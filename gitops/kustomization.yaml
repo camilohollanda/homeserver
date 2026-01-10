@@ -7,7 +7,8 @@ resources:
   - minio/secret.yaml
   - minio/deployment.yaml
   - grafana/namespace.yaml
-  - grafana/secret.yaml
+  # NOTE: secret.yaml is created manually (encrypted version stored as secret.yaml.gpg)
+  # Run: gpg -d grafana/secret.yaml.gpg | kubectl apply -f -
   - grafana/datasources.yaml
   - grafana/deployment.yaml
   - grafana/ingress.yaml
