@@ -16,7 +16,6 @@ configMapGenerator:
   - name: grafana-dashboards
     namespace: grafana
     files:
-      - dashboards/loki-logs.json
       - dashboards/k8s-overview.json
       - dashboards/werify.json
     options:
