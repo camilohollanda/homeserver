@@ -1,2 +1,4 @@
 [env]
 _.file = '.env'
+TF_VAR_infisical_tls_cert = { value = "{{ read_file(path=env.HOME ~ '/local-certs/infisical.local+2.pem') }}", redact = true }
+TF_VAR_infisical_tls_key = { value = "{{ read_file(path=env.HOME ~ '/local-certs/infisical.local+2-key.pem') }}", redact = true }

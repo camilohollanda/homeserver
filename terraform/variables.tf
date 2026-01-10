@@ -84,3 +84,65 @@ variable "ssh_public_keys" {
   default     = []
 }
 
+# Infisical configuration
+variable "infisical_postgres_db" {
+  description = "PostgreSQL database name for Infisical"
+  type        = string
+  default     = "infisical"
+}
+
+variable "infisical_postgres_user" {
+  description = "PostgreSQL username for Infisical"
+  type        = string
+  default     = "infisical"
+}
+
+variable "infisical_postgres_password" {
+  description = "PostgreSQL password for Infisical"
+  type        = string
+  sensitive   = true
+}
+
+variable "infisical_encryption_key" {
+  description = "Infisical encryption key (32 hex chars). Generate with: openssl rand -hex 16"
+  type        = string
+  sensitive   = true
+}
+
+variable "infisical_auth_secret" {
+  description = "Infisical auth secret for JWT signing. Generate with: openssl rand -base64 32"
+  type        = string
+  sensitive   = true
+}
+
+variable "infisical_site_url" {
+  description = "Public URL for Infisical (e.g., https://secrets.example.com)"
+  type        = string
+  default     = ""
+}
+
+variable "snippets_storage" {
+  description = "Proxmox storage for cloud-init snippets (must have 'snippets' content type enabled)"
+  type        = string
+  default     = "local"
+}
+
+variable "pm_ssh_user" {
+  description = "SSH username for Proxmox host (for uploading cloud-init snippets)"
+  type        = string
+  default     = "root"
+}
+
+variable "infisical_tls_cert" {
+  description = "TLS certificate for Infisical (PEM format). Generate with: mkcert infisical.local"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "infisical_tls_key" {
+  description = "TLS private key for Infisical (PEM format)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}

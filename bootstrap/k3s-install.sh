@@ -57,7 +57,7 @@ while true; do
   if kubectl get nodes &>/dev/null; then
     break
   fi
-  
+
   if [ $elapsed -ge $timeout ]; then
     echo "Error: Kubernetes API did not become ready within ${timeout} seconds"
     echo ""
@@ -76,12 +76,12 @@ while true; do
     echo ""
     exit 1
   fi
-  
+
   # Show progress every 10 seconds
   if [ $((elapsed % 10)) -eq 0 ] && [ $elapsed -gt 0 ]; then
     echo "  Still waiting... (${elapsed}s elapsed)"
   fi
-  
+
   sleep 2
   elapsed=$((elapsed + 2))
 done
@@ -89,3 +89,13 @@ done
 echo "K3s installed successfully"
 echo "Kubernetes nodes:"
 kubectl get nodes
+
+# Install Helm
+echo ""
+echo "Installing Helm..."
+if ! command -v helm &> /dev/null; then
+  curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+  echo "Helm installed successfully"
+else
+  echo "Helm already installed"
+fi

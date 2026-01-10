@@ -16,7 +16,12 @@ terraform {
 provider "proxmox" {
   endpoint  = replace(var.pm_api_url, "/api2/json$", "")
   api_token = "${var.pm_api_token_id}=${var.pm_api_token_secret}"
-  insecure = var.pm_tls_insecure
+  insecure  = var.pm_tls_insecure
+
+  ssh {
+    agent    = true
+    username = var.pm_ssh_user
+  }
 }
 
 locals {
@@ -42,6 +47,16 @@ locals {
     memory_mb = 8192
     disk_size = 60
     tags      = "db,postgres"
+  }
+
+  infisical_vm = {
+    name      = "infisical"
+    vmid      = 114
+    ip_cidr   = "192.168.20.22/24"
+    cores     = 2
+    memory_mb = 4096
+    disk_size = 20
+    tags      = "secrets,infisical"
   }
 }
 
@@ -181,6 +196,101 @@ resource "proxmox_virtual_environment_vm" "db_postgres" {
   }
 }
 
+resource "proxmox_virtual_environment_vm" "infisical" {
+  name        = local.infisical_vm.name
+  node_name   = var.pm_node
+  vm_id       = local.infisical_vm.vmid
+  description = "Infisical secret management server"
+  tags        = split(",", local.infisical_vm.tags)
+
+  clone {
+    vm_id     = var.template_vmid
+    node_name = var.pm_node
+    full      = true
+  }
+
+  cpu {
+    cores = local.infisical_vm.cores
+    type  = "host"
+  }
+
+  memory {
+    dedicated = local.infisical_vm.memory_mb
+  }
+
+  bios    = "ovmf"
+  machine = "q35"
+
+  scsi_hardware = "virtio-scsi-single"
+
+  disk {
+    datastore_id = var.storage
+    file_format  = "raw"
+    interface    = "scsi0"
+    size         = local.infisical_vm.disk_size
+  }
+
+  network_device {
+    bridge = var.bridge
+    model  = "virtio"
+  }
+
+  initialization {
+    ip_config {
+      ipv4 {
+        address = local.infisical_vm.ip_cidr
+        gateway = var.gateway
+      }
+    }
+
+    user_account {
+      keys     = var.ssh_public_keys
+      username = var.cloud_init_user
+    }
+
+    dns {
+      servers = [var.nameserver]
+    }
+
+    user_data_file_id = proxmox_virtual_environment_file.infisical_cloud_init.id
+  }
+
+  operating_system {
+    type = "l26"
+  }
+
+  startup {
+    order      = 2
+    up_delay   = 60
+    down_delay = 60
+  }
+
+  depends_on = [proxmox_virtual_environment_vm.db_postgres]
+}
+
+resource "proxmox_virtual_environment_file" "infisical_cloud_init" {
+  content_type = "snippets"
+  datastore_id = var.snippets_storage
+  node_name    = var.pm_node
+
+  source_raw {
+    data = templatefile("${path.module}/cloud-init/infisical.yaml", {
+      postgres_host             = split("/", local.db_vm.ip_cidr)[0]
+      postgres_port             = 5432
+      postgres_db               = var.infisical_postgres_db
+      postgres_user             = var.infisical_postgres_user
+      postgres_password         = var.infisical_postgres_password
+      postgres_password_encoded = urlencode(var.infisical_postgres_password)
+      encryption_key            = var.infisical_encryption_key
+      auth_secret               = var.infisical_auth_secret
+      site_url                  = var.infisical_site_url
+      tls_cert                  = var.infisical_tls_cert
+      tls_key                   = var.infisical_tls_key
+    })
+    file_name = "infisical-cloud-init.yaml"
+  }
+}
+
 output "k3s_vm_ip" {
   description = "IP address for the K3s node"
   value       = split("/", local.k3s_vm.ip_cidr)[0]
@@ -189,4 +299,14 @@ output "k3s_vm_ip" {
 output "db_vm_ip" {
   description = "IP address for the Postgres node"
   value       = split("/", local.db_vm.ip_cidr)[0]
+}
+
+output "infisical_vm_ip" {
+  description = "IP address for the Infisical node"
+  value       = split("/", local.infisical_vm.ip_cidr)[0]
+}
+
+output "infisical_url" {
+  description = "URL to access Infisical UI"
+  value       = "https://${split("/", local.infisical_vm.ip_cidr)[0]}:8443"
 }

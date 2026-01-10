@@ -4,6 +4,7 @@ kind: Kustomization
 resources:
   - namespace.yaml
   - configmap.yaml
-  # secrets.yaml is gitignored - apply manually or use sealed-secrets
+  - external-secret.yaml
+  - ghcr-external-secret.yaml
   - deployment.yaml
   - ingress.yaml
