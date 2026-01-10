@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: werify
+  name: deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: werify
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: werify
+    spec:
+      containers:
+      - name: phoenix
+        image: ghcr.io/prem-prakash/whatsapp-extractor
+        ports:
+        - containerPort: 4000
+          name: http
