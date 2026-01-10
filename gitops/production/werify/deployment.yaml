@@ -19,7 +19,7 @@ spec:
         app: werify
     spec:
       containers:
-      - name: phoenix
+      - name: werify
         image: ghcr.io/prem-prakash/whatsapp-extractor
         ports:
         - containerPort: 4000
