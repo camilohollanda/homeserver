@@ -1,0 +1,26 @@
+# ArgoCD server service with fixed NodePorts
+# Apply after ArgoCD installation to override the default service
+apiVersion: v1
+kind: Service
+metadata:
+  name: argocd-server
+  namespace: argocd
+  labels:
+    app.kubernetes.io/component: server
+    app.kubernetes.io/name: argocd-server
+    app.kubernetes.io/part-of: argocd
+spec:
+  type: NodePort
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+      nodePort: 30080
+      protocol: TCP
+    - name: https
+      port: 443
+      targetPort: 8080
+      nodePort: 30443
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: argocd-server
