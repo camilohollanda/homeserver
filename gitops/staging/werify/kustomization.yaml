@@ -4,8 +4,6 @@ kind: Kustomization
 resources:
   - namespace.yaml
   - configmap.yaml
-  # Note: secrets.yaml is gitignored - decrypt and apply manually:
-  # gpg --decrypt secrets.yaml.gpg > secrets.yaml
-  # kubectl apply -f secrets.yaml
+  # secrets.yaml is gitignored - apply manually or use sealed-secrets
   - deployment.yaml
   - ingress.yaml
