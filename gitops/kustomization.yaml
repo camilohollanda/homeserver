@@ -8,8 +8,13 @@ resources:
   - minio/deployment.yaml
   - grafana/namespace.yaml
   - grafana/secret.yaml
+  - grafana/datasources.yaml
   - grafana/deployment.yaml
   - grafana/ingress.yaml
+  # Loki logging stack
+  - loki-stack/namespace.yaml
+  - loki-stack/loki.yaml
+  - loki-stack/promtail.yaml
   # ArgoCD Applications (app of apps pattern)
   - applications/werify-production.yaml
   - applications/werify-staging.yaml

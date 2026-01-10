@@ -1,3 +1,4 @@
 # don't check in unencrypted secrets
 **/*secrets.yaml
 **/*secret.yaml
+**/secret.yaml
