@@ -27,8 +27,6 @@ spec:
         - containerPort: 4000
           name: http
         envFrom:
-        - configMapRef:
-            name: configmap
         - secretRef:
             name: secrets
         resources:
