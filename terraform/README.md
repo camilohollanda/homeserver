@@ -37,6 +37,17 @@ This directory contains Terraform configuration to provision K3s and Postgres VM
    terraform apply
    ```
 
+7. Copy bootstrap scripts to VMs:
+   ```bash
+   ./copy-bootstrap.sh all
+   ```
+
+   Or copy to specific VMs:
+   ```bash
+   ./copy-bootstrap.sh k3s      # Only k3s-apps VM
+   ./copy-bootstrap.sh postgres # Only db-postgres VM
+   ```
+
 ## Environment Variables
 
 All configuration is done via environment variables with the `TF_VAR_` prefix. Terraform automatically reads these.
