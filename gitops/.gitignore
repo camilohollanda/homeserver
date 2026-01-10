@@ -3,3 +3,7 @@
 **/*secret.yaml
 **/secret.yaml
 .env
+
+# Allow ExternalSecret manifests (these don't contain actual secrets)
+!**/external-secret.yaml
+!**/ghcr-external-secret.yaml
