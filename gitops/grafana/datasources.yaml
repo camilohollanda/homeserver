@@ -10,6 +10,6 @@ data:
       - name: Loki
         type: loki
         access: proxy
-        url: http://loki.loki.svc.cluster.local:3100
+        url: http://loki.loki:3100
         isDefault: true
         editable: false
