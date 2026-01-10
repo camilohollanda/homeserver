@@ -10,3 +10,6 @@ resources:
   - grafana/secret.yaml
   - grafana/deployment.yaml
   - grafana/ingress.yaml
+  # ArgoCD Applications (app of apps pattern)
+  - applications/werify-production.yaml
+  - applications/werify-staging.yaml
