@@ -73,18 +73,38 @@ sudo ~/bootstrap/postgres-install.sh
 
 Then configure databases and users as needed.
 
-### 5. Configure Cloudflare Tunnel
+### 5. Verify Cloudflare Tunnel
 
-1. Create tunnel in Cloudflare dashboard
-2. Copy credentials to `/etc/cloudflared/credentials.json`
-3. Update `TUNNEL_ID` in `/etc/cloudflared/config.yml`
-4. Enable service: `systemctl enable --now cloudflared`
+The `cloudflared-config.sh` script automatically:
+- Logs in to Cloudflare (opens browser for authentication)
+- Creates the tunnel
+- Configures DNS routes
+- Installs and starts the systemd service
 
-### 6. Configure Argo CD
+Check status:
+```bash
+systemctl status cloudflared
+journalctl -u cloudflared -f
+```
 
-1. Get initial admin password: `kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d`
-2. Access Argo CD UI (port-forward or via ingress)
-3. Create Application pointing to this repository's `gitops/` directory
+### 6. Access Argo CD
+
+1. Get initial admin password:
+   ```bash
+   kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d && echo
+   ```
+
+2. Port-forward to access Argo CD:
+   ```bash
+   kubectl port-forward svc/argocd-server -n argocd 8080:443 --address=0.0.0.0
+   ```
+
+3. Access Argo CD UI:
+   - URL: https://localhost:8080
+   - Username: `admin`
+   - Password: (from step 1)
+
+4. Create Application pointing to this repository's `gitops/` directory
 
 ## Notes
 

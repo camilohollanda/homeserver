@@ -1,6 +1,12 @@
 #!/bin/bash
 set -euo pipefail
 
+# Check if running as root
+if [ "$EUID" -ne 0 ]; then
+  echo "Error: This script must be run as root (use sudo)"
+  exit 1
+fi
+
 # PostgreSQL version to install (default: 17)
 # Can be overridden via environment variable: POSTGRES_VERSION=15 ./postgres-install.sh
 POSTGRES_VERSION="${POSTGRES_VERSION:-17}"

@@ -12,6 +12,12 @@ Run on the k3s-apps VM after Terraform provisioning:
 sudo ./bootstrap.sh
 ```
 
+**Note:** All bootstrap scripts must be run as root (using `sudo`) because they:
+- Install system packages
+- Configure systemd services
+- Modify system files
+- Access privileged ports
+
 ### Postgres Database (db-postgres VM)
 
 Run on the db-postgres VM after Terraform provisioning:
@@ -41,11 +47,14 @@ POSTGRES_VERSION=14 sudo ./postgres-install.sh
 ## Post-Install
 
 ### K3s Cluster
-1. Create Cloudflare Tunnel and get credentials
-2. Place credentials at `/etc/cloudflared/credentials.json`
-3. Update `TUNNEL_ID` in `/etc/cloudflared/config.yml`
-4. Enable cloudflared: `systemctl enable --now cloudflared`
-5. Access Argo CD and configure GitOps repositories
+The `cloudflared-config.sh` script automates the tunnel setup using local configuration files:
+- All configuration is stored locally in `/etc/cloudflared/config.yml`
+- Tunnel credentials are stored in `/root/.cloudflared/`
+- The script will guide you through login and tunnel creation
+- DNS routes are configured automatically via CLI commands
+- Service is installed and started automatically
+
+After bootstrap, access Argo CD and configure GitOps repositories.
 
 ### Postgres Database
 1. Set password for postgres user (if needed)
