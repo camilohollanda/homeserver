@@ -5,7 +5,7 @@ metadata:
   namespace: werify-staging
 data:
   ASAAS_BASE_URL: "https://sandbox.asaas.com/"
-  DISABLE_REGISTRATION: "false"
+  DISABLE_REGISTRATION: "true"
   MIX_ENV: "prod"
   OPENAI_BASE_URL: "https://api.openai.com/v1"
   OPENAI_TRANSCRIPTION_MODEL: "whisper-1"
@@ -13,4 +13,4 @@ data:
   SMTP_PORT: "587"
   SMTP_RELAY: "smtp.resend.com"
   SMTP_USERNAME: "resend"
-  TRANSCRIPTION_ADAPTER: "openai"
+  TRANSCRIPTION_ADAPTER: "whisper"
