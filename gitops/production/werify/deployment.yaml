@@ -18,6 +18,8 @@ spec:
       labels:
         app: werify
     spec:
+      imagePullSecrets:
+      - name: ghcr-credentials
       containers:
       - name: werify
         image: ghcr.io/prem-prakash/whatsapp-extractor
