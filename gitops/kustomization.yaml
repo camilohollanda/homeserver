@@ -10,7 +10,3 @@ resources:
   - grafana/secret.yaml
   - grafana/deployment.yaml
   - grafana/ingress.yaml
-  - phoenix/namespace.yaml
-  - phoenix/secret.yaml
-  - phoenix/deployment.yaml
-  - phoenix/ingress.yaml

@@ -75,6 +75,11 @@ case $option in
 
     echo ""
     echo "Step 4: Create repository secret in Argo CD"
+
+    # Remove old secret if exists
+    kubectl delete secret github-repo -n argocd 2>/dev/null || true
+
+    # Create new secret with proper format
     kubectl apply -f - <<EOF
 apiVersion: v1
 kind: Secret
@@ -92,12 +97,22 @@ $(sed 's/^/    /' "$KEY_PATH")
 EOF
 
     echo ""
+    echo "Step 5: Restarting Argo CD repo-server to pick up new secret..."
+    kubectl delete pod -n argocd -l app.kubernetes.io/name=argocd-repo-server --wait=false 2>/dev/null || true
+    sleep 3
+
+    echo ""
     echo "✓ Argo CD repository configured!"
     echo ""
-    echo "You can now use this repository URL in Argo CD Applications:"
-    echo "  ${repo_url}"
+    echo "Repository URL: ${repo_url}"
     echo ""
-    echo "To verify, check Argo CD UI → Settings → Repositories"
+    echo "To verify:"
+    echo "1. Wait a few seconds for repo-server to restart"
+    echo "2. Check Argo CD UI → Settings → Repositories"
+    echo "3. The repository should show 'Successful' status"
+    echo ""
+    echo "If connection fails, run diagnostics:"
+    echo "  sudo ~/bootstrap/argocd-repo-debug.sh"
 
     # Clean up temporary keys (optional - user might want to keep them)
     read -p "Delete temporary key files? (y/N): " -n 1 -r
@@ -139,6 +154,19 @@ EOF
       exit 1
     fi
 
+    # Validate private key format
+    echo ""
+    echo "Validating private key format..."
+    if ! grep -q "BEGIN RSA PRIVATE KEY" "$pem_path" && ! grep -q "BEGIN PRIVATE KEY" "$pem_path"; then
+      echo "Error: The file does not appear to be a valid private key (missing BEGIN marker)"
+      exit 1
+    fi
+    if ! grep -q "END RSA PRIVATE KEY" "$pem_path" && ! grep -q "END PRIVATE KEY" "$pem_path"; then
+      echo "Error: The file does not appear to be a valid private key (missing END marker)"
+      exit 1
+    fi
+    echo "✓ Private key format looks valid"
+
     echo ""
     echo "Step 3: Install the GitHub App on your repository"
     echo "1. Go to your GitHub App settings"
@@ -152,40 +180,67 @@ EOF
     read -p "Enter GitHub App Installation ID: " installation_id
     read -p "Enter repository URL (e.g., https://github.com/username/repo): " repo_url
 
+    # Ensure IDs are treated as strings
+    app_id="${app_id}"
+    installation_id="${installation_id}"
+
     echo ""
-    echo "Step 4: Create Argo CD secret"
-    kubectl create secret generic github-app-creds \
-      --from-file=privateKey="$pem_path" \
-      --from-literal=appId="$app_id" \
-      --from-literal=installationId="$installation_id" \
+    echo "Step 4: Remove old secret if exists"
+    kubectl delete secret github-repo -n argocd 2>/dev/null || true
+
+    echo ""
+    echo "Step 5: Test network connectivity to GitHub API"
+    echo "Testing connection to api.github.com..."
+    if curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 https://api.github.com > /dev/null 2>&1; then
+      echo "✓ Network connectivity to GitHub API is working"
+    else
+      echo "⚠ Warning: Cannot reach GitHub API. This may cause connection issues."
+      echo "  Check firewall rules and network connectivity."
+    fi
+    echo ""
+
+    echo "Step 6: Create repository secret in Argo CD"
+    # Create a temporary file with properly formatted key (ensure no trailing spaces, correct line endings)
+    TEMP_KEY=$(mktemp)
+    # Remove any Windows line endings and ensure proper formatting
+    sed 's/\r$//' "$pem_path" > "$TEMP_KEY"
+
+    # Use kubectl create secret with --from-literal to ensure IDs are stored as strings
+    # This is more reliable than YAML stringData which can be interpreted as numbers
+    kubectl create secret generic github-repo \
+      --from-literal=type=git \
+      --from-literal=url="${repo_url}" \
+      --from-literal=githubAppID="${app_id}" \
+      --from-literal=githubAppInstallationID="${installation_id}" \
+      --from-file=githubAppPrivateKey="$TEMP_KEY" \
       -n argocd \
       --dry-run=client -o yaml | kubectl apply -f -
 
+    # Add label
+    kubectl label secret github-repo -n argocd argocd.argoproj.io/secret-type=repository --overwrite
+
+    # Clean up temp file
+    rm -f "$TEMP_KEY"
+
     echo ""
-    echo "Step 5: Create repository secret in Argo CD"
-    kubectl apply -f - <<EOF
-apiVersion: v1
-kind: Secret
-metadata:
-  name: github-repo
-  namespace: argocd
-  labels:
-    argocd.argoproj.io/secret-type: repository
-type: Opaque
-stringData:
-  type: git
-  url: ${repo_url}
-  githubAppID: ${app_id}
-  githubAppInstallationID: ${installation_id}
-  githubAppPrivateKey: |
-$(sed 's/^/    /' "$pem_path")
-EOF
+    echo "Step 7: Restart Argo CD repo-server to pick up new secret"
+    kubectl delete pod -n argocd -l app.kubernetes.io/name=argocd-repo-server 2>/dev/null || true
+    echo "  Waiting for repo-server to restart..."
+    sleep 5
 
     echo ""
     echo "✓ Argo CD repository configured with GitHub App!"
     echo ""
     echo "You can now use this repository URL in Argo CD Applications:"
     echo "  ${repo_url}"
+    echo ""
+    echo "If you see TLS handshake errors, check:"
+    echo "1. Network connectivity: kubectl exec -n argocd -l app.kubernetes.io/name=argocd-repo-server -- curl -v https://api.github.com"
+    echo "2. Certificate issues: The repo-server pod may need updated CA certificates"
+    echo "3. Private key format: Ensure the .pem file is correctly formatted"
+    echo ""
+    echo "To check repo-server logs:"
+    echo "  kubectl logs -n argocd -l app.kubernetes.io/name=argocd-repo-server --tail=50 -f"
     ;;
 
   *)
