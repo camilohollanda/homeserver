@@ -54,7 +54,27 @@ The `cloudflared-config.sh` script automates the tunnel setup using local config
 - DNS routes are configured automatically via CLI commands
 - Service is installed and started automatically
 
-After bootstrap, access Argo CD and configure GitOps repositories.
+After bootstrap:
+1. Access Argo CD (see main README.md)
+   - **Note**: Argo CD funciona sem domínio público. Veja `ARGOCD-DOMAIN.md` para detalhes.
+2. Configure private GitHub repository access:
+   ```bash
+   sudo ./argocd-github-setup.sh
+   ```
+   This script helps you set up either:
+   - SSH Deploy Key (for single repository)
+   - GitHub App (for multiple repositories)
+3. Create Argo CD Applications pointing to your GitOps repository
+
+## Argo CD Domain Requirements
+
+**Short answer**: Não é necessário ter um domínio público para o Argo CD funcionar.
+
+- ✅ Sync automático funciona via polling (a cada 3 minutos)
+- ✅ Acesso via port-forward funciona perfeitamente
+- ⚠️ Webhooks do GitHub requerem domínio público (para sync imediato)
+
+Veja `ARGOCD-DOMAIN.md` para mais detalhes.
 
 ### Postgres Database
 1. Set password for postgres user (if needed)
