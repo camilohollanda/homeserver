@@ -9,6 +9,7 @@ spec:
     repoURL: https://github.com/prem-prakash/homeserver.git
     targetRevision: main
     path: gitops/production/werify
+    kustomize: {}
   destination:
     server: https://kubernetes.default.svc
     namespace: werify
