@@ -29,6 +29,9 @@ spec:
         envFrom:
         - secretRef:
             name: secrets
+        volumeMounts:
+        - name: uploads
+          mountPath: /app/priv/uploads
         resources:
           requests:
             memory: "256Mi"
@@ -36,6 +39,10 @@ spec:
           limits:
             memory: "1Gi"
             cpu: "500m"
+      volumes:
+      - name: uploads
+        persistentVolumeClaim:
+          claimName: werify-uploads
 ---
 apiVersion: v1
 kind: Service
