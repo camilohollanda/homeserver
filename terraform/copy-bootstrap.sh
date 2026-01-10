@@ -59,7 +59,7 @@ copy_to_vm() {
 # Copy based on target
 case "$TARGET" in
   k3s)
-    copy_to_vm "$K3S_IP" "k3s-apps" "k3s-install.sh ingress-nginx-install.sh argocd-install.sh cloudflared-install.sh cloudflared-config.sh bootstrap.sh"
+    copy_to_vm "$K3S_IP" "k3s-apps" "k3s-install.sh ingress-nginx-install.sh argocd-install.sh argocd-github-setup.sh cloudflared-install.sh cloudflared-config.sh bootstrap.sh"
     echo "Next steps for k3s-apps VM:"
     echo "  ssh ${SSH_USER}@${K3S_IP}"
     echo "  sudo ~/bootstrap/bootstrap.sh"
@@ -72,7 +72,7 @@ case "$TARGET" in
     echo "  # Or with specific version: POSTGRES_VERSION=15 sudo ~/bootstrap/postgres-install.sh"
     ;;
   all)
-    copy_to_vm "$K3S_IP" "k3s-apps" "k3s-install.sh ingress-nginx-install.sh argocd-install.sh cloudflared-install.sh cloudflared-config.sh bootstrap.sh"
+    copy_to_vm "$K3S_IP" "k3s-apps" "k3s-install.sh ingress-nginx-install.sh argocd-install.sh argocd-github-setup.sh cloudflared-install.sh cloudflared-config.sh bootstrap.sh"
     copy_to_vm "$DB_IP" "db-postgres" "postgres-install.sh"
     echo "✓ All bootstrap scripts copied!"
     echo ""

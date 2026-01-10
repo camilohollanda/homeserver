@@ -104,7 +104,15 @@ journalctl -u cloudflared -f
    - Username: `admin`
    - Password: (from step 1)
 
-4. Create Application pointing to this repository's `gitops/` directory
+4. Configure private GitHub repository access (if needed):
+   ```bash
+   sudo ~/bootstrap/argocd-github-setup.sh
+   ```
+   This script helps you set up either:
+   - SSH Deploy Key (recommended for single repository)
+   - GitHub App (recommended for multiple repositories)
+
+5. Create Application pointing to this repository's `gitops/` directory
 
 ## Notes
 
