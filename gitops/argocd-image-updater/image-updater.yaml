@@ -1,0 +1,21 @@
+# ArgoCD Image Updater configuration
+# Watches for new images and updates deployments
+apiVersion: argocd-image-updater.argoproj.io/v1alpha1
+kind: ImageUpdater
+metadata:
+  name: werify-image-updater
+spec:
+  namespace: argocd
+  commonUpdateSettings:
+    updateStrategy: digest
+  writeBackConfig:
+    method: argocd
+  applicationRefs:
+    - namePattern: "werify-production"
+      images:
+        - alias: werify
+          imageName: ghcr.io/prem-prakash/whatsapp-extractor:main
+    - namePattern: "werify-staging"
+      images:
+        - alias: werify
+          imageName: ghcr.io/prem-prakash/whatsapp-extractor:staging
