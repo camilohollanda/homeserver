@@ -63,13 +63,10 @@ copy_to_vm() {
 # Copy based on target
 case "$TARGET" in
   k3s)
-    copy_to_vm "$K3S_IP" "k3s-apps" "k3s-install.sh ingress-nginx-install.sh argocd-install.sh argocd-github-setup.sh cloudflared-install.sh cloudflared-config.sh external-secrets-install.sh bootstrap.sh"
+    copy_to_vm "$K3S_IP" "k3s-apps" "k3s-install.sh ingress-nginx-install.sh argocd-install.sh argocd-github-setup.sh cloudflared-install.sh cloudflared-config.sh external-secrets-install.sh argocd-image-updater-install.sh bootstrap.sh README.md"
     echo "Next steps for k3s-apps VM:"
     echo "  ssh ${SSH_USER}@${K3S_IP}"
     echo "  sudo ~/bootstrap/bootstrap.sh"
-    echo ""
-    echo "  # To install External Secrets Operator (for Infisical integration):"
-    echo "  ~/bootstrap/external-secrets-install.sh"
     ;;
   postgres)
     copy_to_vm "$DB_IP" "db-postgres" "postgres-install.sh infisical-db-setup.sh"
@@ -121,13 +118,13 @@ case "$TARGET" in
     echo "  curl http://localhost:8000/health      # Health check"
     ;;
   all)
-    copy_to_vm "$K3S_IP" "k3s-apps" "k3s-install.sh ingress-nginx-install.sh argocd-install.sh argocd-github-setup.sh cloudflared-install.sh cloudflared-config.sh external-secrets-install.sh bootstrap.sh"
+    copy_to_vm "$K3S_IP" "k3s-apps" "k3s-install.sh ingress-nginx-install.sh argocd-install.sh argocd-github-setup.sh cloudflared-install.sh cloudflared-config.sh external-secrets-install.sh argocd-image-updater-install.sh bootstrap.sh README.md"
     copy_to_vm "$DB_IP" "db-postgres" "postgres-install.sh infisical-db-setup.sh"
     echo "✓ All bootstrap scripts copied!"
     echo ""
     echo "Next steps:"
     echo ""
-    echo "1. Bootstrap K3s cluster:"
+    echo "1. Bootstrap K3s cluster (installs everything):"
     echo "   ssh ${SSH_USER}@${K3S_IP}"
     echo "   sudo ~/bootstrap/bootstrap.sh"
     echo ""
@@ -141,9 +138,11 @@ case "$TARGET" in
     echo "4. Access Infisical (after VM boots, ~3-5 min):"
     echo "   https://${INFISICAL_IP:-192.168.20.22}:8443"
     echo ""
-    echo "5. Install External Secrets Operator (on k3s VM):"
-    echo "   ssh ${SSH_USER}@${K3S_IP}"
-    echo "   ~/bootstrap/external-secrets-install.sh"
+    echo "5. Create Infisical credentials (on k3s VM):"
+    echo "   kubectl create secret generic infisical-credentials \\"
+    echo "     --namespace external-secrets \\"
+    echo "     --from-literal=clientId=\"\\\$INFISICAL_CLIENT_ID\" \\"
+    echo "     --from-literal=clientSecret=\"\\\$INFISICAL_CLIENT_SECRET\""
     echo ""
     if [ -n "$WHISPER_IP" ]; then
     echo "6. Setup Whisper GPU inference server:"

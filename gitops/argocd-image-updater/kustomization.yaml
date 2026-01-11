@@ -1,8 +1,13 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
+# NOTE: ArgoCD Image Updater operator is installed during bootstrap via helm.
+# This directory only contains app-level configuration:
+# - GHCR credentials (via ExternalSecret)
+# - ImageUpdater CR defining which apps to watch
+
 namespace: argocd
 
 resources:
-  - image-updater.yaml
   - ghcr-secret.yaml
+  - image-updater-cr.yaml

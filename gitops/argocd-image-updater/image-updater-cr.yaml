@@ -1,9 +1,9 @@
-# ArgoCD Image Updater configuration
-# Watches for new images and updates deployments
+# ImageUpdater CR to watch for new images and update ArgoCD Applications
 apiVersion: argocd-image-updater.argoproj.io/v1alpha1
 kind: ImageUpdater
 metadata:
   name: werify-image-updater
+  namespace: argocd
 spec:
   namespace: argocd
   commonUpdateSettings:
