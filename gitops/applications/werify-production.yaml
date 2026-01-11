@@ -11,7 +11,7 @@ spec:
     path: gitops/production/werify
   destination:
     server: https://kubernetes.default.svc
-    namespace: werify
+    namespace: werify-production
   syncPolicy:
     automated:
       prune: true
