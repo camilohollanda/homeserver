@@ -102,3 +102,20 @@ spec:
     name: http
   selector:
     app: loki
+---
+# NodePort service for external log ingestion (VMs outside the cluster)
+apiVersion: v1
+kind: Service
+metadata:
+  name: loki-external
+  namespace: loki
+spec:
+  type: NodePort
+  ports:
+  - port: 3100
+    targetPort: 3100
+    nodePort: 31100
+    protocol: TCP
+    name: http
+  selector:
+    app: loki

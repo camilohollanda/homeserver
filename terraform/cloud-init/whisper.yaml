@@ -18,6 +18,7 @@ packages:
   - ffmpeg
   - libsndfile1
   - debconf-utils
+  - unzip
 
 users:
   - default
@@ -463,10 +464,111 @@ write_files:
       [Install]
       WantedBy=multi-user.target
 
+  # Promtail configuration for shipping logs to Loki
+  - path: /etc/promtail/config.yaml
+    permissions: "0644"
+    content: |
+      server:
+        http_listen_port: 9080
+        grpc_listen_port: 0
+
+      positions:
+        filename: /var/lib/promtail/positions.yaml
+
+      clients:
+        - url: http://192.168.20.11:31100/loki/api/v1/push
+
+      scrape_configs:
+        # Scrape whisper-api service logs from journald
+        - job_name: whisper-api
+          journal:
+            max_age: 12h
+            labels:
+              job: whisper-api
+              host: whisper-gpu
+          relabel_configs:
+            # Only collect whisper-api and whisper-auto-setup logs
+            - source_labels: ['__journal__systemd_unit']
+              regex: 'whisper-(api|auto-setup)\.service'
+              action: keep
+            - source_labels: ['__journal__systemd_unit']
+              target_label: unit
+            - source_labels: ['__journal_priority_keyword']
+              target_label: level
+
+        # Also collect general system logs for troubleshooting
+        - job_name: system
+          journal:
+            max_age: 12h
+            labels:
+              job: system
+              host: whisper-gpu
+          relabel_configs:
+            # Keep important system units
+            - source_labels: ['__journal__systemd_unit']
+              regex: '(sshd|systemd-.*|nvidia-.*)\.service'
+              action: keep
+            - source_labels: ['__journal__systemd_unit']
+              target_label: unit
+            - source_labels: ['__journal_priority_keyword']
+              target_label: level
+
+  # Systemd service for Promtail
+  - path: /etc/systemd/system/promtail.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Promtail Log Collector
+      After=network-online.target whisper-api.service
+      Wants=network-online.target
+
+      [Service]
+      Type=simple
+      User=root
+      ExecStart=/usr/local/bin/promtail -config.file=/etc/promtail/config.yaml
+      Restart=always
+      RestartSec=10
+
+      [Install]
+      WantedBy=multi-user.target
+
+  # Promtail installation script
+  - path: /opt/whisper/install-promtail.sh
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      set -e
+
+      PROMTAIL_VERSION="3.6.3"
+      ARCH="amd64"
+
+      echo "Installing Promtail ${PROMTAIL_VERSION}..."
+
+      # Download Promtail
+      cd /tmp
+      wget -q "https://github.com/grafana/loki/releases/download/v${PROMTAIL_VERSION}/promtail-linux-${ARCH}.zip"
+      unzip -o "promtail-linux-${ARCH}.zip"
+      chmod +x "promtail-linux-${ARCH}"
+      mv "promtail-linux-${ARCH}" /usr/local/bin/promtail
+      rm -f "promtail-linux-${ARCH}.zip"
+
+      # Create positions directory
+      mkdir -p /var/lib/promtail
+      mkdir -p /etc/promtail
+
+      # Enable and start promtail
+      systemctl daemon-reload
+      systemctl enable promtail
+      systemctl start promtail
+
+      echo "Promtail installed and started successfully!"
+
 runcmd:
   - mkdir -p /opt/whisper/models
   - chown -R whisper:whisper /opt/whisper
   - echo "Whisper cloud-init started at $(date)" >> /var/log/whisper-setup.log
+  # Install Promtail for log shipping to Loki
+  - /opt/whisper/install-promtail.sh
   # Enable and start auto-setup service
   - systemctl daemon-reload
   - systemctl enable whisper-auto-setup.service
