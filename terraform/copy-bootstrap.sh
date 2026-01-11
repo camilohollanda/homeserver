@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Script to copy bootstrap scripts to VMs after Terraform provisioning
-# Usage: ./copy-bootstrap.sh [k3s|postgres|infisical|all]
+# Usage: ./copy-bootstrap.sh [k3s|postgres|infisical|whisper|all]
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BOOTSTRAP_DIR="$(cd "${SCRIPT_DIR}/../bootstrap" && pwd)"
@@ -13,6 +13,7 @@ echo "Getting VM IPs from Terraform..."
 K3S_IP=$(terraform -chdir="${SCRIPT_DIR}" output -raw k3s_vm_ip 2>/dev/null || echo "")
 DB_IP=$(terraform -chdir="${SCRIPT_DIR}" output -raw db_vm_ip 2>/dev/null || echo "")
 INFISICAL_IP=$(terraform -chdir="${SCRIPT_DIR}" output -raw infisical_vm_ip 2>/dev/null || echo "")
+WHISPER_IP=$(terraform -chdir="${SCRIPT_DIR}" output -raw whisper_vm_ip 2>/dev/null || echo "")
 
 if [ -z "$K3S_IP" ] || [ -z "$DB_IP" ]; then
   echo "Error: Could not get VM IPs from Terraform output."
@@ -26,6 +27,7 @@ SSH_USER="${TF_VAR_cloud_init_user:-deployer}"
 echo "K3s VM IP: $K3S_IP"
 echo "Postgres VM IP: $DB_IP"
 echo "Infisical VM IP: $INFISICAL_IP"
+echo "Whisper VM IP: $WHISPER_IP"
 echo "SSH User: $SSH_USER"
 echo ""
 
@@ -94,6 +96,30 @@ case "$TARGET" in
     echo "  sudo docker compose -f /opt/infisical/docker-compose.yml ps"
     echo "  sudo docker compose -f /opt/infisical/docker-compose.yml logs -f"
     ;;
+  whisper)
+    if [ -z "$WHISPER_IP" ]; then
+      echo "Error: Whisper VM IP not found. Make sure you've applied the Terraform config."
+      exit 1
+    fi
+    echo "Whisper GPU VM uses cloud-init for bootstrap."
+    echo ""
+    echo "To complete setup, run the bootstrap script from your local machine:"
+    echo "  ${BOOTSTRAP_DIR}/whisper-setup.sh ${WHISPER_IP}"
+    echo ""
+    echo "This will:"
+    echo "  1. Install NVIDIA drivers (requires reboot)"
+    echo "  2. Setup Python + faster-whisper"
+    echo "  3. Download the large-v3-turbo model"
+    echo "  4. Start the API service"
+    echo ""
+    echo "After setup, access the API at: http://${WHISPER_IP}:8000"
+    echo ""
+    echo "To check status:"
+    echo "  ssh ${SSH_USER}@${WHISPER_IP}"
+    echo "  nvidia-smi                              # Check GPU"
+    echo "  sudo systemctl status whisper-api      # Check service"
+    echo "  curl http://localhost:8000/health      # Health check"
+    ;;
   all)
     copy_to_vm "$K3S_IP" "k3s-apps" "k3s-install.sh ingress-nginx-install.sh argocd-install.sh argocd-github-setup.sh cloudflared-install.sh cloudflared-config.sh external-secrets-install.sh bootstrap.sh"
     copy_to_vm "$DB_IP" "db-postgres" "postgres-install.sh infisical-db-setup.sh"
@@ -118,13 +144,23 @@ case "$TARGET" in
     echo "5. Install External Secrets Operator (on k3s VM):"
     echo "   ssh ${SSH_USER}@${K3S_IP}"
     echo "   ~/bootstrap/external-secrets-install.sh"
+    echo ""
+    if [ -n "$WHISPER_IP" ]; then
+    echo "6. Setup Whisper GPU inference server:"
+    echo "   ${BOOTSTRAP_DIR}/whisper-setup.sh ${WHISPER_IP}"
+    echo "   # After reboot, run again to complete setup"
+    echo ""
+    echo "7. Test Whisper API:"
+    echo "   curl http://${WHISPER_IP}:8000/health"
+    fi
     ;;
   *)
-    echo "Usage: $0 [k3s|postgres|infisical|all]"
+    echo "Usage: $0 [k3s|postgres|infisical|whisper|all]"
     echo ""
     echo "  k3s       - Copy scripts to k3s-apps VM only"
     echo "  postgres  - Copy scripts to db-postgres VM only"
     echo "  infisical - Show Infisical VM status commands"
+    echo "  whisper   - Show Whisper GPU VM setup commands"
     echo "  all       - Copy scripts to all VMs (default)"
     exit 1
     ;;

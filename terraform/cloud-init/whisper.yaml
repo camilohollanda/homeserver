@@ -1,0 +1,473 @@
+#cloud-config
+# Whisper GPU Inference Server - Fully Automated Setup
+# Automatically installs NVIDIA drivers, reboots, then sets up Whisper API
+
+package_update: true
+package_upgrade: false
+
+packages:
+  - build-essential
+  - python3
+  - python3-pip
+  - python3-venv
+  - git
+  - curl
+  - wget
+  - gnupg
+  - htop
+  - ffmpeg
+  - libsndfile1
+  - debconf-utils
+
+users:
+  - default
+  - name: whisper
+    groups: [sudo, video, render]
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+
+write_files:
+  # Main auto-setup script - runs on every boot until complete
+  - path: /opt/whisper/auto-setup.sh
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      # Automated Whisper GPU Setup
+      # This script runs on every boot until setup is complete
+
+      LOG_FILE="/var/log/whisper-setup.log"
+      exec > >(tee -a "$LOG_FILE") 2>&1
+
+      echo ""
+      echo "=========================================="
+      echo "Whisper Auto-Setup - $(date)"
+      echo "=========================================="
+
+      # State files
+      NVIDIA_DONE="/opt/whisper/.nvidia_installed"
+      PYTHON_DONE="/opt/whisper/.python_installed"
+      SETUP_COMPLETE="/opt/whisper/.setup_complete"
+
+      # If setup is complete, disable this service and exit
+      if [ -f "$SETUP_COMPLETE" ]; then
+          echo "Setup already complete. Disabling auto-setup service."
+          systemctl disable whisper-auto-setup.service
+          exit 0
+      fi
+
+      # Ensure ownership
+      chown -R whisper:whisper /opt/whisper
+
+      # STAGE 1: Install NVIDIA drivers
+      if [ ! -f "$NVIDIA_DONE" ]; then
+          echo ""
+          echo "=== STAGE 1: Installing NVIDIA drivers ==="
+
+          # Make apt fully non-interactive (no prompts)
+          export DEBIAN_FRONTEND=noninteractive
+          export NEEDRESTART_MODE=a
+
+          # Pre-configure keyboard to avoid prompt
+          echo 'keyboard-configuration keyboard-configuration/layoutcode string us' | debconf-set-selections
+          echo 'keyboard-configuration keyboard-configuration/layout select English (US)' | debconf-set-selections
+
+          # Enable non-free repos for Debian
+          if [ -f /etc/apt/sources.list.d/debian.sources ]; then
+              sed -i 's/Components: main$/Components: main contrib non-free non-free-firmware/' /etc/apt/sources.list.d/debian.sources
+          fi
+
+          apt-get update
+          apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" linux-headers-$(uname -r)
+          apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" nvidia-driver firmware-misc-nonfree
+
+          # Mark stage complete
+          touch "$NVIDIA_DONE"
+
+          echo ""
+          echo "NVIDIA drivers installed. Rebooting in 10 seconds..."
+          sleep 10
+          reboot
+          exit 0
+      fi
+
+      # STAGE 2: Verify GPU and setup Python
+      if [ ! -f "$PYTHON_DONE" ]; then
+          echo ""
+          echo "=== STAGE 2: Setting up Python environment ==="
+
+          # Verify GPU
+          if ! nvidia-smi; then
+              echo "ERROR: NVIDIA GPU not detected after driver install."
+              echo "Will retry on next boot..."
+              exit 1
+          fi
+
+          echo "GPU detected:"
+          nvidia-smi
+
+          # Setup Python as whisper user
+          sudo -u whisper /opt/whisper/setup-python.sh
+
+          # Mark stage complete
+          touch "$PYTHON_DONE"
+          chown whisper:whisper "$PYTHON_DONE"
+      fi
+
+      # STAGE 3: Start service
+      echo ""
+      echo "=== STAGE 3: Starting Whisper API service ==="
+
+      chown -R whisper:whisper /opt/whisper
+
+      systemctl daemon-reload
+      systemctl enable whisper-api
+      systemctl start whisper-api
+
+      # Wait for service to start
+      sleep 5
+
+      # Verify service is running
+      if systemctl is-active --quiet whisper-api; then
+          touch "$SETUP_COMPLETE"
+          chown whisper:whisper "$SETUP_COMPLETE"
+
+          echo ""
+          echo "=========================================="
+          echo "SETUP COMPLETE!"
+          echo "=========================================="
+          echo ""
+          echo "Whisper API: http://$(hostname -I | awk '{print $1}'):8000"
+          echo ""
+          echo "Test: curl http://$(hostname -I | awk '{print $1}'):8000/health"
+          echo ""
+
+          # Disable auto-setup service
+          systemctl disable whisper-auto-setup.service
+      else
+          echo "ERROR: whisper-api service failed to start"
+          journalctl -u whisper-api -n 20 --no-pager
+          exit 1
+      fi
+
+  # Systemd service for auto-setup (runs on every boot until complete)
+  - path: /etc/systemd/system/whisper-auto-setup.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Whisper GPU Auto-Setup
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/opt/whisper/auto-setup.sh
+      RemainAfterExit=yes
+      StandardOutput=journal+console
+      StandardError=journal+console
+
+      [Install]
+      WantedBy=multi-user.target
+
+  # Python setup script
+  - path: /opt/whisper/setup-python.sh
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      set -e
+
+      echo "Setting up Python environment..."
+
+      cd /opt/whisper
+
+      # Create virtual environment
+      python3 -m venv venv
+      source venv/bin/activate
+
+      # Upgrade pip
+      pip install --upgrade pip wheel setuptools
+
+      # Install PyTorch with CUDA support
+      pip install torch --index-url https://download.pytorch.org/whl/cu121
+
+      # Install requirements
+      pip install -r requirements.txt
+
+      # Download the turbo model
+      echo "Downloading Whisper turbo model..."
+      python3 -c "
+      import whisper
+      print('Downloading turbo model...')
+      model = whisper.load_model('turbo', device='cpu')
+      print('Model downloaded successfully!')
+      "
+
+      echo "Python setup complete!"
+
+  # Requirements file
+  - path: /opt/whisper/requirements.txt
+    permissions: "0644"
+    content: |
+      openai-whisper
+      fastapi>=0.109.0
+      uvicorn[standard]>=0.27.0
+      python-multipart>=0.0.6
+      pydantic>=2.0.0
+
+  # Whisper API service
+  - path: /opt/whisper/api.py
+    permissions: "0644"
+    content: |
+      #!/usr/bin/env python3
+      """
+      Whisper Transcription API
+      Using OpenAI's official Whisper - works with Maxwell GPUs.
+      """
+      import os
+      import tempfile
+      import time
+      from pathlib import Path
+      from typing import Optional
+
+      from fastapi import FastAPI, File, UploadFile, HTTPException, Query
+      from pydantic import BaseModel
+      import uvicorn
+      import torch
+
+      app = FastAPI(
+          title="Whisper Transcription API",
+          description="GPU-accelerated speech-to-text using OpenAI Whisper",
+          version="2.0.0"
+      )
+
+      MODEL_NAME = os.getenv("WHISPER_MODEL", "turbo")
+      DEVICE = os.getenv("WHISPER_DEVICE", "cuda" if torch.cuda.is_available() else "cpu")
+
+      _model = None
+
+      def get_model():
+          global _model
+          if _model is None:
+              import whisper
+              print(f"Loading Whisper model: {MODEL_NAME} on {DEVICE}")
+              _model = whisper.load_model(MODEL_NAME, device=DEVICE)
+              print("Model loaded successfully!")
+          return _model
+
+      class TranscriptionResponse(BaseModel):
+          text: str
+          language: str
+          duration: Optional[float] = None
+          processing_time: float
+          segments: Optional[list] = None
+
+      class HealthResponse(BaseModel):
+          status: str
+          model: str
+          device: str
+          gpu_available: bool
+          gpu_name: Optional[str] = None
+
+      @app.get("/health", response_model=HealthResponse)
+      async def health_check():
+          gpu_available = torch.cuda.is_available()
+          gpu_name = torch.cuda.get_device_name(0) if gpu_available else None
+          return HealthResponse(
+              status="healthy",
+              model=MODEL_NAME,
+              device=DEVICE,
+              gpu_available=gpu_available,
+              gpu_name=gpu_name
+          )
+
+      @app.post("/transcribe", response_model=TranscriptionResponse)
+      async def transcribe(
+          file: UploadFile = File(...),
+          language: Optional[str] = Query(None),
+          include_segments: bool = Query(False),
+          task: str = Query("transcribe")
+      ):
+          start_time = time.time()
+          allowed_extensions = {".mp3", ".wav", ".m4a", ".ogg", ".flac", ".webm", ".mp4", ".opus"}
+          file_ext = Path(file.filename).suffix.lower() if file.filename else ""
+
+          if file_ext not in allowed_extensions:
+              raise HTTPException(status_code=400, detail=f"Unsupported: {file_ext}")
+
+          with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp:
+              content = await file.read()
+              tmp.write(content)
+              tmp_path = tmp.name
+
+          try:
+              model = get_model()
+              options = {"task": task}
+              if language:
+                  options["language"] = language
+
+              result = model.transcribe(tmp_path, **options)
+
+              segments_list = None
+              if include_segments and "segments" in result:
+                  segments_list = [
+                      {"start": round(s["start"], 2), "end": round(s["end"], 2), "text": s["text"].strip()}
+                      for s in result["segments"]
+                  ]
+
+              return TranscriptionResponse(
+                  text=result["text"].strip(),
+                  language=result.get("language", "unknown"),
+                  processing_time=round(time.time() - start_time, 2),
+                  segments=segments_list
+              )
+          except Exception as e:
+              raise HTTPException(status_code=500, detail=str(e))
+          finally:
+              os.unlink(tmp_path)
+
+      @app.post("/transcribe/batch")
+      async def transcribe_batch(
+          files: list[UploadFile] = File(...),
+          language: Optional[str] = Query(None),
+          include_segments: bool = Query(False),
+          task: str = Query("transcribe")
+      ):
+          """Transcribe multiple audio files in a single request."""
+          start_time = time.time()
+          allowed_extensions = {".mp3", ".wav", ".m4a", ".ogg", ".flac", ".webm", ".mp4", ".opus"}
+          model = get_model()
+
+          results = []
+          for file in files:
+              file_start = time.time()
+              file_ext = Path(file.filename).suffix.lower() if file.filename else ""
+
+              if file_ext not in allowed_extensions:
+                  results.append({
+                      "filename": file.filename,
+                      "error": f"Unsupported file type: {file_ext}"
+                  })
+                  continue
+
+              with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp:
+                  content = await file.read()
+                  tmp.write(content)
+                  tmp_path = tmp.name
+
+              try:
+                  options = {"task": task}
+                  if language:
+                      options["language"] = language
+
+                  result = model.transcribe(tmp_path, **options)
+
+                  segments_list = None
+                  if include_segments and "segments" in result:
+                      segments_list = [
+                          {"start": round(s["start"], 2), "end": round(s["end"], 2), "text": s["text"].strip()}
+                          for s in result["segments"]
+                      ]
+
+                  results.append({
+                      "filename": file.filename,
+                      "text": result["text"].strip(),
+                      "language": result.get("language", "unknown"),
+                      "processing_time": round(time.time() - file_start, 2),
+                      "segments": segments_list
+                  })
+              except Exception as e:
+                  results.append({
+                      "filename": file.filename,
+                      "error": str(e)
+                  })
+              finally:
+                  os.unlink(tmp_path)
+
+          return {
+              "total_files": len(files),
+              "total_processing_time": round(time.time() - start_time, 2),
+              "results": results
+          }
+
+      @app.post("/transcribe/url")
+      async def transcribe_url(
+          url: str,
+          language: Optional[str] = None,
+          include_segments: bool = False,
+          task: str = "transcribe"
+      ):
+          import subprocess
+          start_time = time.time()
+
+          with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+              tmp_path = tmp.name
+
+          try:
+              result = subprocess.run(
+                  ["ffmpeg", "-i", url, "-ar", "16000", "-ac", "1", "-y", tmp_path],
+                  capture_output=True, timeout=300
+              )
+              if result.returncode != 0:
+                  raise HTTPException(status_code=400, detail=f"FFmpeg failed: {result.stderr.decode()}")
+
+              model = get_model()
+              options = {"task": task}
+              if language:
+                  options["language"] = language
+
+              result = model.transcribe(tmp_path, **options)
+
+              segments_list = None
+              if include_segments and "segments" in result:
+                  segments_list = [
+                      {"start": round(s["start"], 2), "end": round(s["end"], 2), "text": s["text"].strip()}
+                      for s in result["segments"]
+                  ]
+
+              return TranscriptionResponse(
+                  text=result["text"].strip(),
+                  language=result.get("language", "unknown"),
+                  processing_time=round(time.time() - start_time, 2),
+                  segments=segments_list
+              )
+          finally:
+              if os.path.exists(tmp_path):
+                  os.unlink(tmp_path)
+
+      if __name__ == "__main__":
+          print("Pre-loading Whisper model...")
+          get_model()
+          print("Starting API server...")
+          uvicorn.run(app, host="0.0.0.0", port=8000)
+
+  # Systemd service for Whisper API
+  - path: /etc/systemd/system/whisper-api.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Whisper Transcription API
+      After=network.target
+
+      [Service]
+      Type=simple
+      User=whisper
+      Group=whisper
+      WorkingDirectory=/opt/whisper
+      Environment="PATH=/opt/whisper/venv/bin:/usr/local/bin:/usr/bin:/bin"
+      Environment="WHISPER_MODEL=turbo"
+      Environment="WHISPER_DEVICE=cuda"
+      ExecStart=/opt/whisper/venv/bin/python /opt/whisper/api.py
+      Restart=always
+      RestartSec=10
+      SupplementaryGroups=video render
+
+      [Install]
+      WantedBy=multi-user.target
+
+runcmd:
+  - mkdir -p /opt/whisper/models
+  - chown -R whisper:whisper /opt/whisper
+  - echo "Whisper cloud-init started at $(date)" >> /var/log/whisper-setup.log
+  # Enable and start auto-setup service
+  - systemctl daemon-reload
+  - systemctl enable whisper-auto-setup.service
+  - systemctl start whisper-auto-setup.service

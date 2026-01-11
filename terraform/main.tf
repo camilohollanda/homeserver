@@ -58,6 +58,18 @@ locals {
     disk_size = 20
     tags      = "secrets,infisical"
   }
+
+  whisper_vm = {
+    name      = "whisper-gpu"
+    vmid      = 115
+    ip_cidr   = "192.168.20.30/24"
+    cores     = 4
+    memory_mb = 16384  # 16GB for Whisper + model loading
+    disk_size = 50     # Space for models and audio files
+    tags      = "ml,whisper,gpu"
+    # GPU mapping name (created in Proxmox: Datacenter → Resource Mappings → PCI)
+    gpu_mapping = "gpu-quadro-m4000"
+  }
 }
 
 resource "proxmox_virtual_environment_vm" "k3s_apps" {
@@ -268,6 +280,95 @@ resource "proxmox_virtual_environment_vm" "infisical" {
   depends_on = [proxmox_virtual_environment_vm.db_postgres]
 }
 
+resource "proxmox_virtual_environment_vm" "whisper_gpu" {
+  name        = local.whisper_vm.name
+  node_name   = var.pm_node
+  vm_id       = local.whisper_vm.vmid
+  description = "Whisper AI inference server with GPU passthrough"
+  tags        = split(",", local.whisper_vm.tags)
+
+  clone {
+    vm_id     = var.template_vmid
+    node_name = var.pm_node
+    full      = true
+  }
+
+  cpu {
+    cores = local.whisper_vm.cores
+    type  = "host"  # Required for GPU passthrough
+  }
+
+  memory {
+    dedicated = local.whisper_vm.memory_mb
+  }
+
+  bios    = "ovmf"
+  machine = "q35"
+
+  scsi_hardware = "virtio-scsi-single"
+
+  disk {
+    datastore_id = var.storage
+    file_format  = "raw"
+    interface    = "scsi0"
+    size         = local.whisper_vm.disk_size
+  }
+
+  network_device {
+    bridge = var.bridge
+    model  = "virtio"
+  }
+
+  # GPU Passthrough - Quadro M4000 (uses resource mapping)
+  hostpci {
+    device  = "hostpci0"
+    mapping = local.whisper_vm.gpu_mapping
+    pcie    = true
+    rombar  = true
+  }
+
+  initialization {
+    ip_config {
+      ipv4 {
+        address = local.whisper_vm.ip_cidr
+        gateway = var.gateway
+      }
+    }
+
+    user_account {
+      keys     = var.ssh_public_keys
+      username = var.cloud_init_user
+    }
+
+    dns {
+      servers = [var.nameserver]
+    }
+
+    user_data_file_id = proxmox_virtual_environment_file.whisper_cloud_init.id
+  }
+
+  operating_system {
+    type = "l26"
+  }
+
+  startup {
+    order      = 3
+    up_delay   = 120  # Give time for GPU initialization
+    down_delay = 60
+  }
+}
+
+resource "proxmox_virtual_environment_file" "whisper_cloud_init" {
+  content_type = "snippets"
+  datastore_id = var.snippets_storage
+  node_name    = var.pm_node
+
+  source_raw {
+    data      = file("${path.module}/cloud-init/whisper.yaml")
+    file_name = "whisper-cloud-init.yaml"
+  }
+}
+
 resource "proxmox_virtual_environment_file" "infisical_cloud_init" {
   content_type = "snippets"
   datastore_id = var.snippets_storage
@@ -309,4 +410,14 @@ output "infisical_vm_ip" {
 output "infisical_url" {
   description = "URL to access Infisical UI"
   value       = "https://${split("/", local.infisical_vm.ip_cidr)[0]}:8443"
+}
+
+output "whisper_vm_ip" {
+  description = "IP address for the Whisper GPU inference server"
+  value       = split("/", local.whisper_vm.ip_cidr)[0]
+}
+
+output "whisper_api_url" {
+  description = "URL for Whisper transcription API"
+  value       = "http://${split("/", local.whisper_vm.ip_cidr)[0]}:8000"
 }
