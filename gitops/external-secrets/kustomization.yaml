@@ -4,9 +4,13 @@ kind: Kustomization
 # NOTE: The External Secrets Operator is installed during bootstrap via helm.
 # This directory only contains the app-level configuration:
 # - ClusterSecretStore pointing to Infisical
-# - Credentials for authentication
+#
+# IMPORTANT: infisical-credentials secret must be created manually:
+#   kubectl create secret generic infisical-credentials \
+#     --namespace external-secrets \
+#     --from-literal=clientId="$INFISICAL_CLIENT_ID" \
+#     --from-literal=clientSecret="$INFISICAL_CLIENT_SECRET"
 
 resources:
   - namespace.yaml
-  - infisical-credentials.yaml
   - werify-cluster-secret-store.yaml
