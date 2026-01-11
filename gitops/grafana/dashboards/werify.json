@@ -59,7 +59,7 @@
           },
           "direction": "backward",
           "editorMode": "code",
-          "expr": "{namespace=\"werify\", app=\"werify\"} | json | line_format `{{.time}} {{.severity}} {{.message}} `\n\n",
+          "expr": "{namespace=\"werify-production\", app=\"werify\"} | json | line_format `{{.time}} {{.severity}} {{.message}} `\n\n",
           "key": "Q-8780d3d0-4d75-4c0f-9f17-6835a0c92702-1",
           "queryType": "range",
           "refId": "A"

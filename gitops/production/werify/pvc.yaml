@@ -2,7 +2,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: werify-uploads
-  namespace: werify
+  namespace: werify-production
 spec:
   accessModes:
     - ReadWriteOnce
