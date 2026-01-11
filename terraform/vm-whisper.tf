@@ -82,7 +82,9 @@ resource "proxmox_virtual_environment_file" "whisper_cloud_init" {
   node_name    = var.pm_node
 
   source_raw {
-    data      = file("${path.module}/cloud-init/whisper.yaml")
+    data = templatefile("${path.module}/cloud-init/whisper.yaml", {
+      whisper_api_script = indent(6, file("${path.module}/cloud-init/whisper-api.py"))
+    })
     file_name = "whisper-cloud-init.yaml"
   }
 }
