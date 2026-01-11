@@ -1,9 +1,3 @@
 # don't check in unencrypted secrets
-**/*secrets.yaml
-**/*secret.yaml
-**/secret.yaml
 .env
-
-# Allow ExternalSecret manifests (these don't contain actual secrets)
-!**/external-secret.yaml
-!**/ghcr-external-secret.yaml
+**/secret.yaml
