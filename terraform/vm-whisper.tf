@@ -6,7 +6,7 @@ resource "proxmox_virtual_environment_vm" "whisper_gpu" {
   tags        = split(",", local.whisper_vm.tags)
 
   clone {
-    vm_id     = var.template_vmid
+    vm_id     = var.template_vmid_debian12_nvidia  # Debian 12 + NVIDIA drivers pre-installed
     node_name = var.pm_node
     full      = true
   }
@@ -22,6 +22,13 @@ resource "proxmox_virtual_environment_vm" "whisper_gpu" {
 
   bios    = "ovmf"
   machine = "q35"
+
+  # Disable Secure Boot - required for NVIDIA drivers (unsigned kernel modules)
+  efi_disk {
+    datastore_id      = var.storage
+    pre_enrolled_keys = false
+    type              = "4m"
+  }
 
   scsi_hardware = "virtio-scsi-single"
 
@@ -82,9 +89,7 @@ resource "proxmox_virtual_environment_file" "whisper_cloud_init" {
   node_name    = var.pm_node
 
   source_raw {
-    data = templatefile("${path.module}/cloud-init/whisper.yaml", {
-      whisper_api_script = indent(6, file("${path.module}/cloud-init/whisper-api.py"))
-    })
+    data = file("${path.module}/cloud-init/whisper.yaml")
     file_name = "whisper-cloud-init.yaml"
   }
 }

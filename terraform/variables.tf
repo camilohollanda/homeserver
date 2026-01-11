@@ -37,9 +37,21 @@ variable "template_name" {
 }
 
 variable "template_vmid" {
-  description = "Cloud-init ready template VM ID to clone"
+  description = "Cloud-init ready template VM ID to clone (Debian 13)"
   type        = number
   default     = 9001
+}
+
+variable "template_vmid_debian12" {
+  description = "Debian 12 cloud-init template VM ID (for PyTorch/GPU workloads)"
+  type        = number
+  default     = 9002
+}
+
+variable "template_vmid_debian12_nvidia" {
+  description = "Debian 12 + NVIDIA drivers template VM ID (for GPU passthrough)"
+  type        = number
+  default     = 9003
 }
 
 variable "storage" {
