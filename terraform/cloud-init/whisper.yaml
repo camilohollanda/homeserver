@@ -2,6 +2,10 @@
 # Whisper GPU Inference Server - Fully Automated Setup
 # Automatically installs NVIDIA drivers, reboots, then sets up Whisper API
 
+# Set hostname for mDNS (whisper.local)
+hostname: whisper
+manage_etc_hosts: true
+
 package_update: true
 package_upgrade: false
 
@@ -19,6 +23,7 @@ packages:
   - libsndfile1
   - debconf-utils
   - unzip
+  - avahi-daemon
 
 users:
   - default
@@ -567,6 +572,9 @@ runcmd:
   - mkdir -p /opt/whisper/models
   - chown -R whisper:whisper /opt/whisper
   - echo "Whisper cloud-init started at $(date)" >> /var/log/whisper-setup.log
+  # Enable avahi for mDNS (whisper.local)
+  - systemctl enable avahi-daemon
+  - systemctl restart avahi-daemon
   # Install Promtail for log shipping to Loki
   - /opt/whisper/install-promtail.sh
   # Enable and start auto-setup service
