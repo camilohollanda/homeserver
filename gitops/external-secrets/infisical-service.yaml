@@ -1,0 +1,27 @@
+# =============================================================================
+# Service + Endpoints for external Infisical server
+# This abstracts the IP so it only needs to be changed in one place
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: infisical
+  namespace: external-secrets
+spec:
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: http
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: infisical
+  namespace: external-secrets
+subsets:
+- addresses:
+  - ip: 192.168.20.22
+  ports:
+  - port: 8080
+    name: http
