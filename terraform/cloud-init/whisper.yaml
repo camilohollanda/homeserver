@@ -1,7 +1,7 @@
 #cloud-config
 # Whisper GPU Inference Server
 # Requires: debian-12-nvidia template (NVIDIA drivers pre-installed)
-# Sets up: Python environment, PyTorch with CUDA, Whisper API
+# Sets up: Python environment, PyTorch with CUDA, Whisper API, HTTPS via Let's Encrypt
 
 hostname: whisper
 manage_etc_hosts: true
@@ -21,7 +21,9 @@ packages:
   - ffmpeg
   - libsndfile1
   - unzip
-  - avahi-daemon
+  - nginx
+  - certbot
+  - python3-certbot-dns-cloudflare
 
 users:
   - default
@@ -31,6 +33,53 @@ users:
     sudo: ALL=(ALL) NOPASSWD:ALL
 
 write_files:
+  # Cloudflare credentials for Let's Encrypt
+  - path: /etc/letsencrypt/cloudflare.ini
+    permissions: "0600"
+    content: |
+      dns_cloudflare_api_token = ${cloudflare_api_token}
+
+  # Nginx configuration
+  - path: /etc/nginx/sites-available/whisper
+    permissions: "0644"
+    content: |
+      server {
+          listen 80;
+          server_name ${domain};
+
+          location / {
+              return 301 https://$host$request_uri;
+          }
+      }
+
+      server {
+          listen 443 ssl;
+          server_name ${domain};
+
+          ssl_certificate /etc/letsencrypt/live/${domain}/fullchain.pem;
+          ssl_certificate_key /etc/letsencrypt/live/${domain}/privkey.pem;
+          ssl_protocols TLSv1.2 TLSv1.3;
+          ssl_ciphers HIGH:!aNULL:!MD5;
+
+          client_max_body_size 100M;
+
+          location / {
+              proxy_pass http://127.0.0.1:8000;
+              proxy_set_header Host $host;
+              proxy_set_header X-Real-IP $remote_addr;
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Proto $scheme;
+              proxy_read_timeout 300s;
+          }
+      }
+
+  # Cert renewal hook
+  - path: /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      systemctl reload nginx
+
   # Main setup script - runs once on first boot
   - path: /opt/whisper/setup.sh
     permissions: "0755"
@@ -100,8 +149,8 @@ write_files:
           echo "SETUP COMPLETE!"
           echo "=========================================="
           echo ""
-          echo "Whisper API: http://$(hostname -I | awk '{print $1}'):8000"
-          echo "Health check: curl http://$(hostname -I | awk '{print $1}'):8000/health"
+          echo "Whisper API: https://${domain}"
+          echo "Health check: curl https://${domain}/health"
           echo ""
 
           # Disable setup service
@@ -367,7 +416,7 @@ write_files:
           print("Pre-loading Whisper model...")
           get_model()
           print("Starting API server...")
-          uvicorn.run(app, host="0.0.0.0", port=8000)
+          uvicorn.run(app, host="127.0.0.1", port=8000)
 
   # Systemd service for Whisper API
   - path: /etc/systemd/system/whisper-api.service
@@ -489,11 +538,29 @@ runcmd:
   - mkdir -p /opt/whisper/models
   - chown -R whisper:whisper /opt/whisper
   - echo "Whisper cloud-init started at $(date)" >> /var/log/whisper-setup.log
-  # Enable avahi for mDNS (whisper.local)
-  - systemctl enable avahi-daemon
-  - systemctl restart avahi-daemon
+
+  # Create letsencrypt directories
+  - mkdir -p /etc/letsencrypt/renewal-hooks/deploy
+
+  # Get Let's Encrypt certificate
+  - |
+    certbot certonly \
+      --dns-cloudflare \
+      --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini \
+      -d ${domain} \
+      --non-interactive \
+      --agree-tos \
+      -m ${letsencrypt_email}
+
+  # Configure nginx
+  - rm -f /etc/nginx/sites-enabled/default
+  - ln -sf /etc/nginx/sites-available/whisper /etc/nginx/sites-enabled/whisper
+  - systemctl enable nginx
+  - systemctl start nginx
+
   # Install Promtail for log shipping
   - /opt/whisper/install-promtail.sh
+
   # Enable and start setup service
   - systemctl daemon-reload
   - systemctl enable whisper-setup.service

@@ -85,9 +85,9 @@ resource "proxmox_virtual_environment_file" "infisical_cloud_init" {
       postgres_password_encoded = urlencode(var.infisical_postgres_password)
       encryption_key            = var.infisical_encryption_key
       auth_secret               = var.infisical_auth_secret
-      site_url                  = var.infisical_site_url
-      tls_cert                  = var.infisical_tls_cert
-      tls_key                   = var.infisical_tls_key
+      domain                    = var.infisical_domain
+      cloudflare_api_token      = var.cloudflare_api_token
+      letsencrypt_email         = var.letsencrypt_email
     })
     file_name = "infisical-cloud-init.yaml"
   }

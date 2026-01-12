@@ -127,10 +127,10 @@ variable "infisical_auth_secret" {
   sensitive   = true
 }
 
-variable "infisical_site_url" {
-  description = "Public URL for Infisical (e.g., https://secrets.example.com)"
+variable "infisical_domain" {
+  description = "Domain for Infisical (e.g., infisical.internal.example.com)"
   type        = string
-  default     = ""
+  default     = "infisical.internal.prakash.com.br"
 }
 
 variable "snippets_storage" {
@@ -145,18 +145,23 @@ variable "pm_ssh_user" {
   default     = "root"
 }
 
-variable "infisical_tls_cert" {
-  description = "TLS certificate for Infisical (PEM format). Generate with: mkcert infisical.local"
+# Let's Encrypt / Cloudflare configuration (shared)
+variable "cloudflare_api_token" {
+  description = "Cloudflare API token for DNS-01 challenge (Edit zone DNS permission)"
   type        = string
-  default     = ""
   sensitive   = true
 }
 
-variable "infisical_tls_key" {
-  description = "TLS private key for Infisical (PEM format)"
+variable "letsencrypt_email" {
+  description = "Email for Let's Encrypt certificate notifications"
   type        = string
-  default     = ""
-  sensitive   = true
+}
+
+# Whisper configuration
+variable "whisper_domain" {
+  description = "Domain for Whisper API (e.g., whisper.internal.example.com)"
+  type        = string
+  default     = "whisper.internal.prakash.com.br"
 }
 
 # PostgreSQL configuration
@@ -170,4 +175,10 @@ variable "postgres_allowed_network" {
   description = "Network CIDR allowed to connect to PostgreSQL"
   type        = string
   default     = "192.168.20.0/24"
+}
+
+variable "postgres_domain" {
+  description = "Domain for PostgreSQL (e.g., pg.internal.example.com)"
+  type        = string
+  default     = "pg.internal.prakash.com.br"
 }

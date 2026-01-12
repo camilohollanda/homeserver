@@ -89,7 +89,11 @@ resource "proxmox_virtual_environment_file" "whisper_cloud_init" {
   node_name    = var.pm_node
 
   source_raw {
-    data = file("${path.module}/cloud-init/whisper.yaml")
+    data = templatefile("${path.module}/cloud-init/whisper.yaml", {
+      domain               = var.whisper_domain
+      cloudflare_api_token = var.cloudflare_api_token
+      letsencrypt_email    = var.letsencrypt_email
+    })
     file_name = "whisper-cloud-init.yaml"
   }
 }

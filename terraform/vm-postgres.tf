@@ -88,8 +88,11 @@ resource "proxmox_virtual_environment_file" "postgres_cloud_init" {
 
   source_raw {
     data = templatefile("${path.module}/cloud-init/postgres.yaml", {
-      postgres_version = var.postgres_version
-      allowed_network  = var.postgres_allowed_network
+      postgres_version     = var.postgres_version
+      allowed_network      = var.postgres_allowed_network
+      domain               = var.postgres_domain
+      cloudflare_api_token = var.cloudflare_api_token
+      letsencrypt_email    = var.letsencrypt_email
     })
     file_name = "postgres-cloud-init.yaml"
   }
