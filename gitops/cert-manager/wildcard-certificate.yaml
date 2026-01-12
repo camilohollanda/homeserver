@@ -3,6 +3,8 @@ kind: Certificate
 metadata:
   name: internal-wildcard
   namespace: cert-manager
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
 spec:
   secretName: internal-wildcard-tls
   issuerRef:
