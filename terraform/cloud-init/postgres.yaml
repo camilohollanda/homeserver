@@ -1,0 +1,91 @@
+#cloud-config
+
+# Set hostname early (before packages install)
+hostname: pg
+manage_etc_hosts: true
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - wget
+  - ca-certificates
+  - gnupg
+  - lsb-release
+  - avahi-daemon
+
+write_files:
+  - path: /etc/apt/keyrings/.placeholder
+    permissions: '0644'
+    content: |
+      # Placeholder for keyrings directory
+
+runcmd:
+  # Ensure avahi is enabled (hostname already set via cloud-init)
+  - systemctl enable avahi-daemon
+  - systemctl restart avahi-daemon
+
+  # Setup data disk for PostgreSQL (/dev/sdb -> /data)
+  - |
+    if [ -b /dev/sdb ] && ! blkid /dev/sdb; then
+      echo "Formatting data disk..."
+      mkfs.ext4 -L pgdata /dev/sdb
+    fi
+  - mkdir -p /data
+  - |
+    if ! grep -q '/data' /etc/fstab; then
+      echo 'LABEL=pgdata /data ext4 defaults,noatime 0 2' >> /etc/fstab
+    fi
+  - mount -a
+
+  # Add PostgreSQL official APT repository
+  - wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /etc/apt/keyrings/postgresql.gpg
+  - chmod 644 /etc/apt/keyrings/postgresql.gpg
+  - echo "deb [signed-by=/etc/apt/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+
+  # Update and install PostgreSQL
+  - apt-get update
+  - apt-get install -y postgresql-${postgres_version} postgresql-contrib-${postgres_version}
+
+  # Stop PostgreSQL to move data directory
+  - systemctl stop postgresql
+
+  # Move PostgreSQL data to /data if not already there
+  - |
+    if [ ! -d /data/postgresql ]; then
+      mkdir -p /data/postgresql
+      chown postgres:postgres /data/postgresql
+      chmod 700 /data/postgresql
+      # Move existing data
+      if [ -d /var/lib/postgresql/${postgres_version}/main ]; then
+        mv /var/lib/postgresql/${postgres_version}/main /data/postgresql/${postgres_version}_main
+      else
+        mkdir -p /data/postgresql/${postgres_version}_main
+        chown postgres:postgres /data/postgresql/${postgres_version}_main
+        chmod 700 /data/postgresql/${postgres_version}_main
+      fi
+    fi
+
+  # Update PostgreSQL config to use /data
+  - sed -i "s|data_directory = '/var/lib/postgresql/${postgres_version}/main'|data_directory = '/data/postgresql/${postgres_version}_main'|" /etc/postgresql/${postgres_version}/main/postgresql.conf
+
+  # Configure PostgreSQL to listen on all interfaces
+  - cp /etc/postgresql/${postgres_version}/main/postgresql.conf /etc/postgresql/${postgres_version}/main/postgresql.conf.bak
+  - sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" /etc/postgresql/${postgres_version}/main/postgresql.conf
+
+  # Configure pg_hba.conf to allow connections from local network
+  - echo "" >> /etc/postgresql/${postgres_version}/main/pg_hba.conf
+  - echo "# Allow connections from local network" >> /etc/postgresql/${postgres_version}/main/pg_hba.conf
+  - echo "host    all             all             ${allowed_network}          md5" >> /etc/postgresql/${postgres_version}/main/pg_hba.conf
+
+  # Initialize database if needed (new data disk)
+  - |
+    if [ ! -f /data/postgresql/${postgres_version}_main/PG_VERSION ]; then
+      sudo -u postgres /usr/lib/postgresql/${postgres_version}/bin/initdb -D /data/postgresql/${postgres_version}_main
+    fi
+
+  # Start PostgreSQL
+  - systemctl start postgresql
+  - systemctl enable postgresql
+
+final_message: "PostgreSQL ${postgres_version} server is ready at pg.local (data on /data)"

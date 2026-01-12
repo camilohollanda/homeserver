@@ -158,3 +158,16 @@ variable "infisical_tls_key" {
   default     = ""
   sensitive   = true
 }
+
+# PostgreSQL configuration
+variable "postgres_version" {
+  description = "PostgreSQL version to install"
+  type        = string
+  default     = "17"
+}
+
+variable "postgres_allowed_network" {
+  description = "Network CIDR allowed to connect to PostgreSQL"
+  type        = string
+  default     = "192.168.20.0/24"
+}

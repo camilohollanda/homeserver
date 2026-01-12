@@ -64,9 +64,12 @@ case "$TARGET" in
     ;;
   postgres)
     copy_dir_to_vm "$DB_IP" "db-postgres" "${BOOTSTRAP_DIR}/postgres"
-    echo "Next steps for db-postgres VM:"
-    echo "  ssh ${SSH_USER}@${DB_IP}"
-    echo "  sudo /opt/bootstrap/install.sh"
+    echo "PostgreSQL is automatically installed via cloud-init."
+    echo "VM is accessible at: pg.local"
+    echo ""
+    echo "To provision app databases:"
+    echo "  ssh ${SSH_USER}@${DB_IP}  # or: ssh ${SSH_USER}@pg.local"
+    echo "  /opt/bootstrap/pg-provision.sh myapp"
     ;;
   infisical)
     if [ -z "$INFISICAL_IP" ]; then
@@ -113,9 +116,10 @@ case "$TARGET" in
     echo "   ssh ${SSH_USER}@${K3S_IP}"
     echo "   sudo /opt/bootstrap/bootstrap.sh"
     echo ""
-    echo "2. Setup Postgres database:"
-    echo "   ssh ${SSH_USER}@${DB_IP}"
-    echo "   sudo /opt/bootstrap/install.sh"
+    echo "2. PostgreSQL is automatically installed via cloud-init (pg.local)"
+    echo "   To provision app databases:"
+    echo "   ssh ${SSH_USER}@${DB_IP}  # or: ssh ${SSH_USER}@pg.local"
+    echo "   /opt/bootstrap/pg-provision.sh myapp"
     echo ""
     echo "3. Setup Infisical database (on db-postgres VM):"
     echo "   /opt/bootstrap/db-setup.sh infisical infisical 'your-password'"
