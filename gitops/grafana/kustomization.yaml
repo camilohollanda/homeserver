@@ -4,8 +4,7 @@ kind: Kustomization
 resources:
   - namespace.yaml
   - pvc.yaml
-  # NOTE: secret.yaml is created manually (encrypted version stored as secret.yaml.gpg)
-  # Run: gpg -d grafana/secret.yaml.gpg | kubectl apply -f -
+  - external-secret.yaml
   - datasources.yaml
   - dashboard-provisioning.yaml
   - deployment.yaml
