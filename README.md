@@ -16,7 +16,7 @@ Kubernetes infrastructure for Werify and Prakash.com.br, running on Proxmox with
 
 - `werify.app` → Phoenix LiveView app (prod)
 - `staging.werify.app` → Staging environment
-- `grafana.prakash.com.br` → Grafana dashboard
+- `grafana.internal.prakash.com.br` → Grafana dashboard
 - `prakash.com.br` → Institutional site
 
 ## Structure
