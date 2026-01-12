@@ -1,68 +1,85 @@
 # Bootstrap Scripts
 
-Scripts to initialize the K3s cluster and install core infrastructure components.
+Scripts organized by VM to initialize infrastructure components.
+
+## Folder Structure
+
+```
+bootstrap/
+├── k3s/                    # k3s-apps VM (192.168.20.11)
+│   ├── bootstrap.sh        # Main orchestrator - run this!
+│   ├── k3s-install.sh
+│   ├── ingress-nginx-install.sh
+│   ├── argocd-install.sh
+│   ├── argocd-github-setup.sh
+│   ├── argocd-image-updater-install.sh
+│   ├── external-secrets-install.sh
+│   ├── cert-manager-install.sh
+│   ├── cloudflared-install.sh
+│   ├── cloudflared-config.sh
+│   └── ARGOCD-DOMAIN.md
+├── postgres/               # db-postgres VM (192.168.20.21)
+│   └── install.sh
+├── infisical/              # infisical VM (192.168.20.22)
+│   └── db-setup.sh         # Run on postgres VM to create Infisical DB
+├── whisper/                # whisper-gpu VM (192.168.20.30)
+│   ├── setup.sh
+│   └── README.md
+└── README.md               # This file
+```
 
 ## Quick Start
 
-### K3s Cluster (k3s-apps VM)
+### 1. Copy Scripts to VMs
 
-Run on the k3s-apps VM after Terraform provisioning:
+From your local machine (in the terraform directory):
 
 ```bash
-sudo ./bootstrap.sh
+./copy-bootstrap.sh all
 ```
 
-This single command installs everything in the correct order.
+This copies the appropriate scripts to each VM at `/opt/bootstrap/`.
 
-## What Gets Installed
+### 2. Bootstrap Each VM
 
-The bootstrap process installs infrastructure in 3 phases:
+#### K3s Cluster (k3s-apps VM)
 
-### Phase 1: Core Infrastructure
-| Component | Script | Description |
-|-----------|--------|-------------|
-| K3s | `k3s-install.sh` | Lightweight Kubernetes (Traefik disabled) |
-| ingress-nginx | `ingress-nginx-install.sh` | Ingress controller |
-| ArgoCD | `argocd-install.sh` | GitOps controller |
-
-### Phase 2: Operators (via Helm)
-| Component | Script | Description |
-|-----------|--------|-------------|
-| External Secrets | `external-secrets-install.sh` | Syncs secrets from Infisical |
-| ArgoCD Image Updater | `argocd-image-updater-install.sh` | Auto-updates container images |
-
-### Phase 3: Networking
-| Component | Script | Description |
-|-----------|--------|-------------|
-| cloudflared | `cloudflared-install.sh` | Cloudflare Tunnel binary |
-| Tunnel config | `cloudflared-config.sh` | Configures tunnel service |
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Bootstrap (run once)                      │
-│  Installs: K3s, ArgoCD, ingress-nginx, operators, tunnel    │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                     GitOps (continuous)                      │
-│  Manages: Apps, secrets config, observability stack          │
-│  Location: gitops/                                           │
-└─────────────────────────────────────────────────────────────┘
+```bash
+ssh deployer@192.168.20.11
+sudo /opt/bootstrap/bootstrap.sh
 ```
 
-**Why Helm in bootstrap?**
+This installs everything in the correct order:
+- K3s (lightweight Kubernetes)
+- ingress-nginx
+- ArgoCD
+- External Secrets Operator
+- ArgoCD Image Updater
+- Cloudflare Tunnel
 
-Operators like External Secrets and ArgoCD Image Updater are 30K+ lines of CRDs,
-RBAC, webhooks, and controllers. They're infrastructure installed once, not
-application configs that change frequently. Helm is appropriate for this.
+#### PostgreSQL (db-postgres VM)
 
-GitOps manages your apps and their configurations (ClusterSecretStore,
-ExternalSecrets, ImageUpdater CRs) - those are self-contained YAML manifests.
+```bash
+ssh deployer@192.168.20.21
+sudo /opt/bootstrap/install.sh
+```
 
-## Post-Bootstrap Steps
+#### Infisical Database (run on postgres VM)
+
+```bash
+ssh deployer@192.168.20.21
+/opt/bootstrap/db-setup.sh infisical infisical 'your-secure-password'
+```
+
+#### Whisper GPU (whisper-gpu VM)
+
+```bash
+ssh deployer@192.168.20.30
+sudo /opt/bootstrap/setup.sh
+# Reboot if prompted for NVIDIA driver, then run again
+```
+
+## Post-Bootstrap Steps (K3s)
 
 ### 1. Create Infisical Credentials
 
@@ -76,12 +93,8 @@ kubectl create secret generic infisical-credentials \
 ### 2. Configure GitHub Access for ArgoCD
 
 ```bash
-sudo ./argocd-github-setup.sh
+sudo /opt/bootstrap/argocd-github-setup.sh
 ```
-
-This sets up either:
-- SSH Deploy Key (single repository)
-- GitHub App (multiple repositories)
 
 ### 3. Access ArgoCD
 
@@ -94,56 +107,59 @@ kubectl -n argocd get secret argocd-initial-admin-secret \
 https://192.168.20.11:30443
 ```
 
-### 4. Apply GitOps Configuration
+## Architecture
 
-In ArgoCD, create an Application pointing to your `gitops/` directory.
-
-## Other Scripts
-
-### Database (db-postgres VM)
-
-```bash
-# Install PostgreSQL 16 (default)
-sudo ./postgres-install.sh
-
-# Or specific version
-POSTGRES_VERSION=15 sudo ./postgres-install.sh
 ```
-
-### Infisical Database Setup
-
-```bash
-sudo ./infisical-db-setup.sh
+┌─────────────────────────────────────────────────────────────────┐
+│                         VMs                                      │
+├─────────────────┬─────────────────┬─────────────────────────────┤
+│   k3s-apps      │   db-postgres   │   infisical   │ whisper-gpu │
+│  192.168.20.11  │  192.168.20.21  │ 192.168.20.22 │ .20.30      │
+├─────────────────┼─────────────────┼───────────────┼─────────────┤
+│ K3s cluster     │ PostgreSQL 17   │ Secrets mgmt  │ ML/GPU      │
+│ ArgoCD          │ Databases for:  │ (Docker)      │ Whisper API │
+│ ingress-nginx   │ - Infisical     │               │             │
+│ External Secrets│ - Apps          │               │             │
+│ Cloudflare Tun. │                 │               │             │
+└─────────────────┴─────────────────┴───────────────┴─────────────┘
 ```
-
-### Whisper GPU Setup
-
-See `WHISPER-GPU.md` for GPU-accelerated transcription setup.
 
 ## Troubleshooting
 
-### Check all pods
-```bash
-kubectl get pods -A
-```
+### K3s Cluster
 
-### Check operator logs
 ```bash
-# External Secrets
+# Check all pods
+kubectl get pods -A
+
+# External Secrets logs
 kubectl logs -n external-secrets -l app.kubernetes.io/name=external-secrets
 
-# ArgoCD Image Updater
+# ArgoCD Image Updater logs
 kubectl logs -n argocd -l app.kubernetes.io/name=argocd-image-updater
-```
 
-### Cloudflare Tunnel
-```bash
+# Cloudflare Tunnel
 systemctl status cloudflared
 journalctl -u cloudflared -f
 ```
 
-## Notes
+### PostgreSQL
 
-- All scripts must be run as root (`sudo`)
-- ArgoCD works without a public domain (polling every 3 min)
-- For immediate GitHub webhook sync, see `ARGOCD-DOMAIN.md`
+```bash
+# Check service status
+systemctl status postgresql
+
+# Connect to database
+sudo -u postgres psql
+```
+
+### Whisper GPU
+
+```bash
+# Check GPU
+nvidia-smi
+
+# Check service
+systemctl status whisper-api
+curl http://localhost:8000/health
+```

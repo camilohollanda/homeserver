@@ -31,135 +31,112 @@ echo "Whisper VM IP: $WHISPER_IP"
 echo "SSH User: $SSH_USER"
 echo ""
 
-# Function to copy bootstrap scripts to a VM
-copy_to_vm() {
+# Function to copy a directory of bootstrap scripts to a VM
+copy_dir_to_vm() {
   local VM_IP=$1
   local VM_NAME=$2
-  local SCRIPTS_TO_COPY=$3
+  local SOURCE_DIR=$3
 
   echo "Copying bootstrap scripts to $VM_NAME ($VM_IP)..."
 
   # Create bootstrap directory on remote VM
-  ssh -o StrictHostKeyChecking=no "${SSH_USER}@${VM_IP}" "mkdir -p ~/bootstrap"
+  ssh -o StrictHostKeyChecking=no "${SSH_USER}@${VM_IP}" "sudo mkdir -p /opt/bootstrap && sudo chown ${SSH_USER}:${SSH_USER} /opt/bootstrap"
 
-  # Copy scripts
-  for script in $SCRIPTS_TO_COPY; do
-    if [ -f "${BOOTSTRAP_DIR}/${script}" ]; then
-      echo "  Copying ${script}..."
-      scp -o StrictHostKeyChecking=no "${BOOTSTRAP_DIR}/${script}" "${SSH_USER}@${VM_IP}:~/bootstrap/"
-    else
-      echo "  Warning: ${script} not found, skipping..."
-    fi
-  done
+  # Copy all files from source directory
+  echo "  Copying from ${SOURCE_DIR}..."
+  scp -o StrictHostKeyChecking=no -r "${SOURCE_DIR}"/* "${SSH_USER}@${VM_IP}:/opt/bootstrap/"
 
   # Make scripts executable
   echo "  Making scripts executable..."
-  ssh -o StrictHostKeyChecking=no "${SSH_USER}@${VM_IP}" "chmod +x ~/bootstrap/*.sh"
+  ssh -o StrictHostKeyChecking=no "${SSH_USER}@${VM_IP}" "chmod +x /opt/bootstrap/*.sh 2>/dev/null || true"
 
-  echo "  ✓ Bootstrap scripts copied to $VM_NAME"
+  echo "  ✓ Bootstrap scripts copied to $VM_NAME at /opt/bootstrap/"
   echo ""
 }
 
 # Copy based on target
 case "$TARGET" in
   k3s)
-    copy_to_vm "$K3S_IP" "k3s-apps" "k3s-install.sh ingress-nginx-install.sh argocd-install.sh argocd-github-setup.sh cloudflared-install.sh cloudflared-config.sh external-secrets-install.sh argocd-image-updater-install.sh bootstrap.sh README.md"
+    copy_dir_to_vm "$K3S_IP" "k3s-apps" "${BOOTSTRAP_DIR}/k3s"
     echo "Next steps for k3s-apps VM:"
     echo "  ssh ${SSH_USER}@${K3S_IP}"
-    echo "  sudo ~/bootstrap/bootstrap.sh"
+    echo "  sudo /opt/bootstrap/bootstrap.sh"
     ;;
   postgres)
-    copy_to_vm "$DB_IP" "db-postgres" "postgres-install.sh infisical-db-setup.sh"
+    copy_dir_to_vm "$DB_IP" "db-postgres" "${BOOTSTRAP_DIR}/postgres"
     echo "Next steps for db-postgres VM:"
     echo "  ssh ${SSH_USER}@${DB_IP}"
-    echo "  sudo ~/bootstrap/postgres-install.sh"
-    echo "  # Or with specific version: POSTGRES_VERSION=15 sudo ~/bootstrap/postgres-install.sh"
-    echo ""
-    echo "  # If setting up Infisical, also run:"
-    echo "  ~/bootstrap/infisical-db-setup.sh infisical infisical 'your-password'"
+    echo "  sudo /opt/bootstrap/install.sh"
     ;;
   infisical)
     if [ -z "$INFISICAL_IP" ]; then
       echo "Error: Infisical VM IP not found. Make sure you've applied the Terraform config."
       exit 1
     fi
+    copy_dir_to_vm "$INFISICAL_IP" "infisical" "${BOOTSTRAP_DIR}/infisical"
     echo "Infisical VM uses cloud-init for bootstrap (Docker + docker-compose)."
-    echo "No additional scripts need to be copied."
+    echo "The db-setup.sh script is for creating the database on the postgres VM."
+    echo ""
+    echo "To setup Infisical database (run on db-postgres VM):"
+    echo "  ssh ${SSH_USER}@${DB_IP}"
+    echo "  /opt/bootstrap/db-setup.sh infisical infisical 'your-password'"
     echo ""
     echo "Access Infisical at: https://${INFISICAL_IP}:8443"
-    echo ""
-    echo "To check status:"
-    echo "  ssh ${SSH_USER}@${INFISICAL_IP}"
-    echo "  sudo docker compose -f /opt/infisical/docker-compose.yml ps"
-    echo "  sudo docker compose -f /opt/infisical/docker-compose.yml logs -f"
     ;;
   whisper)
     if [ -z "$WHISPER_IP" ]; then
       echo "Error: Whisper VM IP not found. Make sure you've applied the Terraform config."
       exit 1
     fi
-    echo "Whisper GPU VM uses cloud-init for bootstrap."
-    echo ""
-    echo "To complete setup, run the bootstrap script from your local machine:"
-    echo "  ${BOOTSTRAP_DIR}/whisper-setup.sh ${WHISPER_IP}"
-    echo ""
-    echo "This will:"
-    echo "  1. Install NVIDIA drivers (requires reboot)"
-    echo "  2. Setup Python + faster-whisper"
-    echo "  3. Download the large-v3-turbo model"
-    echo "  4. Start the API service"
+    copy_dir_to_vm "$WHISPER_IP" "whisper-gpu" "${BOOTSTRAP_DIR}/whisper"
+    echo "Next steps for whisper-gpu VM:"
+    echo "  ssh ${SSH_USER}@${WHISPER_IP}"
+    echo "  sudo /opt/bootstrap/setup.sh"
     echo ""
     echo "After setup, access the API at: http://${WHISPER_IP}:8000"
-    echo ""
-    echo "To check status:"
-    echo "  ssh ${SSH_USER}@${WHISPER_IP}"
-    echo "  nvidia-smi                              # Check GPU"
-    echo "  sudo systemctl status whisper-api      # Check service"
-    echo "  curl http://localhost:8000/health      # Health check"
     ;;
   all)
-    copy_to_vm "$K3S_IP" "k3s-apps" "k3s-install.sh ingress-nginx-install.sh argocd-install.sh argocd-github-setup.sh cloudflared-install.sh cloudflared-config.sh external-secrets-install.sh argocd-image-updater-install.sh bootstrap.sh README.md"
-    copy_to_vm "$DB_IP" "db-postgres" "postgres-install.sh infisical-db-setup.sh"
+    copy_dir_to_vm "$K3S_IP" "k3s-apps" "${BOOTSTRAP_DIR}/k3s"
+    copy_dir_to_vm "$DB_IP" "db-postgres" "${BOOTSTRAP_DIR}/postgres"
+    if [ -n "$INFISICAL_IP" ]; then
+      # Copy infisical db-setup to postgres VM as well
+      scp -o StrictHostKeyChecking=no "${BOOTSTRAP_DIR}/infisical/db-setup.sh" "${SSH_USER}@${DB_IP}:/opt/bootstrap/"
+    fi
+    if [ -n "$WHISPER_IP" ]; then
+      copy_dir_to_vm "$WHISPER_IP" "whisper-gpu" "${BOOTSTRAP_DIR}/whisper"
+    fi
     echo "✓ All bootstrap scripts copied!"
     echo ""
     echo "Next steps:"
     echo ""
-    echo "1. Bootstrap K3s cluster (installs everything):"
+    echo "1. Bootstrap K3s cluster:"
     echo "   ssh ${SSH_USER}@${K3S_IP}"
-    echo "   sudo ~/bootstrap/bootstrap.sh"
+    echo "   sudo /opt/bootstrap/bootstrap.sh"
     echo ""
     echo "2. Setup Postgres database:"
     echo "   ssh ${SSH_USER}@${DB_IP}"
-    echo "   sudo ~/bootstrap/postgres-install.sh"
+    echo "   sudo /opt/bootstrap/install.sh"
     echo ""
     echo "3. Setup Infisical database (on db-postgres VM):"
-    echo "   ~/bootstrap/infisical-db-setup.sh infisical infisical 'your-password'"
+    echo "   /opt/bootstrap/db-setup.sh infisical infisical 'your-password'"
     echo ""
-    echo "4. Access Infisical (after VM boots, ~3-5 min):"
+    echo "4. Access Infisical (after VM boots):"
     echo "   https://${INFISICAL_IP:-192.168.20.22}:8443"
     echo ""
-    echo "5. Create Infisical credentials (on k3s VM):"
-    echo "   kubectl create secret generic infisical-credentials \\"
-    echo "     --namespace external-secrets \\"
-    echo "     --from-literal=clientId=\"\\\$INFISICAL_CLIENT_ID\" \\"
-    echo "     --from-literal=clientSecret=\"\\\$INFISICAL_CLIENT_SECRET\""
-    echo ""
     if [ -n "$WHISPER_IP" ]; then
-    echo "6. Setup Whisper GPU inference server:"
-    echo "   ${BOOTSTRAP_DIR}/whisper-setup.sh ${WHISPER_IP}"
-    echo "   # After reboot, run again to complete setup"
+    echo "5. Setup Whisper GPU:"
+    echo "   ssh ${SSH_USER}@${WHISPER_IP}"
+    echo "   sudo /opt/bootstrap/setup.sh"
     echo ""
-    echo "7. Test Whisper API:"
-    echo "   curl http://${WHISPER_IP}:8000/health"
     fi
     ;;
   *)
     echo "Usage: $0 [k3s|postgres|infisical|whisper|all]"
     echo ""
-    echo "  k3s       - Copy scripts to k3s-apps VM only"
-    echo "  postgres  - Copy scripts to db-postgres VM only"
-    echo "  infisical - Show Infisical VM status commands"
-    echo "  whisper   - Show Whisper GPU VM setup commands"
+    echo "  k3s       - Copy scripts to k3s-apps VM"
+    echo "  postgres  - Copy scripts to db-postgres VM"
+    echo "  infisical - Copy scripts and show Infisical setup commands"
+    echo "  whisper   - Copy scripts to whisper-gpu VM"
     echo "  all       - Copy scripts to all VMs (default)"
     exit 1
     ;;
