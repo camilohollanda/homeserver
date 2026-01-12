@@ -19,7 +19,8 @@ bootstrap/
 │   ├── cloudflared-config.sh
 │   └── ARGOCD-DOMAIN.md
 ├── postgres/               # db-postgres VM (192.168.20.21)
-│   └── install.sh
+│   ├── install.sh          # Install PostgreSQL
+│   └── pg-provision.sh        # Provision databases for apps
 ├── infisical/              # infisical VM (192.168.20.22)
 │   └── db-setup.sh         # Run on postgres VM to create Infisical DB
 ├── whisper/                # whisper-gpu VM (192.168.20.30)
@@ -63,6 +64,21 @@ This installs everything in the correct order:
 ssh deployer@192.168.20.21
 sudo /opt/bootstrap/install.sh
 ```
+
+#### Provision App Database (run on postgres VM)
+
+```bash
+ssh deployer@192.168.20.21
+/opt/bootstrap/pg-provision.sh myapp              # Creates myapp_staging DB
+/opt/bootstrap/pg-provision.sh myapp --env prod   # Creates myapp_prod DB
+```
+
+This script:
+- Generates a strong 32-character password
+- Creates database and user with correct permissions
+- Is idempotent (safe to run multiple times)
+- Outputs the DATABASE_URL
+- Prints the Infisical CLI command to store the secret
 
 #### Infisical Database (run on postgres VM)
 
