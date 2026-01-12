@@ -1,0 +1,16 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: internal-wildcard
+  namespace: cert-manager
+spec:
+  secretName: internal-wildcard-tls
+  issuerRef:
+    name: letsencrypt-dns
+    kind: ClusterIssuer
+  # Wildcard certificate for all internal services
+  dnsNames:
+    - "*.internal.prakash.com.br"
+    - "internal.prakash.com.br"
+  # Certificate will be renewed 30 days before expiry
+  renewBefore: 720h

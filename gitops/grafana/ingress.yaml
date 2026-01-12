@@ -3,16 +3,22 @@ kind: Ingress
 metadata:
   name: grafana
   namespace: grafana
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-dns
 spec:
   ingressClassName: nginx
+  tls:
+    - hosts:
+        - grafana.internal.prakash.com.br
+      secretName: grafana-tls
   rules:
-  - host: grafana.prakash.com.br
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: grafana
-            port:
-              number: 3000
+    - host: grafana.internal.prakash.com.br
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: grafana
+                port:
+                  number: 3000

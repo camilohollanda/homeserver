@@ -1,0 +1,21 @@
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-dns
+spec:
+  acme:
+    # Use Let's Encrypt production server
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: admin@prakash.com.br
+    privateKeySecretRef:
+      name: letsencrypt-dns-account-key
+    solvers:
+      - dns01:
+          cloudflare:
+            apiTokenSecretRef:
+              name: cloudflare-api-token
+              key: api-token
+        # Optional: limit this solver to specific domains
+        selector:
+          dnsZones:
+            - prakash.com.br
