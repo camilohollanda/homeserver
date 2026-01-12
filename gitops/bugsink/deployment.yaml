@@ -30,6 +30,9 @@ spec:
           httpGet:
             path: /
             port: 8000
+            httpHeaders:
+            - name: Host
+              value: bugsink.internal.prakash.com.br
           initialDelaySeconds: 10
           periodSeconds: 5
           timeoutSeconds: 3
@@ -37,6 +40,9 @@ spec:
           httpGet:
             path: /
             port: 8000
+            httpHeaders:
+            - name: Host
+              value: bugsink.internal.prakash.com.br
           initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 3
