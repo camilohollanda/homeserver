@@ -13,3 +13,4 @@ resources:
   # ArgoCD Applications (app of apps pattern)
   - applications/werify-production.yaml
   - applications/werify-staging.yaml
+  - applications/bugsink.yaml
