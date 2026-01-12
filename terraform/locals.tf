@@ -19,7 +19,7 @@ locals {
     ip_cidr   = "192.168.20.21/24"
     cores     = 4
     memory_mb = 8192
-    disk_size = 60
+    disk_size = 20    # OS disk only - data disk (60GB) managed manually in Proxmox
     tags      = "db,postgres"
   }
 

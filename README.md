@@ -62,16 +62,17 @@ ssh deployer@<k3s-vm-ip>
 sudo ~/bootstrap/bootstrap.sh
 ```
 
-### 4. Setup Postgres Database
+### 4. Postgres Database
 
-SSH into the db-postgres VM and run:
+PostgreSQL is automatically installed via cloud-init when the VM is created.
+The VM is accessible at `pg.local` via mDNS (Avahi).
+
+To provision databases for applications:
 
 ```bash
-ssh deployer@<db-vm-ip>
-sudo ~/bootstrap/postgres-install.sh
+ssh deployer@pg.local
+/opt/bootstrap/pg-provision.sh myapp
 ```
-
-Then configure databases and users as needed.
 
 ### 5. Verify Cloudflare Tunnel
 

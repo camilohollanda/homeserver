@@ -18,9 +18,8 @@ bootstrap/
 │   ├── cloudflared-install.sh
 │   ├── cloudflared-config.sh
 │   └── ARGOCD-DOMAIN.md
-├── postgres/               # db-postgres VM (192.168.20.21)
-│   ├── install.sh          # Install PostgreSQL
-│   └── pg-provision.sh        # Provision databases for apps
+├── postgres/               # db-postgres VM (192.168.20.21) - pg.local
+│   └── pg-provision.sh     # Provision databases for apps (PostgreSQL installed via cloud-init)
 ├── infisical/              # infisical VM (192.168.20.22)
 │   └── db-setup.sh         # Run on postgres VM to create Infisical DB
 ├── whisper/                # whisper-gpu VM (192.168.20.30)
@@ -60,10 +59,8 @@ This installs everything in the correct order:
 
 #### PostgreSQL (db-postgres VM)
 
-```bash
-ssh deployer@192.168.20.21
-sudo /opt/bootstrap/install.sh
-```
+PostgreSQL is automatically installed and configured via cloud-init when the VM is created.
+The VM is accessible at `pg.local` via mDNS (Avahi).
 
 #### Provision App Database (run on postgres VM)
 
