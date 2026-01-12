@@ -8,7 +8,7 @@ spec:
   source:
     repoURL: https://github.com/prem-prakash/homeserver.git
     targetRevision: main
-    path: gitops/production/bugsink
+    path: gitops/bugsink
   destination:
     server: https://kubernetes.default.svc
     namespace: bugsink
