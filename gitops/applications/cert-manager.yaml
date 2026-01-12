@@ -5,20 +5,29 @@ metadata:
   namespace: argocd
 spec:
   project: default
-  source:
-    repoURL: https://github.com/prem-prakash/homeserver.git
-    targetRevision: main
-    path: gitops/cert-manager
+  sources:
+    # Install cert-manager from Helm chart
+    - repoURL: https://charts.jetstack.io
+      chart: cert-manager
+      targetRevision: v1.14.3
+      helm:
+        values: |
+          crds:
+            enabled: true
+    # Custom resources (ClusterIssuer, Certificate, ExternalSecret)
+    - repoURL: https://github.com/prem-prakash/homeserver.git
+      targetRevision: main
+      path: gitops/cert-manager
   destination:
     server: https://kubernetes.default.svc
     namespace: cert-manager
   syncPolicy:
     automated:
-      prune: false
+      prune: true
       selfHeal: true
     syncOptions:
-    - CreateNamespace=false
-    - SkipDryRunOnMissingResource=true
+      - CreateNamespace=true
+      - ServerSideApply=true
     retry:
       limit: 5
       backoff:
