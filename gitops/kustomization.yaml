@@ -2,15 +2,13 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
+  # Shared infrastructure (managed directly by apps)
   - external-secrets/
   - reloader/
   - argocd-image-updater/
-  - grafana/
-  # Loki logging stack
-  - loki-stack/namespace.yaml
-  - loki-stack/loki.yaml
-  - loki-stack/promtail.yaml
   # ArgoCD Applications (app of apps pattern)
   - applications/werify-production.yaml
   - applications/werify-staging.yaml
   - applications/bugsink.yaml
+  - applications/grafana.yaml
+  - applications/loki.yaml
