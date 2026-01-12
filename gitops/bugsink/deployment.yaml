@@ -46,6 +46,8 @@ spec:
         env:
         - name: PORT
           value: "8000"
+        - name: BEHIND_HTTPS_PROXY
+          value: "true"
         volumeMounts:
         - name: data
           mountPath: /data
