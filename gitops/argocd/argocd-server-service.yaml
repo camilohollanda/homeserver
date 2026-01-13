@@ -1,5 +1,4 @@
-# ArgoCD server service with fixed NodePorts
-# Apply after ArgoCD installation to override the default service
+# ArgoCD server service - ClusterIP for ingress access
 apiVersion: v1
 kind: Service
 metadata:
@@ -10,17 +9,15 @@ metadata:
     app.kubernetes.io/name: argocd-server
     app.kubernetes.io/part-of: argocd
 spec:
-  type: NodePort
+  type: ClusterIP
   ports:
     - name: http
       port: 80
       targetPort: 8080
-      nodePort: 30080
       protocol: TCP
     - name: https
       port: 443
       targetPort: 8080
-      nodePort: 30443
       protocol: TCP
   selector:
     app.kubernetes.io/name: argocd-server
