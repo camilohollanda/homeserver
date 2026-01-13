@@ -24,7 +24,7 @@ spec:
       - name: ghcr-credentials
       containers:
       - name: werify
-        image: ghcr.io/prem-prakash/whatsapp-extractor:staging
+        image: ghcr.io/prem-prakash/werify:staging
         ports:
         - containerPort: 4000
           name: http

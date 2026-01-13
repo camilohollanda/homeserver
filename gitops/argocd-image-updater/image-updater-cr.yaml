@@ -14,8 +14,8 @@ spec:
     - namePattern: "werify-production"
       images:
         - alias: werify
-          imageName: ghcr.io/prem-prakash/whatsapp-extractor:main
+          imageName: ghcr.io/prem-prakash/werify:main
     - namePattern: "werify-staging"
       images:
         - alias: werify
-          imageName: ghcr.io/prem-prakash/whatsapp-extractor:staging
+          imageName: ghcr.io/prem-prakash/werify:staging
