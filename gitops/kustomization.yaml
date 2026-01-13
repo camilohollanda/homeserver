@@ -6,6 +6,7 @@ resources:
   - external-secrets/
   - reloader/
   - argocd-image-updater/
+  - argocd/
   # ArgoCD Applications (app of apps pattern)
   - applications/cert-manager.yaml
   - applications/werify-production.yaml
