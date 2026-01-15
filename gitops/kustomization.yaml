@@ -7,6 +7,7 @@ resources:
   - reloader/
   - argocd-image-updater/
   - argocd/
+  - storageclass/
   # ArgoCD Applications (app of apps pattern)
   - applications/cert-manager.yaml
   - applications/werify-production.yaml
