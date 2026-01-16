@@ -69,7 +69,15 @@ write_files:
               proxy_set_header X-Real-IP $remote_addr;
               proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
               proxy_set_header X-Forwarded-Proto $scheme;
-              proxy_read_timeout 300s;
+
+              # Extended timeouts for queued requests and long audio processing
+              proxy_read_timeout 600s;
+              proxy_connect_timeout 60s;
+              proxy_send_timeout 600s;
+
+              # Disable buffering for better streaming behavior
+              proxy_buffering off;
+              proxy_request_buffering off;
           }
       }
 
@@ -235,12 +243,19 @@ write_files:
       """
       Whisper Transcription API
       GPU-accelerated speech-to-text using OpenAI Whisper
+
+      Features:
+      - Request queuing with semaphore to process one request at a time
+      - Extended timeouts for long audio files
+      - Queue status endpoint for monitoring
       """
       import os
       import tempfile
       import time
+      import asyncio
       from pathlib import Path
       from typing import Optional
+      from datetime import datetime
 
       from fastapi import FastAPI, File, UploadFile, HTTPException, Query
       from pydantic import BaseModel
@@ -249,12 +264,24 @@ write_files:
 
       app = FastAPI(
           title="Whisper Transcription API",
-          description="GPU-accelerated speech-to-text using OpenAI Whisper",
-          version="2.0.0"
+          description="GPU-accelerated speech-to-text using OpenAI Whisper with request queuing",
+          version="2.1.0"
       )
 
       MODEL_NAME = os.getenv("WHISPER_MODEL", "turbo")
       DEVICE = os.getenv("WHISPER_DEVICE", "cuda" if torch.cuda.is_available() else "cpu")
+
+      # Semaphore to ensure only one transcription runs at a time
+      # This prevents GPU memory issues and ensures stable processing
+      transcription_semaphore = asyncio.Semaphore(1)
+
+      # Queue statistics
+      queue_stats = {
+          "total_processed": 0,
+          "total_queued": 0,
+          "current_queue_size": 0,
+          "last_processed_at": None,
+      }
 
       _model = None
 
@@ -272,6 +299,7 @@ write_files:
           language: str
           duration: Optional[float] = None
           processing_time: float
+          queue_wait_time: float = 0.0
           segments: Optional[list] = None
 
       class HealthResponse(BaseModel):
@@ -280,6 +308,13 @@ write_files:
           device: str
           gpu_available: bool
           gpu_name: Optional[str] = None
+
+      class QueueStatusResponse(BaseModel):
+          current_queue_size: int
+          total_processed: int
+          total_queued: int
+          last_processed_at: Optional[str] = None
+          is_processing: bool
 
       @app.get("/health", response_model=HealthResponse)
       async def health_check():
@@ -293,6 +328,59 @@ write_files:
               gpu_name=gpu_name
           )
 
+      @app.get("/queue/status", response_model=QueueStatusResponse)
+      async def queue_status():
+          """Get current queue status and statistics."""
+          return QueueStatusResponse(
+              current_queue_size=queue_stats["current_queue_size"],
+              total_processed=queue_stats["total_processed"],
+              total_queued=queue_stats["total_queued"],
+              last_processed_at=queue_stats["last_processed_at"],
+              is_processing=transcription_semaphore.locked()
+          )
+
+      async def process_transcription(tmp_path: str, options: dict, include_segments: bool) -> dict:
+          """Process transcription with queue management."""
+          global queue_stats
+
+          queue_stats["total_queued"] += 1
+          queue_stats["current_queue_size"] += 1
+          queue_start = time.time()
+
+          try:
+              # Wait for semaphore - this ensures only one transcription at a time
+              async with transcription_semaphore:
+                  queue_wait_time = time.time() - queue_start
+                  process_start = time.time()
+
+                  # Run transcription in thread pool to not block event loop
+                  model = get_model()
+                  loop = asyncio.get_event_loop()
+                  result = await loop.run_in_executor(
+                      None,
+                      lambda: model.transcribe(tmp_path, **options)
+                  )
+
+                  segments_list = None
+                  if include_segments and "segments" in result:
+                      segments_list = [
+                          {"start": round(s["start"], 2), "end": round(s["end"], 2), "text": s["text"].strip()}
+                          for s in result["segments"]
+                      ]
+
+                  queue_stats["total_processed"] += 1
+                  queue_stats["last_processed_at"] = datetime.now().isoformat()
+
+                  return {
+                      "text": result["text"].strip(),
+                      "language": result.get("language", "unknown"),
+                      "processing_time": round(time.time() - process_start, 2),
+                      "queue_wait_time": round(queue_wait_time, 2),
+                      "segments": segments_list
+                  }
+          finally:
+              queue_stats["current_queue_size"] -= 1
+
       @app.post("/transcribe", response_model=TranscriptionResponse)
       async def transcribe(
           file: UploadFile = File(...),
@@ -302,7 +390,6 @@ write_files:
           temperature: float = Query(0.0, description="Sampling temperature (0 = deterministic)"),
           best_of: int = Query(5, description="Number of candidates for beam search")
       ):
-          start_time = time.time()
           allowed_extensions = {".mp3", ".wav", ".m4a", ".ogg", ".flac", ".webm", ".mp4", ".opus"}
           file_ext = Path(file.filename).suffix.lower() if file.filename else ""
 
@@ -315,7 +402,6 @@ write_files:
               tmp_path = tmp.name
 
           try:
-              model = get_model()
               options = {
                   "task": task,
                   "language": language,
@@ -323,20 +409,14 @@ write_files:
                   "best_of": best_of
               }
 
-              result = model.transcribe(tmp_path, **options)
-
-              segments_list = None
-              if include_segments and "segments" in result:
-                  segments_list = [
-                      {"start": round(s["start"], 2), "end": round(s["end"], 2), "text": s["text"].strip()}
-                      for s in result["segments"]
-                  ]
+              result = await process_transcription(tmp_path, options, include_segments)
 
               return TranscriptionResponse(
-                  text=result["text"].strip(),
-                  language=result.get("language", "unknown"),
-                  processing_time=round(time.time() - start_time, 2),
-                  segments=segments_list
+                  text=result["text"],
+                  language=result["language"],
+                  processing_time=result["processing_time"],
+                  queue_wait_time=result["queue_wait_time"],
+                  segments=result["segments"]
               )
           except Exception as e:
               raise HTTPException(status_code=500, detail=str(e))
@@ -352,14 +432,12 @@ write_files:
           temperature: float = Query(0.0, description="Sampling temperature (0 = deterministic)"),
           best_of: int = Query(5, description="Number of candidates for beam search")
       ):
-          """Transcribe multiple audio files in a single request."""
+          """Transcribe multiple audio files in a single request (processed sequentially)."""
           start_time = time.time()
           allowed_extensions = {".mp3", ".wav", ".m4a", ".ogg", ".flac", ".webm", ".mp4", ".opus"}
-          model = get_model()
 
           results = []
           for file in files:
-              file_start = time.time()
               file_ext = Path(file.filename).suffix.lower() if file.filename else ""
 
               if file_ext not in allowed_extensions:
@@ -382,21 +460,15 @@ write_files:
                       "best_of": best_of
                   }
 
-                  result = model.transcribe(tmp_path, **options)
-
-                  segments_list = None
-                  if include_segments and "segments" in result:
-                      segments_list = [
-                          {"start": round(s["start"], 2), "end": round(s["end"], 2), "text": s["text"].strip()}
-                          for s in result["segments"]
-                      ]
+                  result = await process_transcription(tmp_path, options, include_segments)
 
                   results.append({
                       "filename": file.filename,
-                      "text": result["text"].strip(),
-                      "language": result.get("language", "unknown"),
-                      "processing_time": round(time.time() - file_start, 2),
-                      "segments": segments_list
+                      "text": result["text"],
+                      "language": result["language"],
+                      "processing_time": result["processing_time"],
+                      "queue_wait_time": result["queue_wait_time"],
+                      "segments": result["segments"]
                   })
               except Exception as e:
                   results.append({
@@ -415,8 +487,13 @@ write_files:
       if __name__ == "__main__":
           print("Pre-loading Whisper model...")
           get_model()
-          print("Starting API server...")
-          uvicorn.run(app, host="127.0.0.1", port=8000)
+          print("Starting API server with request queuing enabled...")
+          uvicorn.run(
+              app,
+              host="127.0.0.1",
+              port=8000,
+              timeout_keep_alive=600  # 10 minute keep-alive timeout
+          )
 
   # Systemd service for Whisper API
   - path: /etc/systemd/system/whisper-api.service
