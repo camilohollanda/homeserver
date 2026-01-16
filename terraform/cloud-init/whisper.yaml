@@ -279,14 +279,25 @@ write_files:
             - host: unix:///var/run/docker.sock
               refresh_interval: 5s
           relabel_configs:
+            - target_label: job
+              replacement: docker
             - source_labels: ['__meta_docker_container_name']
               regex: '/(.+)'
               target_label: container
             - source_labels: ['__meta_docker_container_name']
               regex: '/(whisper-api|watchtower)'
               action: keep
-            - action: labelmap
-              regex: __meta_docker_container_label_(.+)
+            - source_labels: ['__meta_docker_container_label_com_docker_compose_service']
+              target_label: compose_service
+            - source_labels: ['__meta_docker_container_label_com_docker_compose_project']
+              target_label: compose_project
+            - source_labels: ['__meta_docker_container_label_com_docker_compose_service']
+              target_label: service_name
+            - source_labels: ['__meta_docker_container_id']
+              target_label: __path__
+              replacement: /var/lib/docker/containers/$1/$1-json.log
+            - action: labelkeep
+              regex: '^(job|container|compose_service|compose_project|service_name)$'
           pipeline_stages:
             - json:
                 expressions:

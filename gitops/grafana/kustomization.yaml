@@ -17,5 +17,6 @@ configMapGenerator:
     files:
       - dashboards/k8s-overview.json
       - dashboards/werify.json
+      - dashboards/whisper-api.json
     options:
       disableNameSuffixHash: true
