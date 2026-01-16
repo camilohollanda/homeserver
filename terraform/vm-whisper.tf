@@ -93,6 +93,8 @@ resource "proxmox_virtual_environment_file" "whisper_cloud_init" {
       domain               = var.whisper_domain
       cloudflare_api_token = var.cloudflare_api_token
       letsencrypt_email    = var.letsencrypt_email
+      github_owner         = var.whisper_github_owner
+      ghcr_auth            = base64encode("${var.whisper_github_owner}:${var.whisper_ghcr_token}")
     })
     file_name = "whisper-cloud-init.yaml"
   }
