@@ -1,7 +1,7 @@
 #cloud-config
-# Whisper GPU Inference Server
+# Whisper GPU Inference Server (Docker-based)
 # Requires: debian-12-nvidia template (NVIDIA drivers pre-installed)
-# Sets up: Python environment, PyTorch with CUDA, Whisper API, HTTPS via Let's Encrypt
+# Sets up: Docker, NVIDIA Container Toolkit, Whisper API container, Watchtower for auto-updates
 
 hostname: whisper
 manage_etc_hosts: true
@@ -10,16 +10,12 @@ package_update: true
 package_upgrade: false
 
 packages:
-  - build-essential
-  - python3
-  - python3-pip
-  - python3-venv
-  - git
+  - ca-certificates
   - curl
+  - gnupg
+  - git
   - wget
   - htop
-  - ffmpeg
-  - libsndfile1
   - unzip
   - nginx
   - certbot
@@ -28,7 +24,7 @@ packages:
 users:
   - default
   - name: whisper
-    groups: [sudo, video, render]
+    groups: [sudo, video, render, docker]
     shell: /bin/bash
     sudo: ALL=(ALL) NOPASSWD:ALL
 
@@ -88,12 +84,58 @@ write_files:
       #!/bin/bash
       systemctl reload nginx
 
+  # Docker Compose configuration for Whisper API + Watchtower
+  - path: /opt/whisper/docker-compose.yaml
+    permissions: "0644"
+    content: |
+      services:
+        whisper-api:
+          image: ghcr.io/${github_owner}/whisper-api:latest
+          container_name: whisper-api
+          restart: unless-stopped
+          ports:
+            - "127.0.0.1:8000:8000"
+          volumes:
+            - whisper-cache:/app/.cache
+          environment:
+            - WHISPER_MODEL=turbo
+            - WHISPER_DEVICE=cuda
+            - XDG_CACHE_HOME=/app/.cache
+          deploy:
+            resources:
+              reservations:
+                devices:
+                  - driver: nvidia
+                    count: 1
+                    capabilities: [gpu]
+          logging:
+            driver: json-file
+            options:
+              max-size: "10m"
+              max-file: "3"
+
+        watchtower:
+          image: nickfedor/watchtower
+          container_name: watchtower
+          restart: unless-stopped
+          volumes:
+            - /var/run/docker.sock:/var/run/docker.sock
+            - /home/whisper/.docker/config.json:/config.json:ro
+          environment:
+            - WATCHTOWER_CLEANUP=true
+            - WATCHTOWER_POLL_INTERVAL=300
+            - WATCHTOWER_INCLUDE_STOPPED=false
+            - DOCKER_CONFIG=/
+          command: whisper-api
+      volumes:                   # <-- ADD THIS at the end
+        whisper-cache:
+
   # Main setup script - runs once on first boot
   - path: /opt/whisper/setup.sh
     permissions: "0755"
     content: |
       #!/bin/bash
-      # Whisper API Setup Script
+      # Whisper API Docker Setup Script
       # NVIDIA drivers are pre-installed in the template
 
       LOG_FILE="/var/log/whisper-setup.log"
@@ -101,7 +143,7 @@ write_files:
 
       echo ""
       echo "=========================================="
-      echo "Whisper Setup - $(date)"
+      echo "Whisper Docker Setup - $(date)"
       echo "=========================================="
 
       SETUP_COMPLETE="/opt/whisper/.setup_complete"
@@ -111,9 +153,6 @@ write_files:
           echo "Setup already complete."
           exit 0
       fi
-
-      # Ensure ownership
-      chown -R whisper:whisper /opt/whisper
 
       # Verify GPU is available
       echo ""
@@ -129,26 +168,55 @@ write_files:
       echo "GPU detected:"
       nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv
 
-      # Setup Python environment
+      # Install NVIDIA Container Toolkit
       echo ""
-      echo "=== Setting up Python environment ==="
-      sudo -u whisper /opt/whisper/setup-python.sh
+      echo "=== Installing NVIDIA Container Toolkit ==="
+      if ! command -v nvidia-ctk &> /dev/null; then
+          curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+          curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+              sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+              tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+          apt-get update
+          apt-get install -y nvidia-container-toolkit
+          nvidia-ctk runtime configure --runtime=docker
+          systemctl restart docker
+          echo "NVIDIA Container Toolkit installed"
+      else
+          echo "NVIDIA Container Toolkit already installed"
+      fi
 
-      # Start service
+      # Setup GHCR authentication
       echo ""
-      echo "=== Starting Whisper API service ==="
+      echo "=== Configuring GHCR authentication ==="
+      mkdir -p /home/whisper/.docker
+      echo '{"auths":{"ghcr.io":{"auth":"${ghcr_auth}"}}}' > /home/whisper/.docker/config.json
+      chown -R whisper:whisper /home/whisper/.docker
+      chmod 600 /home/whisper/.docker/config.json
+      echo "GHCR authentication configured"
 
+      # Ensure ownership
       chown -R whisper:whisper /opt/whisper
 
-      systemctl daemon-reload
-      systemctl enable whisper-api
-      systemctl start whisper-api
+      # Pull and start containers
+      echo ""
+      echo "=== Starting Whisper API containers ==="
+      cd /opt/whisper
+      sudo -u whisper docker compose pull
+      sudo -u whisper docker compose up -d
 
-      # Wait for service to start
-      sleep 5
+      # Wait for API to be ready
+      echo ""
+      echo "=== Waiting for API to be ready ==="
+      for i in {1..60}; do
+          if curl -s http://localhost:8000/health | grep -q "healthy"; then
+              break
+          fi
+          echo "Waiting... ($i/60)"
+          sleep 5
+      done
 
-      # Verify service is running
-      if systemctl is-active --quiet whisper-api; then
+      # Verify setup
+      if curl -s http://localhost:8000/health | grep -q "healthy"; then
           touch "$SETUP_COMPLETE"
           chown whisper:whisper "$SETUP_COMPLETE"
 
@@ -159,13 +227,14 @@ write_files:
           echo ""
           echo "Whisper API: https://${domain}"
           echo "Health check: curl https://${domain}/health"
+          echo "Queue status: curl https://${domain}/queue/status"
           echo ""
 
           # Disable setup service
           systemctl disable whisper-setup.service
       else
-          echo "ERROR: whisper-api service failed to start"
-          journalctl -u whisper-api -n 20 --no-pager
+          echo "ERROR: Whisper API failed to start"
+          docker compose logs whisper-api
           exit 1
       fi
 
@@ -174,9 +243,10 @@ write_files:
     permissions: "0644"
     content: |
       [Unit]
-      Description=Whisper API Setup
-      After=network-online.target
+      Description=Whisper API Docker Setup
+      After=network-online.target docker.service
       Wants=network-online.target
+      Requires=docker.service
 
       [Service]
       Type=oneshot
@@ -188,338 +258,7 @@ write_files:
       [Install]
       WantedBy=multi-user.target
 
-  # Python setup script
-  - path: /opt/whisper/setup-python.sh
-    permissions: "0755"
-    content: |
-      #!/bin/bash
-      set -e
-
-      echo "Setting up Python environment..."
-
-      cd /opt/whisper
-
-      # Create virtual environment
-      python3 -m venv venv
-      source venv/bin/activate
-
-      # Upgrade pip
-      pip install --upgrade pip wheel setuptools
-
-      # Install PyTorch 2.0.1 with CUDA 11.8 - supports Maxwell GPUs (sm_52)
-      echo "Installing PyTorch with CUDA support..."
-      pip install torch==2.0.1+cu118 --index-url https://download.pytorch.org/whl/cu118
-
-      # Install requirements
-      pip install -r requirements.txt
-
-      # Download the turbo model
-      echo "Downloading Whisper turbo model..."
-      python3 -c "
-      import whisper
-      print('Downloading turbo model...')
-      model = whisper.load_model('turbo', device='cpu')
-      print('Model downloaded successfully!')
-      "
-
-      echo "Python setup complete!"
-
-  # Requirements file
-  - path: /opt/whisper/requirements.txt
-    permissions: "0644"
-    content: |
-      numpy<2
-      openai-whisper
-      fastapi>=0.109.0
-      uvicorn[standard]>=0.27.0
-      python-multipart>=0.0.6
-      pydantic>=2.0.0
-
-  # Whisper API service
-  - path: /opt/whisper/api.py
-    permissions: "0644"
-    content: |
-      #!/usr/bin/env python3
-      """
-      Whisper Transcription API
-      GPU-accelerated speech-to-text using OpenAI Whisper
-
-      Features:
-      - Request queuing with semaphore to process one request at a time
-      - Extended timeouts for long audio files
-      - Queue status endpoint for monitoring
-      """
-      import os
-      import tempfile
-      import time
-      import asyncio
-      from pathlib import Path
-      from typing import Optional
-      from datetime import datetime
-
-      from fastapi import FastAPI, File, UploadFile, HTTPException, Query
-      from pydantic import BaseModel
-      import uvicorn
-      import torch
-
-      app = FastAPI(
-          title="Whisper Transcription API",
-          description="GPU-accelerated speech-to-text using OpenAI Whisper with request queuing",
-          version="2.1.0"
-      )
-
-      MODEL_NAME = os.getenv("WHISPER_MODEL", "turbo")
-      DEVICE = os.getenv("WHISPER_DEVICE", "cuda" if torch.cuda.is_available() else "cpu")
-
-      # Semaphore to ensure only one transcription runs at a time
-      # This prevents GPU memory issues and ensures stable processing
-      transcription_semaphore = asyncio.Semaphore(1)
-
-      # Queue statistics
-      queue_stats = {
-          "total_processed": 0,
-          "total_queued": 0,
-          "current_queue_size": 0,
-          "last_processed_at": None,
-      }
-
-      _model = None
-
-      def get_model():
-          global _model
-          if _model is None:
-              import whisper
-              print(f"Loading Whisper model: {MODEL_NAME} on {DEVICE}")
-              _model = whisper.load_model(MODEL_NAME, device=DEVICE)
-              print("Model loaded successfully!")
-          return _model
-
-      class TranscriptionResponse(BaseModel):
-          text: str
-          language: str
-          duration: Optional[float] = None
-          processing_time: float
-          queue_wait_time: float = 0.0
-          segments: Optional[list] = None
-
-      class HealthResponse(BaseModel):
-          status: str
-          model: str
-          device: str
-          gpu_available: bool
-          gpu_name: Optional[str] = None
-
-      class QueueStatusResponse(BaseModel):
-          current_queue_size: int
-          total_processed: int
-          total_queued: int
-          last_processed_at: Optional[str] = None
-          is_processing: bool
-
-      @app.get("/health", response_model=HealthResponse)
-      async def health_check():
-          gpu_available = torch.cuda.is_available()
-          gpu_name = torch.cuda.get_device_name(0) if gpu_available else None
-          return HealthResponse(
-              status="healthy",
-              model=MODEL_NAME,
-              device=DEVICE,
-              gpu_available=gpu_available,
-              gpu_name=gpu_name
-          )
-
-      @app.get("/queue/status", response_model=QueueStatusResponse)
-      async def queue_status():
-          """Get current queue status and statistics."""
-          return QueueStatusResponse(
-              current_queue_size=queue_stats["current_queue_size"],
-              total_processed=queue_stats["total_processed"],
-              total_queued=queue_stats["total_queued"],
-              last_processed_at=queue_stats["last_processed_at"],
-              is_processing=transcription_semaphore.locked()
-          )
-
-      async def process_transcription(tmp_path: str, options: dict, include_segments: bool) -> dict:
-          """Process transcription with queue management."""
-          global queue_stats
-
-          queue_stats["total_queued"] += 1
-          queue_stats["current_queue_size"] += 1
-          queue_start = time.time()
-
-          try:
-              # Wait for semaphore - this ensures only one transcription at a time
-              async with transcription_semaphore:
-                  queue_wait_time = time.time() - queue_start
-                  process_start = time.time()
-
-                  # Run transcription in thread pool to not block event loop
-                  model = get_model()
-                  loop = asyncio.get_event_loop()
-                  result = await loop.run_in_executor(
-                      None,
-                      lambda: model.transcribe(tmp_path, **options)
-                  )
-
-                  segments_list = None
-                  if include_segments and "segments" in result:
-                      segments_list = [
-                          {"start": round(s["start"], 2), "end": round(s["end"], 2), "text": s["text"].strip()}
-                          for s in result["segments"]
-                      ]
-
-                  queue_stats["total_processed"] += 1
-                  queue_stats["last_processed_at"] = datetime.now().isoformat()
-
-                  return {
-                      "text": result["text"].strip(),
-                      "language": result.get("language", "unknown"),
-                      "processing_time": round(time.time() - process_start, 2),
-                      "queue_wait_time": round(queue_wait_time, 2),
-                      "segments": segments_list
-                  }
-          finally:
-              queue_stats["current_queue_size"] -= 1
-
-      @app.post("/transcribe", response_model=TranscriptionResponse)
-      async def transcribe(
-          file: UploadFile = File(...),
-          language: Optional[str] = Query("pt", description="Language code (e.g., 'pt', 'en')"),
-          include_segments: bool = Query(False),
-          task: str = Query("transcribe"),
-          temperature: float = Query(0.0, description="Sampling temperature (0 = deterministic)"),
-          best_of: int = Query(5, description="Number of candidates for beam search")
-      ):
-          allowed_extensions = {".mp3", ".wav", ".m4a", ".ogg", ".flac", ".webm", ".mp4", ".opus"}
-          file_ext = Path(file.filename).suffix.lower() if file.filename else ""
-
-          if file_ext not in allowed_extensions:
-              raise HTTPException(status_code=400, detail=f"Unsupported: {file_ext}")
-
-          with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp:
-              content = await file.read()
-              tmp.write(content)
-              tmp_path = tmp.name
-
-          try:
-              options = {
-                  "task": task,
-                  "language": language,
-                  "temperature": temperature,
-                  "best_of": best_of
-              }
-
-              result = await process_transcription(tmp_path, options, include_segments)
-
-              return TranscriptionResponse(
-                  text=result["text"],
-                  language=result["language"],
-                  processing_time=result["processing_time"],
-                  queue_wait_time=result["queue_wait_time"],
-                  segments=result["segments"]
-              )
-          except Exception as e:
-              raise HTTPException(status_code=500, detail=str(e))
-          finally:
-              os.unlink(tmp_path)
-
-      @app.post("/transcribe/batch")
-      async def transcribe_batch(
-          files: list[UploadFile] = File(...),
-          language: Optional[str] = Query("pt", description="Language code (e.g., 'pt', 'en')"),
-          include_segments: bool = Query(False),
-          task: str = Query("transcribe"),
-          temperature: float = Query(0.0, description="Sampling temperature (0 = deterministic)"),
-          best_of: int = Query(5, description="Number of candidates for beam search")
-      ):
-          """Transcribe multiple audio files in a single request (processed sequentially)."""
-          start_time = time.time()
-          allowed_extensions = {".mp3", ".wav", ".m4a", ".ogg", ".flac", ".webm", ".mp4", ".opus"}
-
-          results = []
-          for file in files:
-              file_ext = Path(file.filename).suffix.lower() if file.filename else ""
-
-              if file_ext not in allowed_extensions:
-                  results.append({
-                      "filename": file.filename,
-                      "error": f"Unsupported file type: {file_ext}"
-                  })
-                  continue
-
-              with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp:
-                  content = await file.read()
-                  tmp.write(content)
-                  tmp_path = tmp.name
-
-              try:
-                  options = {
-                      "task": task,
-                      "language": language,
-                      "temperature": temperature,
-                      "best_of": best_of
-                  }
-
-                  result = await process_transcription(tmp_path, options, include_segments)
-
-                  results.append({
-                      "filename": file.filename,
-                      "text": result["text"],
-                      "language": result["language"],
-                      "processing_time": result["processing_time"],
-                      "queue_wait_time": result["queue_wait_time"],
-                      "segments": result["segments"]
-                  })
-              except Exception as e:
-                  results.append({
-                      "filename": file.filename,
-                      "error": str(e)
-                  })
-              finally:
-                  os.unlink(tmp_path)
-
-          return {
-              "total_files": len(files),
-              "total_processing_time": round(time.time() - start_time, 2),
-              "results": results
-          }
-
-      if __name__ == "__main__":
-          print("Pre-loading Whisper model...")
-          get_model()
-          print("Starting API server with request queuing enabled...")
-          uvicorn.run(
-              app,
-              host="127.0.0.1",
-              port=8000,
-              timeout_keep_alive=600  # 10 minute keep-alive timeout
-          )
-
-  # Systemd service for Whisper API
-  - path: /etc/systemd/system/whisper-api.service
-    permissions: "0644"
-    content: |
-      [Unit]
-      Description=Whisper Transcription API
-      After=network.target
-
-      [Service]
-      Type=simple
-      User=whisper
-      Group=whisper
-      WorkingDirectory=/opt/whisper
-      Environment="PATH=/opt/whisper/venv/bin:/usr/local/bin:/usr/bin:/bin"
-      Environment="WHISPER_MODEL=turbo"
-      Environment="WHISPER_DEVICE=cuda"
-      ExecStart=/opt/whisper/venv/bin/python /opt/whisper/api.py
-      Restart=always
-      RestartSec=10
-      SupplementaryGroups=video render
-
-      [Install]
-      WantedBy=multi-user.target
-
-  # Promtail configuration for shipping logs to Loki
+  # Promtail configuration for shipping logs to Loki (updated for Docker)
   - path: /etc/promtail/config.yaml
     permissions: "0644"
     content: |
@@ -534,20 +273,28 @@ write_files:
         - url: http://192.168.20.11:31100/loki/api/v1/push
 
       scrape_configs:
-        - job_name: whisper-api
-          journal:
-            max_age: 12h
-            labels:
-              job: whisper-api
-              host: whisper-gpu
+        # Scrape Docker container logs
+        - job_name: docker
+          docker_sd_configs:
+            - host: unix:///var/run/docker.sock
+              refresh_interval: 5s
           relabel_configs:
-            - source_labels: ['__journal__systemd_unit']
-              regex: 'whisper-(api|setup)\.service'
+            - source_labels: ['__meta_docker_container_name']
+              regex: '/(.+)'
+              target_label: container
+            - source_labels: ['__meta_docker_container_name']
+              regex: '/(whisper-api|watchtower)'
               action: keep
-            - source_labels: ['__journal__systemd_unit']
-              target_label: unit
-            - source_labels: ['__journal_priority_keyword']
-              target_label: level
+            - action: labelmap
+              regex: __meta_docker_container_label_(.+)
+          pipeline_stages:
+            - json:
+                expressions:
+                  log: log
+                  stream: stream
+                  time: time
+            - output:
+                source: log
 
         - job_name: system
           journal:
@@ -557,7 +304,7 @@ write_files:
               host: whisper-gpu
           relabel_configs:
             - source_labels: ['__journal__systemd_unit']
-              regex: '(sshd|systemd-.*|nvidia-.*)\.service'
+              regex: '(sshd|systemd-.*|nvidia-.*|docker.*)\.service'
               action: keep
             - source_labels: ['__journal__systemd_unit']
               target_label: unit
@@ -570,7 +317,7 @@ write_files:
     content: |
       [Unit]
       Description=Promtail Log Collector
-      After=network-online.target whisper-api.service
+      After=network-online.target docker.service
       Wants=network-online.target
 
       [Service]
@@ -612,9 +359,21 @@ write_files:
       echo "Promtail installed and started!"
 
 runcmd:
-  - mkdir -p /opt/whisper/models
+  - mkdir -p /opt/whisper
   - chown -R whisper:whisper /opt/whisper
   - echo "Whisper cloud-init started at $(date)" >> /var/log/whisper-setup.log
+
+  # Install Docker CE from official repository
+  - install -m 0755 -d /etc/apt/keyrings
+  - curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+  - chmod a+r /etc/apt/keyrings/docker.asc
+  - |
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo $VERSION_CODENAME) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+  - apt-get update
+  - apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  - usermod -aG docker whisper
+  - systemctl enable docker
+  - systemctl start docker
 
   # Create letsencrypt directories
   - mkdir -p /etc/letsencrypt/renewal-hooks/deploy

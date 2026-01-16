@@ -164,6 +164,17 @@ variable "whisper_domain" {
   default     = "whisper.internal.prakash.com.br"
 }
 
+variable "whisper_github_owner" {
+  description = "GitHub owner/org for whisper-api repository (e.g., 'myusername')"
+  type        = string
+}
+
+variable "whisper_ghcr_token" {
+  description = "GitHub PAT with packages:read scope for pulling whisper-api image from GHCR"
+  type        = string
+  sensitive   = true
+}
+
 # PostgreSQL configuration
 variable "postgres_version" {
   description = "PostgreSQL version to install"
