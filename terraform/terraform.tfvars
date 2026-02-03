@@ -25,7 +25,6 @@ ssh_public_keys = [
 #   openssl rand -base64 24       # for postgres_password
 infisical_postgres_db       = "infisical"
 infisical_postgres_user     = "infisical"
-infisical_site_url          = "https://192.168.20.22:8443"
 # infisical_postgres_password - set via TF_VAR_infisical_postgres_password
 # infisical_encryption_key    - set via TF_VAR_infisical_encryption_key
 # infisical_auth_secret       - set via TF_VAR_infisical_auth_secret
