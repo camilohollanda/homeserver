@@ -351,14 +351,14 @@ write_files:
       PROMTAIL_VERSION="3.6.3"
       ARCH="amd64"
 
-      echo "Installing Promtail ${PROMTAIL_VERSION}..."
+      echo "Installing Promtail $${PROMTAIL_VERSION}..."
 
       cd /tmp
-      wget -q "https://github.com/grafana/loki/releases/download/v${PROMTAIL_VERSION}/promtail-linux-${ARCH}.zip"
-      unzip -o "promtail-linux-${ARCH}.zip"
-      chmod +x "promtail-linux-${ARCH}"
-      mv "promtail-linux-${ARCH}" /usr/local/bin/promtail
-      rm -f "promtail-linux-${ARCH}.zip"
+      wget -q "https://github.com/grafana/loki/releases/download/v$${PROMTAIL_VERSION}/promtail-linux-$${ARCH}.zip"
+      unzip -o "promtail-linux-$${ARCH}.zip"
+      chmod +x "promtail-linux-$${ARCH}"
+      mv "promtail-linux-$${ARCH}" /usr/local/bin/promtail
+      rm -f "promtail-linux-$${ARCH}.zip"
 
       mkdir -p /var/lib/promtail
       mkdir -p /etc/promtail
@@ -398,6 +398,7 @@ runcmd:
       --non-interactive \
       --agree-tos \
       -m ${letsencrypt_email}
+  - systemctl reload nginx
 
   # Configure nginx
   - rm -f /etc/nginx/sites-enabled/default
