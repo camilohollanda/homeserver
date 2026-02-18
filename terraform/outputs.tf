@@ -18,12 +18,12 @@ output "infisical_url" {
   value       = "https://${split("/", local.infisical_vm.ip_cidr)[0]}:8443"
 }
 
-output "whisper_vm_ip" {
+output "ai_vm_ip" {
   description = "IP address for the Whisper GPU inference server"
-  value       = split("/", local.whisper_vm.ip_cidr)[0]
+  value       = split("/", local.ai_vm.ip_cidr)[0]
 }
 
 output "whisper_api_url" {
   description = "URL for Whisper transcription API"
-  value       = "http://${split("/", local.whisper_vm.ip_cidr)[0]}:8000"
+  value       = "http://${split("/", local.ai_vm.ip_cidr)[0]}:8000"
 }

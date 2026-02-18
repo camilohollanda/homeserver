@@ -1,9 +1,10 @@
 #cloud-config
-# Whisper GPU Inference Server (Docker-based)
+# AI Services GPU Inference Server (Docker-based)
+# Services: Whisper (speech-to-text), Ollama (LLM inference)
 # Requires: debian-12-nvidia template (NVIDIA drivers pre-installed)
-# Sets up: Docker, NVIDIA Container Toolkit, Whisper API container, Watchtower for auto-updates
+# Sets up: Docker, NVIDIA Container Toolkit, Whisper API, Ollama, Watchtower
 
-hostname: whisper
+hostname: ai-gpu
 manage_etc_hosts: true
 
 package_update: true
@@ -23,7 +24,7 @@ packages:
 
 users:
   - default
-  - name: whisper
+  - name: ai
     groups: [sudo, video, render, docker]
     shell: /bin/bash
     sudo: ALL=(ALL) NOPASSWD:ALL
@@ -35,8 +36,8 @@ write_files:
     content: |
       dns_cloudflare_api_token = ${cloudflare_api_token}
 
-  # Nginx configuration
-  - path: /etc/nginx/sites-available/whisper
+  # Nginx configuration - routes /transcribe to Whisper, /generate and /api to Ollama
+  - path: /etc/nginx/sites-available/ai
     permissions: "0644"
     content: |
       server {
@@ -59,21 +60,86 @@ write_files:
 
           client_max_body_size 100M;
 
-          location / {
-              proxy_pass http://127.0.0.1:8000;
+          # Health check endpoint
+          location = /health {
+              proxy_pass http://127.0.0.1:8000/health;
+              proxy_set_header Host $host;
+              proxy_set_header X-Real-IP $remote_addr;
+          }
+
+          # Whisper transcription endpoints
+          location /transcribe {
+              proxy_pass http://127.0.0.1:8000/transcribe;
               proxy_set_header Host $host;
               proxy_set_header X-Real-IP $remote_addr;
               proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
               proxy_set_header X-Forwarded-Proto $scheme;
 
-              # Extended timeouts for queued requests and long audio processing
+              # Extended timeouts for audio processing
               proxy_read_timeout 600s;
               proxy_connect_timeout 60s;
               proxy_send_timeout 600s;
-
-              # Disable buffering for better streaming behavior
               proxy_buffering off;
               proxy_request_buffering off;
+          }
+
+          # Ollama generate endpoint (for custom prompts)
+          location /generate {
+              proxy_pass http://127.0.0.1:11434/api/generate;
+              proxy_set_header Host $host;
+              proxy_set_header X-Real-IP $remote_addr;
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Proto $scheme;
+
+              # Extended timeouts for LLM processing
+              proxy_read_timeout 300s;
+              proxy_connect_timeout 60s;
+              proxy_send_timeout 300s;
+          }
+
+          # Ollama chat endpoint (OpenAI-compatible)
+          location /v1/chat/completions {
+              proxy_pass http://127.0.0.1:11434/v1/chat/completions;
+              proxy_set_header Host $host;
+              proxy_set_header X-Real-IP $remote_addr;
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Proto $scheme;
+              proxy_read_timeout 300s;
+          }
+
+          # Ollama API (full access)
+          location /api/ {
+              proxy_pass http://127.0.0.1:11434/api/;
+              proxy_set_header Host $host;
+              proxy_set_header X-Real-IP $remote_addr;
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Proto $scheme;
+              proxy_read_timeout 300s;
+          }
+
+          # Queue status (whisper)
+          location /queue {
+              proxy_pass http://127.0.0.1:8000/queue;
+              proxy_set_header Host $host;
+              proxy_set_header X-Real-IP $remote_addr;
+          }
+
+          # Swagger docs for whisper
+          location /docs {
+              proxy_pass http://127.0.0.1:8000/docs;
+              proxy_set_header Host $host;
+              proxy_set_header X-Real-IP $remote_addr;
+          }
+
+          location /openapi.json {
+              proxy_pass http://127.0.0.1:8000/openapi.json;
+              proxy_set_header Host $host;
+          }
+
+          # Root shows service info
+          location = / {
+              default_type application/json;
+              return 200 '{"service":"AI Services","endpoints":{"/transcribe":"Speech-to-text (Whisper)","/generate":"Text generation (Ollama)","/v1/chat/completions":"OpenAI-compatible chat","/api/":"Full Ollama API","/health":"Health check","/docs":"Whisper API docs"}}';
           }
       }
 
@@ -84,8 +150,9 @@ write_files:
       #!/bin/bash
       systemctl reload nginx
 
-  # Docker Compose configuration for Whisper API + Watchtower
-  - path: /opt/whisper/docker-compose.yaml
+
+  # Docker Compose configuration
+  - path: /opt/ai/docker-compose.yaml
     permissions: "0644"
     content: |
       services:
@@ -114,39 +181,64 @@ write_files:
               max-size: "10m"
               max-file: "3"
 
+        ollama:
+          image: ollama/ollama:latest
+          container_name: ollama
+          restart: unless-stopped
+          ports:
+            - "127.0.0.1:11434:11434"
+          volumes:
+            - ollama-data:/root/.ollama
+          environment:
+            - OLLAMA_KEEP_ALIVE=5m
+          deploy:
+            resources:
+              reservations:
+                devices:
+                  - driver: nvidia
+                    count: 1
+                    capabilities: [gpu]
+          logging:
+            driver: json-file
+            options:
+              max-size: "10m"
+              max-file: "3"
+
         watchtower:
           image: nickfedor/watchtower
           container_name: watchtower
           restart: unless-stopped
           volumes:
             - /var/run/docker.sock:/var/run/docker.sock
-            - /home/whisper/.docker/config.json:/config.json:ro
+            - /home/ai/.docker/config.json:/config.json:ro
           environment:
             - WATCHTOWER_CLEANUP=true
             - WATCHTOWER_POLL_INTERVAL=300
             - WATCHTOWER_INCLUDE_STOPPED=false
             - DOCKER_CONFIG=/
-          command: whisper-api
-      volumes:                   # <-- ADD THIS at the end
+          command: whisper-api ollama
+
+      volumes:
         whisper-cache:
+        ollama-data:
 
   # Main setup script - runs once on first boot
-  - path: /opt/whisper/setup.sh
+  - path: /opt/ai/setup.sh
     permissions: "0755"
     content: |
       #!/bin/bash
-      # Whisper API Docker Setup Script
+      # AI Services Docker Setup Script
       # NVIDIA drivers are pre-installed in the template
 
-      LOG_FILE="/var/log/whisper-setup.log"
+      LOG_FILE="/var/log/ai-setup.log"
       exec > >(tee -a "$LOG_FILE") 2>&1
 
       echo ""
       echo "=========================================="
-      echo "Whisper Docker Setup - $(date)"
+      echo "AI Services Setup - $(date)"
       echo "=========================================="
 
-      SETUP_COMPLETE="/opt/whisper/.setup_complete"
+      SETUP_COMPLETE="/opt/ai/.setup_complete"
 
       # If setup is complete, exit
       if [ -f "$SETUP_COMPLETE" ]; then
@@ -188,25 +280,40 @@ write_files:
       # Setup GHCR authentication
       echo ""
       echo "=== Configuring GHCR authentication ==="
-      mkdir -p /home/whisper/.docker
-      echo '{"auths":{"ghcr.io":{"auth":"${ghcr_auth}"}}}' > /home/whisper/.docker/config.json
-      chown -R whisper:whisper /home/whisper/.docker
-      chmod 600 /home/whisper/.docker/config.json
+      mkdir -p /home/ai/.docker
+      echo '{"auths":{"ghcr.io":{"auth":"${ghcr_auth}"}}}' > /home/ai/.docker/config.json
+      chown -R ai:ai /home/ai/.docker
+      chmod 600 /home/ai/.docker/config.json
       echo "GHCR authentication configured"
 
       # Ensure ownership
-      chown -R whisper:whisper /opt/whisper
+      chown -R ai:ai /opt/ai
 
       # Pull and start containers
       echo ""
-      echo "=== Starting Whisper API containers ==="
-      cd /opt/whisper
-      sudo -u whisper docker compose pull
-      sudo -u whisper docker compose up -d
+      echo "=== Starting AI Services containers ==="
+      cd /opt/ai
+      sudo -u ai docker compose pull
+      sudo -u ai docker compose up -d
 
-      # Wait for API to be ready
+      # Wait for Ollama to be ready and pull the model
       echo ""
-      echo "=== Waiting for API to be ready ==="
+      echo "=== Pulling Ollama model (${ollama_model}) ==="
+      for i in {1..30}; do
+          if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
+              break
+          fi
+          echo "Waiting for Ollama... ($i/30)"
+          sleep 5
+      done
+
+      # Pull the translation model
+      echo "Pulling ${ollama_model}..."
+      curl -X POST http://localhost:11434/api/pull -d '{"name": "${ollama_model}"}' --no-buffer
+
+      # Wait for Whisper API to be ready
+      echo ""
+      echo "=== Waiting for Whisper API to be ready ==="
       for i in {1..60}; do
           if curl -s http://localhost:8000/health | grep -q "healthy"; then
               break
@@ -216,41 +323,54 @@ write_files:
       done
 
       # Verify setup
-      if curl -s http://localhost:8000/health | grep -q "healthy"; then
+      WHISPER_OK=$(curl -s http://localhost:8000/health | grep -q "healthy" && echo "yes" || echo "no")
+      OLLAMA_OK=$(curl -s http://localhost:11434/api/tags | grep -q "${ollama_model}" && echo "yes" || echo "no")
+
+      if [ "$WHISPER_OK" = "yes" ] && [ "$OLLAMA_OK" = "yes" ]; then
           touch "$SETUP_COMPLETE"
-          chown whisper:whisper "$SETUP_COMPLETE"
+          chown ai:ai "$SETUP_COMPLETE"
 
           echo ""
           echo "=========================================="
           echo "SETUP COMPLETE!"
           echo "=========================================="
           echo ""
-          echo "Whisper API: https://${domain}"
-          echo "Health check: curl https://${domain}/health"
-          echo "Queue status: curl https://${domain}/queue/status"
+          echo "AI Services: https://${domain}"
+          echo ""
+          echo "Endpoints:"
+          echo "  - Transcription: POST https://${domain}/transcribe"
+          echo "  - Generate:      POST https://${domain}/generate"
+          echo "  - Chat:          POST https://${domain}/v1/chat/completions"
+          echo "  - Health:        GET  https://${domain}/health"
+          echo ""
+          echo "Status:"
+          echo "  - Whisper API: $WHISPER_OK"
+          echo "  - Ollama:      $OLLAMA_OK"
           echo ""
 
           # Disable setup service
-          systemctl disable whisper-setup.service
+          systemctl disable ai-setup.service
       else
-          echo "ERROR: Whisper API failed to start"
-          docker compose logs whisper-api
+          echo "ERROR: Some services failed to start"
+          echo "  - Whisper API: $WHISPER_OK"
+          echo "  - Ollama: $OLLAMA_OK"
+          docker compose logs
           exit 1
       fi
 
   # Systemd service for setup (runs once on first boot)
-  - path: /etc/systemd/system/whisper-setup.service
+  - path: /etc/systemd/system/ai-setup.service
     permissions: "0644"
     content: |
       [Unit]
-      Description=Whisper API Docker Setup
+      Description=AI Services Docker Setup
       After=network-online.target docker.service
       Wants=network-online.target
       Requires=docker.service
 
       [Service]
       Type=oneshot
-      ExecStart=/opt/whisper/setup.sh
+      ExecStart=/opt/ai/setup.sh
       RemainAfterExit=yes
       StandardOutput=journal+console
       StandardError=journal+console
@@ -258,7 +378,7 @@ write_files:
       [Install]
       WantedBy=multi-user.target
 
-  # Promtail configuration for shipping logs to Loki (updated for Docker)
+  # Promtail configuration for shipping logs to Loki
   - path: /etc/promtail/config.yaml
     permissions: "0644"
     content: |
@@ -285,7 +405,7 @@ write_files:
               regex: '/(.+)'
               target_label: container
             - source_labels: ['__meta_docker_container_name']
-              regex: '/(whisper-api|watchtower)'
+              regex: '/(whisper-api|ollama|watchtower)'
               action: keep
             - source_labels: ['__meta_docker_container_label_com_docker_compose_service']
               target_label: compose_service
@@ -312,7 +432,7 @@ write_files:
             max_age: 12h
             labels:
               job: system
-              host: whisper-gpu
+              host: ai-gpu
           relabel_configs:
             - source_labels: ['__journal__systemd_unit']
               regex: '(sshd|systemd-.*|nvidia-.*|docker.*)\.service'
@@ -342,7 +462,7 @@ write_files:
       WantedBy=multi-user.target
 
   # Promtail installation script
-  - path: /opt/whisper/install-promtail.sh
+  - path: /opt/ai/install-promtail.sh
     permissions: "0755"
     content: |
       #!/bin/bash
@@ -370,9 +490,9 @@ write_files:
       echo "Promtail installed and started!"
 
 runcmd:
-  - mkdir -p /opt/whisper
-  - chown -R whisper:whisper /opt/whisper
-  - echo "Whisper cloud-init started at $(date)" >> /var/log/whisper-setup.log
+  - mkdir -p /opt/ai
+  - chown -R ai:ai /opt/ai
+  - echo "AI services cloud-init started at $(date)" >> /var/log/ai-setup.log
 
   # Install Docker CE from official repository
   - install -m 0755 -d /etc/apt/keyrings
@@ -382,7 +502,7 @@ runcmd:
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo $VERSION_CODENAME) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
   - apt-get update
   - apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-  - usermod -aG docker whisper
+  - usermod -aG docker ai
   - systemctl enable docker
   - systemctl start docker
 
@@ -402,14 +522,14 @@ runcmd:
 
   # Configure nginx
   - rm -f /etc/nginx/sites-enabled/default
-  - ln -sf /etc/nginx/sites-available/whisper /etc/nginx/sites-enabled/whisper
+  - ln -sf /etc/nginx/sites-available/ai /etc/nginx/sites-enabled/ai
   - systemctl enable nginx
   - systemctl start nginx
 
   # Install Promtail for log shipping
-  - /opt/whisper/install-promtail.sh
+  - /opt/ai/install-promtail.sh
 
   # Enable and start setup service
   - systemctl daemon-reload
-  - systemctl enable whisper-setup.service
-  - systemctl start whisper-setup.service
+  - systemctl enable ai-setup.service
+  - systemctl start ai-setup.service
