@@ -1,9 +1,9 @@
-resource "proxmox_virtual_environment_vm" "whisper_gpu" {
-  name        = local.whisper_vm.name
+resource "proxmox_virtual_environment_vm" "ai_gpu" {
+  name        = local.ai_vm.name
   node_name   = var.pm_node
-  vm_id       = local.whisper_vm.vmid
-  description = "Whisper AI inference server with GPU passthrough"
-  tags        = split(",", local.whisper_vm.tags)
+  vm_id       = local.ai_vm.vmid
+  description = "AI inference server (Whisper + Ollama) with GPU passthrough"
+  tags        = split(",", local.ai_vm.tags)
 
   clone {
     vm_id     = var.template_vmid_debian12_nvidia  # Debian 12 + NVIDIA drivers pre-installed
@@ -12,12 +12,12 @@ resource "proxmox_virtual_environment_vm" "whisper_gpu" {
   }
 
   cpu {
-    cores = local.whisper_vm.cores
+    cores = local.ai_vm.cores
     type  = "host" # Required for GPU passthrough
   }
 
   memory {
-    dedicated = local.whisper_vm.memory_mb
+    dedicated = local.ai_vm.memory_mb
   }
 
   bios    = "ovmf"
@@ -36,7 +36,7 @@ resource "proxmox_virtual_environment_vm" "whisper_gpu" {
     datastore_id = var.storage
     file_format  = "raw"
     interface    = "scsi0"
-    size         = local.whisper_vm.disk_size
+    size         = local.ai_vm.disk_size
   }
 
   network_device {
@@ -47,7 +47,7 @@ resource "proxmox_virtual_environment_vm" "whisper_gpu" {
   # GPU Passthrough - Quadro M4000 (uses resource mapping)
   hostpci {
     device  = "hostpci0"
-    mapping = local.whisper_vm.gpu_mapping
+    mapping = local.ai_vm.gpu_mapping
     pcie    = true
     rombar  = true
   }
@@ -55,7 +55,7 @@ resource "proxmox_virtual_environment_vm" "whisper_gpu" {
   initialization {
     ip_config {
       ipv4 {
-        address = local.whisper_vm.ip_cidr
+        address = local.ai_vm.ip_cidr
         gateway = var.gateway
       }
     }
@@ -69,7 +69,7 @@ resource "proxmox_virtual_environment_vm" "whisper_gpu" {
       servers = [var.nameserver]
     }
 
-    user_data_file_id = proxmox_virtual_environment_file.whisper_cloud_init.id
+    user_data_file_id = proxmox_virtual_environment_file.ai_cloud_init.id
   }
 
   operating_system {
@@ -83,19 +83,20 @@ resource "proxmox_virtual_environment_vm" "whisper_gpu" {
   }
 }
 
-resource "proxmox_virtual_environment_file" "whisper_cloud_init" {
+resource "proxmox_virtual_environment_file" "ai_cloud_init" {
   content_type = "snippets"
   datastore_id = var.snippets_storage
   node_name    = var.pm_node
 
   source_raw {
-    data = templatefile("${path.module}/cloud-init/whisper.yaml", {
-      domain               = var.whisper_domain
+    data = templatefile("${path.module}/cloud-init/ai.yaml", {
+      domain               = var.ai_domain
       cloudflare_api_token = var.cloudflare_api_token
       letsencrypt_email    = var.letsencrypt_email
-      github_owner         = var.whisper_github_owner
-      ghcr_auth            = base64encode("${var.whisper_github_owner}:${var.whisper_ghcr_token}")
+      github_owner         = var.ai_github_owner
+      ghcr_auth            = base64encode("${var.ai_github_owner}:${var.ai_ghcr_token}")
+      ollama_model         = var.ai_ollama_model
     })
-    file_name = "whisper-cloud-init.yaml"
+    file_name = "ai-cloud-init.yaml"
   }
 }

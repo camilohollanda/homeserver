@@ -33,14 +33,14 @@ locals {
     tags      = "secrets,infisical"
   }
 
-  whisper_vm = {
-    name      = "whisper-gpu"
+  ai_vm = {
+    name      = "ai-gpu"
     vmid      = 115
     ip_cidr   = "192.168.20.30/24"
     cores     = 4
-    memory_mb = 16384 # 16GB for Whisper + model loading
-    disk_size = 50    # Space for models and audio files
-    tags      = "ml,whisper,gpu"
+    memory_mb = 16384 # 16GB for Whisper + Ollama model loading
+    disk_size = 60    # Space for models (Whisper + Qwen)
+    tags      = "ml,whisper,ollama,gpu"
     # GPU mapping name (created in Proxmox: Datacenter → Resource Mappings → PCI)
     gpu_mapping = "gpu-quadro-m4000"
   }

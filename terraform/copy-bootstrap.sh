@@ -13,7 +13,7 @@ echo "Getting VM IPs from Terraform..."
 K3S_IP=$(terraform -chdir="${SCRIPT_DIR}" output -raw k3s_vm_ip 2>/dev/null || echo "")
 DB_IP=$(terraform -chdir="${SCRIPT_DIR}" output -raw db_vm_ip 2>/dev/null || echo "")
 INFISICAL_IP=$(terraform -chdir="${SCRIPT_DIR}" output -raw infisical_vm_ip 2>/dev/null || echo "")
-WHISPER_IP=$(terraform -chdir="${SCRIPT_DIR}" output -raw whisper_vm_ip 2>/dev/null || echo "")
+AI_IP=$(terraform -chdir="${SCRIPT_DIR}" output -raw ai_vm_ip 2>/dev/null || echo "")
 
 if [ -z "$K3S_IP" ] || [ -z "$DB_IP" ]; then
   echo "Error: Could not get VM IPs from Terraform output."
@@ -27,7 +27,7 @@ SSH_USER="${TF_VAR_cloud_init_user:-deployer}"
 echo "K3s VM IP: $K3S_IP"
 echo "Postgres VM IP: $DB_IP"
 echo "Infisical VM IP: $INFISICAL_IP"
-echo "Whisper VM IP: $WHISPER_IP"
+echo "Whisper VM IP: $AI_IP"
 echo "SSH User: $SSH_USER"
 echo ""
 
@@ -87,16 +87,16 @@ case "$TARGET" in
     echo "Access Infisical at: https://${INFISICAL_IP}:8443"
     ;;
   whisper)
-    if [ -z "$WHISPER_IP" ]; then
+    if [ -z "$AI_IP" ]; then
       echo "Error: Whisper VM IP not found. Make sure you've applied the Terraform config."
       exit 1
     fi
-    copy_dir_to_vm "$WHISPER_IP" "whisper-gpu" "${BOOTSTRAP_DIR}/whisper"
+    copy_dir_to_vm "$AI_IP" "whisper-gpu" "${BOOTSTRAP_DIR}/whisper"
     echo "Next steps for whisper-gpu VM:"
-    echo "  ssh ${SSH_USER}@${WHISPER_IP}"
+    echo "  ssh ${SSH_USER}@${AI_IP}"
     echo "  sudo /opt/bootstrap/setup.sh"
     echo ""
-    echo "After setup, access the API at: http://${WHISPER_IP}:8000"
+    echo "After setup, access the API at: http://${AI_IP}:8000"
     ;;
   all)
     copy_dir_to_vm "$K3S_IP" "k3s-apps" "${BOOTSTRAP_DIR}/k3s"
@@ -105,8 +105,8 @@ case "$TARGET" in
       # Copy infisical db-setup to postgres VM as well
       scp -o StrictHostKeyChecking=no "${BOOTSTRAP_DIR}/infisical/db-setup.sh" "${SSH_USER}@${DB_IP}:/opt/bootstrap/"
     fi
-    if [ -n "$WHISPER_IP" ]; then
-      copy_dir_to_vm "$WHISPER_IP" "whisper-gpu" "${BOOTSTRAP_DIR}/whisper"
+    if [ -n "$AI_IP" ]; then
+      copy_dir_to_vm "$AI_IP" "whisper-gpu" "${BOOTSTRAP_DIR}/whisper"
     fi
     echo "✓ All bootstrap scripts copied!"
     echo ""
@@ -127,9 +127,9 @@ case "$TARGET" in
     echo "4. Access Infisical (after VM boots):"
     echo "   https://${INFISICAL_IP:-192.168.20.22}:8443"
     echo ""
-    if [ -n "$WHISPER_IP" ]; then
+    if [ -n "$AI_IP" ]; then
     echo "5. Setup Whisper GPU:"
-    echo "   ssh ${SSH_USER}@${WHISPER_IP}"
+    echo "   ssh ${SSH_USER}@${AI_IP}"
     echo "   sudo /opt/bootstrap/setup.sh"
     echo ""
     fi

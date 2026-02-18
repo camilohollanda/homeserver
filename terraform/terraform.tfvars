@@ -29,3 +29,9 @@ infisical_postgres_user     = "infisical"
 # infisical_encryption_key    - set via TF_VAR_infisical_encryption_key
 # infisical_auth_secret       - set via TF_VAR_infisical_auth_secret
 pm_ssh_user = "root"
+
+# AI Services configuration (Whisper + Ollama/Qwen)
+# ai_domain        - set via TF_VAR_ai_domain (e.g., ai.internal.example.com)
+# ai_github_owner  - set via TF_VAR_ai_github_owner (GitHub username for whisper-api)
+# ai_ghcr_token    - set via TF_VAR_ai_ghcr_token (GitHub PAT with packages:read)
+# ai_ollama_model  - defaults to qwen2.5:3b (can override via TF_VAR_ai_ollama_model)

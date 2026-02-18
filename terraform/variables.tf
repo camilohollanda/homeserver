@@ -157,22 +157,28 @@ variable "letsencrypt_email" {
   type        = string
 }
 
-# Whisper configuration
-variable "whisper_domain" {
-  description = "Domain for Whisper API (e.g., whisper.internal.example.com)"
+# AI Services configuration (Whisper + Ollama/Qwen)
+variable "ai_domain" {
+  description = "Domain for AI services API (e.g., ai.internal.example.com)"
   type        = string
-  default     = "whisper.internal.prakash.com.br"
+  default     = "ai.internal.prakash.com.br"
 }
 
-variable "whisper_github_owner" {
+variable "ai_github_owner" {
   description = "GitHub owner/org for whisper-api repository (e.g., 'myusername')"
   type        = string
 }
 
-variable "whisper_ghcr_token" {
+variable "ai_ghcr_token" {
   description = "GitHub PAT with packages:read scope for pulling whisper-api image from GHCR"
   type        = string
   sensitive   = true
+}
+
+variable "ai_ollama_model" {
+  description = "Ollama model for translation (e.g., qwen2.5:3b)"
+  type        = string
+  default     = "qwen2.5:3b"
 }
 
 # PostgreSQL configuration
