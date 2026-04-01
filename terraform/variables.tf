@@ -199,3 +199,52 @@ variable "postgres_domain" {
   type        = string
   default     = "pg.internal.prakash.com.br"
 }
+
+# Media stack configuration
+variable "media_library_path" {
+  description = "Host path used for shared movies/tv files"
+  type        = string
+  default     = "/srv/media"
+}
+
+variable "media_download_path" {
+  description = "Host path used for completed and incoming torrent downloads"
+  type        = string
+  default     = "/srv/downloads"
+}
+
+variable "media_timezone" {
+  description = "Timezone used in Jellyfin/qBittorrent/Radarr containers"
+  type        = string
+  default     = "UTC"
+}
+
+variable "media_uid" {
+  description = "UID used inside container processes for media stack"
+  type        = number
+  default     = 1000
+}
+
+variable "media_gid" {
+  description = "GID used inside container processes for media stack"
+  type        = number
+  default     = 1000
+}
+
+variable "media_jellyfin_domain" {
+  description = "Local domain for Jellyfin (served via reverse proxy)"
+  type        = string
+  default     = "jellyfin.internal.prakash.com.br"
+}
+
+variable "media_qbittorrent_domain" {
+  description = "Local domain for qBittorrent (served via reverse proxy)"
+  type        = string
+  default     = "torrent.internal.prakash.com.br"
+}
+
+variable "media_radarr_domain" {
+  description = "Local domain for Radarr (served via reverse proxy)"
+  type        = string
+  default     = "radarr.internal.prakash.com.br"
+}

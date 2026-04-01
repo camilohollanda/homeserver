@@ -25,6 +25,9 @@ bootstrap/
 ├── whisper/                # whisper-gpu VM (192.168.20.30)
 │   ├── setup.sh
 │   └── README.md
+├── media/                  # media-server VM (192.168.20.40)
+│   ├── setup.sh
+│   └── README.md
 └── README.md               # This file
 ```
 
@@ -91,6 +94,18 @@ ssh deployer@192.168.20.30
 sudo /opt/bootstrap/setup.sh
 # Reboot if prompted for NVIDIA driver, then run again
 ```
+
+#### Media Server (media-server VM)
+
+```bash
+ssh deployer@192.168.20.40
+sudo /opt/bootstrap/setup.sh
+```
+
+This VM is provisioned by Terraform cloud-init with a local reverse proxy:
+- Jellyfin: `http://jellyfin.internal.prakash.com.br`
+- qBittorrent: `http://torrent.internal.prakash.com.br`
+- Radarr: `http://radarr.internal.prakash.com.br`
 
 ## Post-Bootstrap Steps (K3s)
 

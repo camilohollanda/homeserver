@@ -4,6 +4,8 @@ This directory contains Terraform configuration to provision VMs on Proxmox:
 - **k3s-apps** (192.168.20.11) - K3s single-node cluster
 - **db-postgres** (192.168.20.21) - PostgreSQL database server
 - **infisical** (192.168.20.22) - Infisical secret management server
+- **ai-gpu** (192.168.20.30) - Whisper + Ollama services
+- **media-server** (192.168.20.40) - Jellyfin + qBittorrent + Radarr stack
 
 ## Prerequisites
 
@@ -47,9 +49,10 @@ This directory contains Terraform configuration to provision VMs on Proxmox:
 
    Or copy to specific VMs:
    ```bash
-   ./copy-bootstrap.sh k3s      # Only k3s-apps VM
-   ./copy-bootstrap.sh postgres # Only db-postgres VM
-   ```
+./copy-bootstrap.sh k3s      # Only k3s-apps VM
+./copy-bootstrap.sh postgres # Only db-postgres VM
+./copy-bootstrap.sh media    # Only media-server VM
+```
 
 ## Environment Variables
 
@@ -67,6 +70,19 @@ TF_VAR_ssh_public_keys='["key1","key2"]'
 - `.env.sample` - Example environment variables (safe to commit)
 - `.env` - Your actual environment variables (gitignored)
 - `.gitignore` - Excludes sensitive files from git
+
+### Media stack
+
+The media server (Jellyfin + qBittorrent + Radarr) is deployed by Terraform through:
+
+- `terraform/vm-media.tf` - VM definition
+- `terraform/cloud-init/media.yaml` - container stack and service bootstrap
+- `bootstrap/media` - manual helper scripts and docs
+
+The media VM exposes these services via a local reverse proxy (no ports):
+- `http://jellyfin.internal.prakash.com.br`
+- `http://torrent.internal.prakash.com.br`
+- `http://radarr.internal.prakash.com.br`
 
 ## Infisical Setup
 

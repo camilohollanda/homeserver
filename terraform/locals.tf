@@ -44,4 +44,14 @@ locals {
     # GPU mapping name (created in Proxmox: Datacenter → Resource Mappings → PCI)
     gpu_mapping = "gpu-quadro-m4000"
   }
+
+  media_vm = {
+    name      = "media-server"
+    vmid      = 116
+    ip_cidr   = "192.168.20.40/24"
+    cores     = 6
+    memory_mb = 8192
+    disk_size = 180
+    tags      = "media,jellyfin,qbittorrent,radarr"
+  }
 }

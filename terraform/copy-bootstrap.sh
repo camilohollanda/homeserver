@@ -2,18 +2,19 @@
 set -euo pipefail
 
 # Script to copy bootstrap scripts to VMs after Terraform provisioning
-# Usage: ./copy-bootstrap.sh [k3s|postgres|infisical|whisper|all]
+# Usage: ./copy-bootstrap.sh [k3s|postgres|infisical|whisper|media|all]
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BOOTSTRAP_DIR="$(cd "${SCRIPT_DIR}/../bootstrap" && pwd)"
 TARGET="${1:-all}"
 
 # Get VM IPs from Terraform output
-echo "Getting VM IPs from Terraform..."
+echo "Getting VM IPs from Terraform output..."
 K3S_IP=$(terraform -chdir="${SCRIPT_DIR}" output -raw k3s_vm_ip 2>/dev/null || echo "")
 DB_IP=$(terraform -chdir="${SCRIPT_DIR}" output -raw db_vm_ip 2>/dev/null || echo "")
 INFISICAL_IP=$(terraform -chdir="${SCRIPT_DIR}" output -raw infisical_vm_ip 2>/dev/null || echo "")
 AI_IP=$(terraform -chdir="${SCRIPT_DIR}" output -raw ai_vm_ip 2>/dev/null || echo "")
+MEDIA_IP=$(terraform -chdir="${SCRIPT_DIR}" output -raw media_server_ip 2>/dev/null || echo "")
 
 if [ -z "$K3S_IP" ] || [ -z "$DB_IP" ]; then
   echo "Error: Could not get VM IPs from Terraform output."
@@ -28,6 +29,7 @@ echo "K3s VM IP: $K3S_IP"
 echo "Postgres VM IP: $DB_IP"
 echo "Infisical VM IP: $INFISICAL_IP"
 echo "Whisper VM IP: $AI_IP"
+echo "Media VM IP: $MEDIA_IP"
 echo "SSH User: $SSH_USER"
 echo ""
 
@@ -98,6 +100,21 @@ case "$TARGET" in
     echo ""
     echo "After setup, access the API at: http://${AI_IP}:8000"
     ;;
+  media)
+    if [ -z "$MEDIA_IP" ]; then
+      echo "Error: Media VM IP not found. Make sure you've applied the Terraform config."
+      exit 1
+    fi
+    copy_dir_to_vm "$MEDIA_IP" "media-server" "${BOOTSTRAP_DIR}/media"
+    echo "Next steps for media-server VM:"
+    echo "  ssh ${SSH_USER}@${MEDIA_IP}"
+    echo "  sudo /opt/bootstrap/setup.sh"
+    echo ""
+    echo "Service endpoints:"
+    echo "  Jellyfin:   http://${MEDIA_IP}:8096"
+    echo "  qBittorrent: http://${MEDIA_IP}:8080"
+    echo "  Radarr:     http://${MEDIA_IP}:7878"
+    ;;
   all)
     copy_dir_to_vm "$K3S_IP" "k3s-apps" "${BOOTSTRAP_DIR}/k3s"
     copy_dir_to_vm "$DB_IP" "db-postgres" "${BOOTSTRAP_DIR}/postgres"
@@ -108,6 +125,10 @@ case "$TARGET" in
     if [ -n "$AI_IP" ]; then
       copy_dir_to_vm "$AI_IP" "whisper-gpu" "${BOOTSTRAP_DIR}/whisper"
     fi
+    if [ -n "$MEDIA_IP" ]; then
+      copy_dir_to_vm "$MEDIA_IP" "media-server" "${BOOTSTRAP_DIR}/media"
+    fi
+
     echo "✓ All bootstrap scripts copied!"
     echo ""
     echo "Next steps:"
@@ -128,19 +149,27 @@ case "$TARGET" in
     echo "   https://${INFISICAL_IP:-192.168.20.22}:8443"
     echo ""
     if [ -n "$AI_IP" ]; then
-    echo "5. Setup Whisper GPU:"
-    echo "   ssh ${SSH_USER}@${AI_IP}"
-    echo "   sudo /opt/bootstrap/setup.sh"
-    echo ""
+      echo "5. Setup Whisper GPU:"
+      echo "   ssh ${SSH_USER}@${AI_IP}"
+      echo "   sudo /opt/bootstrap/setup.sh"
+      echo ""
+    fi
+    if [ -n "$MEDIA_IP" ]; then
+      echo "6. Media services:" 
+      echo "   http://${MEDIA_IP}:8096 - Jellyfin"
+      echo "   http://${MEDIA_IP}:8080 - qBittorrent"
+      echo "   http://${MEDIA_IP}:7878 - Radarr"
+      echo ""
     fi
     ;;
   *)
-    echo "Usage: $0 [k3s|postgres|infisical|whisper|all]"
+    echo "Usage: $0 [k3s|postgres|infisical|whisper|media|all]"
     echo ""
     echo "  k3s       - Copy scripts to k3s-apps VM"
     echo "  postgres  - Copy scripts to db-postgres VM"
     echo "  infisical - Copy scripts and show Infisical setup commands"
     echo "  whisper   - Copy scripts to whisper-gpu VM"
+    echo "  media     - Copy scripts to media-server VM"
     echo "  all       - Copy scripts to all VMs (default)"
     exit 1
     ;;

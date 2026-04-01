@@ -1,0 +1,190 @@
+#cloud-config
+
+# Media server for home movie playback and torrent downloads
+hostname: media-server
+manage_etc_hosts: true
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - ca-certificates
+  - curl
+  - gnupg
+
+write_files:
+  - path: /opt/media-stack/.env
+    permissions: '0600'
+    content: |
+      TIMEZONE=${media_timezone}
+      PUID=${media_uid}
+      PGID=${media_gid}
+
+  - path: /opt/media-stack/docker-compose.yml
+    permissions: '0644'
+    content: |
+      services:
+        qbittorrent:
+          image: lscr.io/linuxserver/qbittorrent:latest
+          container_name: qbittorrent
+          restart: unless-stopped
+          environment:
+            - PUID=${media_uid}
+            - PGID=${media_gid}
+            - TZ=${media_timezone}
+            - WEBUI_PORT=8080
+          volumes:
+            - qbittorrent-config:/config
+            - ${media_download_path}:/downloads
+            - ${media_library_path}:/media
+          expose:
+            - "8080"
+
+        radarr:
+          image: lscr.io/linuxserver/radarr:latest
+          container_name: radarr
+          restart: unless-stopped
+          environment:
+            - PUID=${media_uid}
+            - PGID=${media_gid}
+            - TZ=${media_timezone}
+          volumes:
+            - radarr-config:/config
+            - ${media_library_path}:/media
+            - ${media_download_path}:/downloads
+          expose:
+            - "7878"
+
+        jellyfin:
+          image: lscr.io/linuxserver/jellyfin:latest
+          container_name: jellyfin
+          restart: unless-stopped
+          environment:
+            - PUID=${media_uid}
+            - PGID=${media_gid}
+            - TZ=${media_timezone}
+          volumes:
+            - jellyfin-config:/config
+            - ${media_library_path}/movies:/media/movies
+            - ${media_library_path}/tv:/media/tv
+          expose:
+            - "8096"
+
+        nginx:
+          image: nginx:alpine
+          container_name: media-nginx
+          restart: unless-stopped
+          ports:
+            - "80:80"
+          volumes:
+            - /opt/media-stack/nginx.conf:/etc/nginx/nginx.conf:ro
+          depends_on:
+            - jellyfin
+            - qbittorrent
+            - radarr
+
+      volumes:
+        qbittorrent-config:
+        radarr-config:
+        jellyfin-config:
+
+  - path: /opt/media-stack/nginx.conf
+    permissions: '0644'
+    content: |
+      events {
+        worker_connections 1024;
+      }
+
+      http {
+        server {
+          listen 80;
+          server_name ${media_jellyfin_domain};
+
+          location / {
+            proxy_pass http://jellyfin:8096;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+          }
+        }
+
+        server {
+          listen 80;
+          server_name ${media_qbittorrent_domain};
+
+          location / {
+            proxy_pass http://qbittorrent:8080;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+          }
+        }
+
+        server {
+          listen 80;
+          server_name ${media_radarr_domain};
+
+          location / {
+            proxy_pass http://radarr:7878;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+          }
+        }
+      }
+
+  - path: /etc/systemd/system/media-stack.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Media stack (Jellyfin + qBittorrent + Radarr)
+      Requires=docker.service
+      After=docker.service
+
+      [Service]
+      Type=oneshot
+      WorkingDirectory=/opt/media-stack
+      ExecStart=/usr/bin/docker compose up -d
+      ExecStop=/usr/bin/docker compose down
+      RemainAfterExit=yes
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /opt/media-stack/restart-stack.sh
+    permissions: '0755'
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      cd /opt/media-stack
+      /usr/bin/docker compose pull
+      /usr/bin/docker compose up -d
+
+runcmd:
+  - install -m 0755 -d /etc/apt/keyrings
+  - curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+  - chmod a+r /etc/apt/keyrings/docker.asc
+  - echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+  - apt-get update
+  - apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+  - usermod -aG docker deployer
+
+  - systemctl enable docker
+  - systemctl start docker
+
+  - mkdir -p /opt/media-stack
+  - mkdir -p ${media_library_path}/movies ${media_library_path}/tv
+  - mkdir -p ${media_download_path}/incomplete ${media_download_path}/complete
+  - chown -R ${media_uid}:${media_gid} ${media_library_path} ${media_download_path}
+  - chmod -R 775 ${media_library_path} ${media_download_path}
+  - /opt/media-stack/restart-stack.sh
+
+  - systemctl daemon-reload
+  - systemctl enable media-stack
+  - systemctl start media-stack
+
+final_message: "Media server is ready. Jellyfin: http://<media-server-ip>:8096, qBittorrent: http://<media-server-ip>:8080, Radarr: http://<media-server-ip>:7878"
