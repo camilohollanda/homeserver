@@ -214,7 +214,7 @@ variable "media_download_path" {
 }
 
 variable "media_timezone" {
-  description = "Timezone used in Jellyfin/qBittorrent/Radarr containers"
+  description = "Timezone used in Jellyfin/qBittorrent/Radarr/Sonarr containers"
   type        = string
   default     = "UTC"
 }
@@ -247,4 +247,22 @@ variable "media_radarr_domain" {
   description = "Local domain for Radarr (served via reverse proxy)"
   type        = string
   default     = "radarr.internal.prakash.com.br"
+}
+
+variable "media_sonarr_domain" {
+  description = "Local domain for Sonarr (served via reverse proxy)"
+  type        = string
+  default     = "sonarr.internal.prakash.com.br"
+}
+
+variable "media_prowlarr_domain" {
+  description = "Local domain for Prowlarr (served via reverse proxy)"
+  type        = string
+  default     = "prowlarr.internal.prakash.com.br"
+}
+
+variable "media_bazarr_domain" {
+  description = "Local domain for Bazarr (served via reverse proxy)"
+  type        = string
+  default     = "bazarr.internal.prakash.com.br"
 }

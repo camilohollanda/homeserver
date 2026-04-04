@@ -36,17 +36,21 @@ output "media_server_ip" {
 output "media_services" {
   description = "Local URLs for media services"
   value = {
-    jellyfin   = "http://${split("/", local.media_vm.ip_cidr)[0]}:8096"
+    jellyfin    = "http://${split("/", local.media_vm.ip_cidr)[0]}:8096"
     qbittorrent = "http://${split("/", local.media_vm.ip_cidr)[0]}:8080"
-    radarr     = "http://${split("/", local.media_vm.ip_cidr)[0]}:7878"
+    radarr      = "http://${split("/", local.media_vm.ip_cidr)[0]}:7878"
+    sonarr      = "http://${split("/", local.media_vm.ip_cidr)[0]}:8989"
   }
 }
 
 output "media_proxy_urls" {
   description = "Local domain URLs via reverse proxy (no ports)"
   value = {
-    jellyfin   = "http://${var.media_jellyfin_domain}"
+    jellyfin    = "http://${var.media_jellyfin_domain}"
     qbittorrent = "http://${var.media_qbittorrent_domain}"
-    radarr     = "http://${var.media_radarr_domain}"
+    radarr      = "http://${var.media_radarr_domain}"
+    sonarr      = "http://${var.media_sonarr_domain}"
+    prowlarr    = "http://${var.media_prowlarr_domain}"
+    bazarr      = "http://${var.media_bazarr_domain}"
   }
 }

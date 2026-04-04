@@ -1,4 +1,4 @@
-# Media Server (Jellyfin + qBittorrent + Radarr)
+# Media Server (Jellyfin + qBittorrent + Radarr + Sonarr)
 
 Provisioned by Terraform from `terraform/vm-media.tf`.
 
@@ -7,6 +7,9 @@ Provisioned by Terraform from `terraform/vm-media.tf`.
 - `jellyfin` behind `nginx` on `http://jellyfin.internal.prakash.com.br`
 - `qbittorrent` behind `nginx` on `http://torrent.internal.prakash.com.br`
 - `radarr` behind `nginx` on `http://radarr.internal.prakash.com.br`
+- `sonarr` behind `nginx` on `http://sonarr.internal.prakash.com.br`
+- `prowlarr` behind `nginx` on `http://prowlarr.internal.prakash.com.br`
+- `bazarr` behind `nginx` on `http://bazarr.internal.prakash.com.br`
 
 ## Storage layout
 
@@ -25,7 +28,11 @@ These paths come from Terraform variables:
 1. Visit Jellyfin at `http://jellyfin.internal.prakash.com.br` and complete first-run setup.
 2. Configure a movie library pointing at `/media/movies`.
 3. Visit qBittorrent at `http://torrent.internal.prakash.com.br` and set remote indexers.
-4. Visit Radarr at `http://radarr.internal.prakash.com.br`, add `qBittorrent` as download client and point the movie folder to `/media/movies`.
+4. Visit Prowlarr at `http://prowlarr.internal.prakash.com.br` and add your indexers.
+5. In Prowlarr, connect it to Radarr, Sonarr, and qBittorrent.
+6. Visit Bazarr at `http://bazarr.internal.prakash.com.br` and connect it to Radarr and Sonarr.
+7. Visit Radarr at `http://radarr.internal.prakash.com.br`, add `qBittorrent` as download client and point the movie folder to `/media/movies`.
+8. Visit Sonarr at `http://sonarr.internal.prakash.com.br`, add `qBittorrent` as download client and point the TV folder to `/media/tv`.
 
 For stack updates:
 

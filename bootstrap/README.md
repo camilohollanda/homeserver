@@ -28,6 +28,8 @@ bootstrap/
 ├── media/                  # media-server VM (192.168.20.40)
 │   ├── setup.sh
 │   └── README.md
+├── dns/                    # DNS helpers (Cloudflare Zero Trust Internal DNS)
+│   └── zero-trust-internal-dns.sh
 └── README.md               # This file
 ```
 
@@ -106,6 +108,9 @@ This VM is provisioned by Terraform cloud-init with a local reverse proxy:
 - Jellyfin: `http://jellyfin.internal.prakash.com.br`
 - qBittorrent: `http://torrent.internal.prakash.com.br`
 - Radarr: `http://radarr.internal.prakash.com.br`
+- Sonarr: `http://sonarr.internal.prakash.com.br`
+- Prowlarr: `http://prowlarr.internal.prakash.com.br`
+- Bazarr: `http://bazarr.internal.prakash.com.br`
 
 ## Post-Bootstrap Steps (K3s)
 

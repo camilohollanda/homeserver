@@ -114,6 +114,7 @@ case "$TARGET" in
     echo "  Jellyfin:   http://${MEDIA_IP}:8096"
     echo "  qBittorrent: http://${MEDIA_IP}:8080"
     echo "  Radarr:     http://${MEDIA_IP}:7878"
+    echo "  Sonarr:     http://${MEDIA_IP}:8989"
     ;;
   all)
     copy_dir_to_vm "$K3S_IP" "k3s-apps" "${BOOTSTRAP_DIR}/k3s"
@@ -159,6 +160,7 @@ case "$TARGET" in
       echo "   http://${MEDIA_IP}:8096 - Jellyfin"
       echo "   http://${MEDIA_IP}:8080 - qBittorrent"
       echo "   http://${MEDIA_IP}:7878 - Radarr"
+      echo "   http://${MEDIA_IP}:8989 - Sonarr"
       echo ""
     fi
     ;;
