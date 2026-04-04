@@ -2,7 +2,7 @@ resource "proxmox_virtual_environment_vm" "media_server" {
   name        = local.media_vm.name
   node_name   = var.pm_node
   vm_id       = local.media_vm.vmid
-  description = "Media stack host (Jellyfin + qBittorrent + Radarr)"
+  description = "Media stack host (Jellyfin + qBittorrent + Radarr + Sonarr)"
   tags        = split(",", local.media_vm.tags)
 
   clone {
@@ -75,14 +75,17 @@ resource "proxmox_virtual_environment_file" "media_cloud_init" {
 
   source_raw {
     data = templatefile("${path.module}/cloud-init/media.yaml", {
-      media_library_path   = var.media_library_path
-      media_download_path  = var.media_download_path
-      media_timezone      = var.media_timezone
-      media_uid          = var.media_uid
-      media_gid          = var.media_gid
-      media_jellyfin_domain   = var.media_jellyfin_domain
+      media_library_path       = var.media_library_path
+      media_download_path      = var.media_download_path
+      media_timezone           = var.media_timezone
+      media_uid                = var.media_uid
+      media_gid                = var.media_gid
+      media_jellyfin_domain    = var.media_jellyfin_domain
       media_qbittorrent_domain = var.media_qbittorrent_domain
-      media_radarr_domain     = var.media_radarr_domain
+      media_radarr_domain      = var.media_radarr_domain
+      media_sonarr_domain      = var.media_sonarr_domain
+      media_prowlarr_domain    = var.media_prowlarr_domain
+      media_bazarr_domain      = var.media_bazarr_domain
     })
     file_name = "media-cloud-init.yaml"
   }

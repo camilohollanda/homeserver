@@ -5,7 +5,7 @@ This directory contains Terraform configuration to provision VMs on Proxmox:
 - **db-postgres** (192.168.20.21) - PostgreSQL database server
 - **infisical** (192.168.20.22) - Infisical secret management server
 - **ai-gpu** (192.168.20.30) - Whisper + Ollama services
-- **media-server** (192.168.20.40) - Jellyfin + qBittorrent + Radarr stack
+- **media-server** (192.168.20.40) - Jellyfin + qBittorrent + Radarr + Sonarr stack
 
 ## Prerequisites
 
@@ -73,7 +73,7 @@ TF_VAR_ssh_public_keys='["key1","key2"]'
 
 ### Media stack
 
-The media server (Jellyfin + qBittorrent + Radarr) is deployed by Terraform through:
+The media server (Jellyfin + qBittorrent + Radarr + Sonarr) is deployed by Terraform through:
 
 - `terraform/vm-media.tf` - VM definition
 - `terraform/cloud-init/media.yaml` - container stack and service bootstrap
@@ -83,6 +83,9 @@ The media VM exposes these services via a local reverse proxy (no ports):
 - `http://jellyfin.internal.prakash.com.br`
 - `http://torrent.internal.prakash.com.br`
 - `http://radarr.internal.prakash.com.br`
+- `http://sonarr.internal.prakash.com.br`
+- `http://prowlarr.internal.prakash.com.br`
+- `http://bazarr.internal.prakash.com.br`
 
 ## Infisical Setup
 

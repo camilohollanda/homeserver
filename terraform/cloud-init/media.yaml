@@ -1,6 +1,6 @@
 #cloud-config
 
-# Media server for home movie playback and torrent downloads
+# Media server for home movie/TV playback and torrent downloads
 hostname: media-server
 manage_etc_hosts: true
 
@@ -24,6 +24,33 @@ write_files:
     permissions: '0644'
     content: |
       services:
+        prowlarr:
+          image: lscr.io/linuxserver/prowlarr:latest
+          container_name: prowlarr
+          restart: unless-stopped
+          environment:
+            - PUID=${media_uid}
+            - PGID=${media_gid}
+            - TZ=${media_timezone}
+          volumes:
+            - prowlarr-config:/config
+          expose:
+            - "9696"
+
+        bazarr:
+          image: lscr.io/linuxserver/bazarr:latest
+          container_name: bazarr
+          restart: unless-stopped
+          environment:
+            - PUID=${media_uid}
+            - PGID=${media_gid}
+            - TZ=${media_timezone}
+          volumes:
+            - bazarr-config:/config
+            - ${media_library_path}:/media
+          expose:
+            - "6767"
+
         qbittorrent:
           image: lscr.io/linuxserver/qbittorrent:latest
           container_name: qbittorrent
@@ -55,6 +82,21 @@ write_files:
           expose:
             - "7878"
 
+        sonarr:
+          image: lscr.io/linuxserver/sonarr:latest
+          container_name: sonarr
+          restart: unless-stopped
+          environment:
+            - PUID=${media_uid}
+            - PGID=${media_gid}
+            - TZ=${media_timezone}
+          volumes:
+            - sonarr-config:/config
+            - ${media_library_path}:/media
+            - ${media_download_path}:/downloads
+          expose:
+            - "8989"
+
         jellyfin:
           image: lscr.io/linuxserver/jellyfin:latest
           container_name: jellyfin
@@ -82,10 +124,16 @@ write_files:
             - jellyfin
             - qbittorrent
             - radarr
+            - sonarr
+            - prowlarr
+            - bazarr
 
       volumes:
+        prowlarr-config:
+        bazarr-config:
         qbittorrent-config:
         radarr-config:
+        sonarr-config:
         jellyfin-config:
 
   - path: /opt/media-stack/nginx.conf
@@ -134,13 +182,52 @@ write_files:
             proxy_set_header X-Forwarded-Proto $scheme;
           }
         }
+
+        server {
+          listen 80;
+          server_name ${media_sonarr_domain};
+
+          location / {
+            proxy_pass http://sonarr:8989;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+          }
+        }
+
+        server {
+          listen 80;
+          server_name ${media_prowlarr_domain};
+
+          location / {
+            proxy_pass http://prowlarr:9696;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+          }
+        }
+
+        server {
+          listen 80;
+          server_name ${media_bazarr_domain};
+
+          location / {
+            proxy_pass http://bazarr:6767;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+          }
+        }
       }
 
   - path: /etc/systemd/system/media-stack.service
     permissions: '0644'
     content: |
       [Unit]
-      Description=Media stack (Jellyfin + qBittorrent + Radarr)
+      Description=Media stack (Jellyfin + qBittorrent + Radarr + Sonarr)
       Requires=docker.service
       After=docker.service
 
@@ -187,4 +274,4 @@ runcmd:
   - systemctl enable media-stack
   - systemctl start media-stack
 
-final_message: "Media server is ready. Jellyfin: http://<media-server-ip>:8096, qBittorrent: http://<media-server-ip>:8080, Radarr: http://<media-server-ip>:7878"
+final_message: "Media server is ready. Jellyfin: http://<media-server-ip>:8096, qBittorrent: http://<media-server-ip>:8080, Radarr: http://<media-server-ip>:7878, Sonarr: http://<media-server-ip>:8989"
