@@ -76,19 +76,7 @@ resource "proxmox_virtual_environment_file" "infisical_cloud_init" {
   node_name    = var.pm_node
 
   source_raw {
-    data = templatefile("${path.module}/cloud-init/infisical.yaml", {
-      postgres_host             = split("/", local.db_vm.ip_cidr)[0]
-      postgres_port             = 5432
-      postgres_db               = var.infisical_postgres_db
-      postgres_user             = var.infisical_postgres_user
-      postgres_password         = var.infisical_postgres_password
-      postgres_password_encoded = urlencode(var.infisical_postgres_password)
-      encryption_key            = var.infisical_encryption_key
-      auth_secret               = var.infisical_auth_secret
-      domain                    = var.infisical_domain
-      cloudflare_api_token      = var.cloudflare_api_token
-      letsencrypt_email         = var.letsencrypt_email
-    })
+    data      = file("${path.module}/cloud-init/infisical.yaml")
     file_name = "infisical-cloud-init.yaml"
   }
 }
