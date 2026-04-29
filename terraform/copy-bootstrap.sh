@@ -1,4 +1,7 @@
 #!/bin/bash
+# SUPERSEDED — bootstrap scripts now run directly from your local machine via SSH.
+# Use bootstrap/all.sh (or per-VM setup.sh scripts) instead.
+# This script is kept for reference only.
 set -euo pipefail
 
 # Script to copy bootstrap scripts to VMs after Terraform provisioning

@@ -1,106 +1,14 @@
 #cloud-config
+# Minimal OS prep only.
+# Full PostgreSQL installation is handled by bootstrap/postgres/setup.sh (runs locally).
 
-# Set hostname early (before packages install)
 hostname: pg
 manage_etc_hosts: true
 
 package_update: true
-package_upgrade: true
+package_upgrade: false
 
 packages:
-  - wget
+  - curl
   - ca-certificates
   - gnupg
-  - lsb-release
-  - certbot
-  - python3-certbot-dns-cloudflare
-
-write_files:
-  - path: /etc/apt/keyrings/.placeholder
-    permissions: '0644'
-    content: |
-      # Placeholder for keyrings directory
-
-  # Cloudflare credentials for Let's Encrypt
-  - path: /etc/letsencrypt/cloudflare.ini
-    permissions: '0600'
-    content: |
-      dns_cloudflare_api_token = ${cloudflare_api_token}
-
-  # Script to copy certs to PostgreSQL and reload
-  - path: /etc/letsencrypt/renewal-hooks/deploy/postgres-ssl.sh
-    permissions: '0755'
-    content: |
-      #!/bin/bash
-      # Copy Let's Encrypt certs to PostgreSQL SSL directory
-      DOMAIN="${domain}"
-      PG_VERSION="${postgres_version}"
-      SSL_DIR="/etc/postgresql/$PG_VERSION/main/ssl"
-
-      mkdir -p "$SSL_DIR"
-      cp "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" "$SSL_DIR/server.crt"
-      cp "/etc/letsencrypt/live/$DOMAIN/privkey.pem" "$SSL_DIR/server.key"
-      chown postgres:postgres "$SSL_DIR"/*
-      chmod 600 "$SSL_DIR/server.key"
-      chmod 644 "$SSL_DIR/server.crt"
-
-      # Reload PostgreSQL to pick up new certs
-      systemctl reload postgresql
-
-runcmd:
-  # Create letsencrypt directories
-  - mkdir -p /etc/letsencrypt/renewal-hooks/deploy
-
-  # Get Let's Encrypt certificate
-  - |
-    certbot certonly \
-      --dns-cloudflare \
-      --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini \
-      -d ${domain} \
-      --non-interactive \
-      --agree-tos \
-      -m ${letsencrypt_email}
-
-  # Add PostgreSQL official APT repository
-  - wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /etc/apt/keyrings/postgresql.gpg
-  - chmod 644 /etc/apt/keyrings/postgresql.gpg
-  - echo "deb [signed-by=/etc/apt/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | tee /etc/apt/sources.list.d/pgdg.list > /dev/null
-
-  # Update and install PostgreSQL
-  - apt-get update
-  - apt-get install -y postgresql-${postgres_version} postgresql-contrib-${postgres_version}
-
-  # Stop PostgreSQL to configure
-  - systemctl stop postgresql
-
-  # Setup SSL directory and copy certs
-  - mkdir -p /etc/postgresql/${postgres_version}/main/ssl
-  - cp /etc/letsencrypt/live/${domain}/fullchain.pem /etc/postgresql/${postgres_version}/main/ssl/server.crt
-  - cp /etc/letsencrypt/live/${domain}/privkey.pem /etc/postgresql/${postgres_version}/main/ssl/server.key
-  - chown -R postgres:postgres /etc/postgresql/${postgres_version}/main/ssl
-  - chmod 600 /etc/postgresql/${postgres_version}/main/ssl/server.key
-  - chmod 644 /etc/postgresql/${postgres_version}/main/ssl/server.crt
-
-  # Configure PostgreSQL
-  - cp /etc/postgresql/${postgres_version}/main/postgresql.conf /etc/postgresql/${postgres_version}/main/postgresql.conf.bak
-
-  # Listen on all interfaces
-  - sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" /etc/postgresql/${postgres_version}/main/postgresql.conf
-
-  # Enable SSL
-  - sed -i "s/#ssl = off/ssl = on/" /etc/postgresql/${postgres_version}/main/postgresql.conf
-  - sed -i "s|#ssl_cert_file = 'server.crt'|ssl_cert_file = '/etc/postgresql/${postgres_version}/main/ssl/server.crt'|" /etc/postgresql/${postgres_version}/main/postgresql.conf
-  - sed -i "s|#ssl_key_file = 'server.key'|ssl_key_file = '/etc/postgresql/${postgres_version}/main/ssl/server.key'|" /etc/postgresql/${postgres_version}/main/postgresql.conf
-
-  # Configure pg_hba.conf to allow SSL connections from local network
-  - echo "" >> /etc/postgresql/${postgres_version}/main/pg_hba.conf
-  - echo "# Allow SSL connections from local network" >> /etc/postgresql/${postgres_version}/main/pg_hba.conf
-  - echo "hostssl all             all             ${allowed_network}          scram-sha-256" >> /etc/postgresql/${postgres_version}/main/pg_hba.conf
-  - echo "# Allow non-SSL connections from local network (fallback)" >> /etc/postgresql/${postgres_version}/main/pg_hba.conf
-  - echo "host    all             all             ${allowed_network}          scram-sha-256" >> /etc/postgresql/${postgres_version}/main/pg_hba.conf
-
-  # Start PostgreSQL
-  - systemctl start postgresql
-  - systemctl enable postgresql
-
-final_message: "PostgreSQL ${postgres_version} server is ready at ${domain} with SSL enabled"

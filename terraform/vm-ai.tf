@@ -89,14 +89,7 @@ resource "proxmox_virtual_environment_file" "ai_cloud_init" {
   node_name    = var.pm_node
 
   source_raw {
-    data = templatefile("${path.module}/cloud-init/ai.yaml", {
-      domain               = var.ai_domain
-      cloudflare_api_token = var.cloudflare_api_token
-      letsencrypt_email    = var.letsencrypt_email
-      github_owner         = var.ai_github_owner
-      ghcr_auth            = base64encode("${var.ai_github_owner}:${var.ai_ghcr_token}")
-      ollama_model         = var.ai_ollama_model
-    })
+    data      = file("${path.module}/cloud-init/ai.yaml")
     file_name = "ai-cloud-init.yaml"
   }
 }

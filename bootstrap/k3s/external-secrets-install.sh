@@ -1,17 +1,13 @@
 #!/usr/bin/env bash
-#
-# Install External Secrets Operator for Kubernetes
-# This enables syncing secrets from Infisical to K8s
-#
-# NOTE: This is infrastructure-level installation done once during bootstrap.
-# The operator is installed via Helm, but app-level configs (ClusterSecretStore,
-# ExternalSecrets) are managed in gitops/external-secrets/
-#
+# Runs on the k3s VM as root.
+# Remote: REMOTE_HOST=deployer@192.168.20.11 ./external-secrets-install.sh
+if [[ -n "${REMOTE_HOST:-}" ]]; then
+  cat "$0" | ssh "$REMOTE_HOST" "sudo bash -s"; exit $?
+fi
 set -euo pipefail
 
-# Check if running as root
-if [ "$EUID" -ne 0 ]; then
-  echo "Error: This script must be run as root (use sudo)"
+if [[ "$EUID" -ne 0 ]]; then
+  echo "Error: run as root, or set REMOTE_HOST= for remote execution"
   exit 1
 fi
 

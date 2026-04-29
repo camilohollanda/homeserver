@@ -1,13 +1,11 @@
 #!/bin/bash
+# SUPERSEDED — use bootstrap/k3s/setup.sh instead (runs from your local machine).
+# This script ran on the VM itself and required copy-bootstrap.sh first.
+# It is kept for reference only.
 set -euo pipefail
 
 # =============================================================================
-# K3s Cluster Bootstrap
-# =============================================================================
-# This script orchestrates the complete cluster setup in the correct order.
-# Run this once after Terraform provisions the k3s-apps VM.
-#
-# Usage: sudo ./bootstrap.sh
+# K3s Cluster Bootstrap (legacy — on-VM runner)
 # =============================================================================
 
 # Check if running as root

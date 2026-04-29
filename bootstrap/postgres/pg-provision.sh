@@ -1,18 +1,19 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# Runs on the postgres VM as root.
+# Remote: REMOTE_HOST=deployer@192.168.20.21 ./pg-provision.sh <app_name> [--env staging|prod]
 #
-# Provision a PostgreSQL database with user and strong password
-#
-# Usage: pg-provision <app_name> [--env staging|prod]
-#
-# Examples:
-#   pg-provision myapp
-#   pg-provision myapp --env staging
-#   pg-provision myapp --env prod
-#
-# This script is idempotent - safe to run multiple times.
-# If the database/user exists, it will update the password.
-#
+# This script is idempotent — safe to run multiple times.
+if [[ -n "${REMOTE_HOST:-}" ]]; then
+  { printf 'set --'; printf ' %q' "$@"; printf '\n'; cat "$0"; } \
+    | ssh "$REMOTE_HOST" "sudo bash -s"
+  exit $?
+fi
 set -euo pipefail
+
+if [[ "$EUID" -ne 0 ]]; then
+  echo "Error: run as root, or set REMOTE_HOST= for remote execution"
+  exit 1
+fi
 
 # Configuration
 POSTGRES_HOST="${POSTGRES_HOST:-192.168.20.21}"

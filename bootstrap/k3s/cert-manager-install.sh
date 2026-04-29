@@ -1,5 +1,15 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# Runs on the k3s VM as root.
+# Remote: REMOTE_HOST=deployer@192.168.20.11 ./cert-manager-install.sh
+if [[ -n "${REMOTE_HOST:-}" ]]; then
+  cat "$0" | ssh "$REMOTE_HOST" "sudo bash -s"; exit $?
+fi
 set -euo pipefail
+
+if [[ "$EUID" -ne 0 ]]; then
+  echo "Error: run as root, or set REMOTE_HOST= for remote execution"
+  exit 1
+fi
 
 # cert-manager installation script for k3s
 # Uses Cloudflare DNS-01 challenge for Let's Encrypt certificates
