@@ -26,19 +26,19 @@ spec:
       - name: iddh-members
         image: ghcr.io/iddh-com-br/members:main
         ports:
-        - containerPort: 80
+        - containerPort: 4000
           name: http
         readinessProbe:
           httpGet:
             path: /health
-            port: 80
+            port: 4000
           initialDelaySeconds: 10
           periodSeconds: 5
           timeoutSeconds: 3
         livenessProbe:
           httpGet:
             path: /health
-            port: 80
+            port: 4000
           initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 3
@@ -48,10 +48,10 @@ spec:
 
         resources:
           requests:
-            memory: "128Mi"
-            cpu: "50m"
+            memory: "256Mi"
+            cpu: "100m"
           limits:
-            memory: "512Mi"
+            memory: "1Gi"
             cpu: "500m"
 
 ---
@@ -63,8 +63,8 @@ metadata:
 spec:
   type: ClusterIP
   ports:
-  - port: 80
-    targetPort: 80
+  - port: 4000
+    targetPort: 4000
     protocol: TCP
     name: http
   selector:

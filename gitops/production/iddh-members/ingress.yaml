@@ -15,4 +15,4 @@ spec:
           service:
             name: iddh-members
             port:
-              number: 80
+              number: 4000
