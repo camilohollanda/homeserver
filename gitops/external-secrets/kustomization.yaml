@@ -17,3 +17,4 @@ resources:
   - shared-cluster-secret-store.yaml
   - werify-cluster-secret-store.yaml
   - bugsink-cluster-secret-store.yaml
+  - iddh-members-cluster-secret-store.yaml
