@@ -21,44 +21,45 @@ spec:
         app: werify
     spec:
       imagePullSecrets:
-      - name: ghcr-credentials
+        - name: ghcr-credentials
       containers:
-      - name: werify
-        image: ghcr.io/prem-prakash/werify:staging
-        ports:
-        - containerPort: 4000
-          name: http
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 4000
-          initialDelaySeconds: 10
-          periodSeconds: 5
-          timeoutSeconds: 3
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 4000
-          initialDelaySeconds: 30
-          periodSeconds: 10
-          timeoutSeconds: 3
-        envFrom:
-        - secretRef:
-            name: secrets
-        volumeMounts:
-        - name: uploads
-          mountPath: /app/priv/uploads
-        resources:
-          requests:
-            memory: "256Mi"
-            cpu: "100m"
-          limits:
-            memory: "1Gi"
-            cpu: "500m"
+        - name: werify
+          image: ghcr.io/prem-prakash/werify:staging
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 4000
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 4000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 4000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 3
+          envFrom:
+            - secretRef:
+                name: secrets
+          volumeMounts:
+            - name: uploads
+              mountPath: /app/priv/uploads
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
       volumes:
-      - name: uploads
-        persistentVolumeClaim:
-          claimName: werify-uploads
+        - name: uploads
+          persistentVolumeClaim:
+            claimName: werify-uploads
 ---
 apiVersion: v1
 kind: Service
@@ -68,9 +69,9 @@ metadata:
 spec:
   type: ClusterIP
   ports:
-  - port: 4000
-    targetPort: 4000
-    protocol: TCP
-    name: http
+    - port: 4000
+      targetPort: 4000
+      protocol: TCP
+      name: http
   selector:
     app: werify

@@ -25,6 +25,7 @@ spec:
       containers:
       - name: iddh-members
         image: ghcr.io/iddh-com-br/members:main
+        imagePullPolicy: Always
         ports:
         - containerPort: 4000
           name: http
