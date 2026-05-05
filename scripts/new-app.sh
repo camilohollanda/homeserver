@@ -5,7 +5,7 @@
 #   -d, --domain        Domain name for the app (e.g. myapp.com or app.prakash.com.br)
 #   -r, --repo          Container image (e.g. ghcr.io/owner/myapp)
 #   -n, --name          App name slug (default: derived from repo basename)
-#   -p, --port          Container port (default: 80)
+#   -p, --port          Container port (default: 4000 — Phoenix/Elixir default; use 80 for others)
 #   -t, --tag           Image tag (default: main)
 #       --storage       Add persistent storage, e.g. --storage 10Gi:/app/uploads
 #       --no-ghcr       Skip GHCR pull secret (image is public or not on GHCR)
@@ -23,7 +23,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 DOMAIN=""
 IMAGE=""
 APP_NAME=""
-PORT="80"
+PORT="4000"
 TAG="main"
 STORAGE_SIZE=""
 STORAGE_MOUNT=""
@@ -615,6 +615,6 @@ if ! known_zone "$DOMAIN"; then
   echo ""
 fi
 echo ""
-echo " Health probe is set to GET /health:${PORT} — adjust ingress.yaml"
-echo " or deployment.yaml if your app uses a different path."
+echo " Port    : ${PORT}  (override with --port)"
+echo " Health  : GET /health:${PORT} — adjust deployment.yaml if your app uses a different path."
 echo ""
