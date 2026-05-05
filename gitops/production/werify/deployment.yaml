@@ -25,6 +25,7 @@ spec:
       containers:
       - name: werify
         image: ghcr.io/prem-prakash/werify:main
+        imagePullPolicy: Always
         ports:
         - containerPort: 4000
           name: http
