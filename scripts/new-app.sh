@@ -78,6 +78,7 @@ MANIFESTS_DIR="${REPO_ROOT}/gitops/production/${APP_NAME}"
 ARGOCD_APP="${REPO_ROOT}/gitops/applications/${APP_NAME}-production.yaml"
 SECRET_STORE="${REPO_ROOT}/gitops/external-secrets/${APP_NAME}-cluster-secret-store.yaml"
 KUSTOMIZATION="${REPO_ROOT}/gitops/external-secrets/kustomization.yaml"
+GITOPS_KUSTOMIZATION="${REPO_ROOT}/gitops/kustomization.yaml"
 CLOUDFLARED_SCRIPT="${REPO_ROOT}/bootstrap/k3s/cloudflared-config.sh"
 
 # ---------------------------------------------------------------------------
@@ -437,7 +438,24 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 11. Cloudflare tunnel config (only for new/unknown domains)
+# 11. Patch gitops/kustomization.yaml (root app-of-apps list)
+# ---------------------------------------------------------------------------
+NEW_APP_RESOURCE="  - applications/${APP_NAME}-production.yaml"
+if $DRY_RUN; then
+  echo "--- patch: gitops/kustomization.yaml ---"
+  echo "  append: ${NEW_APP_RESOURCE}"
+  echo ""
+else
+  if grep -qF "applications/${APP_NAME}-production.yaml" "${GITOPS_KUSTOMIZATION}"; then
+    echo "  skipped: applications/${APP_NAME}-production.yaml already in gitops/kustomization.yaml"
+  else
+    echo "${NEW_APP_RESOURCE}" >> "${GITOPS_KUSTOMIZATION}"
+    echo "  patched: gitops/kustomization.yaml"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# 12. Cloudflare tunnel config (only for new/unknown domains)
 # ---------------------------------------------------------------------------
 if known_zone "$DOMAIN"; then
   echo ""
@@ -516,6 +534,8 @@ echo " Files written:"
 echo "   gitops/production/${APP_NAME}/"
 echo "   gitops/applications/${APP_NAME}-production.yaml"
 echo "   gitops/external-secrets/${APP_NAME}-cluster-secret-store.yaml"
+echo "   gitops/kustomization.yaml (patched)"
+echo "   gitops/external-secrets/kustomization.yaml (patched)"
 if [[ -n "$STORAGE_SIZE" ]]; then
   echo "   gitops/storageclass/${APP_NAME}-production-data-pv.yaml"
 fi
