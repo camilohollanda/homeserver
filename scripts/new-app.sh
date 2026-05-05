@@ -10,6 +10,10 @@
 #       --storage       Add persistent storage, e.g. --storage 10Gi:/app/uploads
 #       --no-ghcr       Skip GHCR pull secret (image is public or not on GHCR)
 #       --dry-run       Print files to stdout instead of writing them
+#
+# Optional env vars:
+#   INFISICAL_CLIENT_ID / INFISICAL_CLIENT_SECRET  — if set, creates the
+#     Infisical secrets folder automatically via API
 
 set -euo pipefail
 
@@ -455,7 +459,55 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 12. Cloudflare tunnel config (only for new/unknown domains)
+# 12. Create Infisical secrets folder via API
+# ---------------------------------------------------------------------------
+echo ""
+echo "==> Creating Infisical folder '${APP_NAME_TITLE}' in prod..."
+
+if $DRY_RUN; then
+  echo "--- Infisical API ---"
+  echo "  POST ${INFISICAL_HOST}/api/v1/folders"
+  echo "  { environment: prod, name: ${APP_NAME_TITLE}, path: / }"
+  echo ""
+elif [[ -z "${INFISICAL_CLIENT_ID:-}" || -z "${INFISICAL_CLIENT_SECRET:-}" ]]; then
+  echo "  skipped: INFISICAL_CLIENT_ID / INFISICAL_CLIENT_SECRET not set"
+  echo "  Create the folder manually in Infisical: prod → /${APP_NAME_TITLE}/"
+else
+  _token=$(curl -sf -X POST "${INFISICAL_HOST}/api/v1/auth/universal-auth/login" \
+    -H "Content-Type: application/json" \
+    -d "{\"clientId\":\"${INFISICAL_CLIENT_ID}\",\"clientSecret\":\"${INFISICAL_CLIENT_SECRET}\"}" \
+    | python3 -c "import sys,json; print(json.load(sys.stdin)['accessToken'])" 2>/dev/null) || _token=""
+
+  if [[ -z "$_token" ]]; then
+    echo "  WARNING: Infisical authentication failed — create folder manually: prod → /${APP_NAME_TITLE}/"
+  else
+    _workspace_id=$(curl -sf "${INFISICAL_HOST}/api/v1/workspaces" \
+      -H "Authorization: Bearer ${_token}" \
+      | python3 -c "
+import sys,json
+ws=json.load(sys.stdin).get('workspaces',[])
+m=next((w for w in ws if w.get('slug')=='${INFISICAL_PROJECT}'),None)
+print(m['id'] if m else '')
+" 2>/dev/null) || _workspace_id=""
+
+    if [[ -z "$_workspace_id" ]]; then
+      echo "  WARNING: workspace '${INFISICAL_PROJECT}' not found — create folder manually: prod → /${APP_NAME_TITLE}/"
+    else
+      _http=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${INFISICAL_HOST}/api/v1/folders" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer ${_token}" \
+        -d "{\"workspaceId\":\"${_workspace_id}\",\"environment\":\"prod\",\"name\":\"${APP_NAME_TITLE}\",\"path\":\"/\"}")
+      case "$_http" in
+        200|201) echo "  ✓ folder created: prod → /${APP_NAME_TITLE}/" ;;
+        400|409) echo "  ✓ folder already exists: prod → /${APP_NAME_TITLE}/" ;;
+        *)       echo "  WARNING: unexpected response (HTTP ${_http}) — create folder manually: prod → /${APP_NAME_TITLE}/" ;;
+      esac
+    fi
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# 13. Cloudflare tunnel config (only for new/unknown domains)
 # ---------------------------------------------------------------------------
 if known_zone "$DOMAIN"; then
   echo ""
@@ -542,10 +594,8 @@ fi
 echo ""
 echo " Next steps:"
 echo ""
-echo " 1. Add secrets to Infisical"
-echo "    Project : ${INFISICAL_PROJECT}"
-echo "    Env     : prod"
-echo "    Path    : /${APP_NAME_TITLE}/"
+echo " 1. Add secrets to Infisical (folder created automatically if credentials were set)"
+echo "    Project : ${INFISICAL_PROJECT}  Env: prod  Path: /${APP_NAME_TITLE}/"
 echo ""
 if [[ -n "$STORAGE_SIZE" ]]; then
   echo " 2. Create the storage directory on the k3s VM:"
