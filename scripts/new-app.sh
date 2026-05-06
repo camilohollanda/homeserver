@@ -84,6 +84,7 @@ SECRET_STORE="${REPO_ROOT}/gitops/external-secrets/${APP_NAME}-cluster-secret-st
 KUSTOMIZATION="${REPO_ROOT}/gitops/external-secrets/kustomization.yaml"
 GITOPS_KUSTOMIZATION="${REPO_ROOT}/gitops/kustomization.yaml"
 CLOUDFLARED_SCRIPT="${REPO_ROOT}/bootstrap/k3s/cloudflared-config.sh"
+IMAGE_UPDATER_CR="${REPO_ROOT}/gitops/argocd-image-updater/image-updater-cr.yaml"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -459,7 +460,30 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 12. Create Infisical secrets folder via API
+# 12. Patch gitops/argocd-image-updater/image-updater-cr.yaml
+# ---------------------------------------------------------------------------
+if ! $NO_GHCR; then
+  NEW_IMAGE_UPDATER_ENTRY="    - namePattern: \"${APP_NAME}-production\"
+      images:
+        - alias: ${APP_NAME}
+          imageName: ${IMAGE}:${TAG}"
+  if $DRY_RUN; then
+    echo "--- patch: gitops/argocd-image-updater/image-updater-cr.yaml ---"
+    echo "  append to applicationRefs:"
+    echo "$NEW_IMAGE_UPDATER_ENTRY"
+    echo ""
+  else
+    if grep -qF "namePattern: \"${APP_NAME}-production\"" "${IMAGE_UPDATER_CR}"; then
+      echo "  skipped: ${APP_NAME}-production already in image-updater-cr.yaml"
+    else
+      echo "${NEW_IMAGE_UPDATER_ENTRY}" >> "${IMAGE_UPDATER_CR}"
+      echo "  patched: gitops/argocd-image-updater/image-updater-cr.yaml"
+    fi
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# 13. Create Infisical secrets folder via API
 # ---------------------------------------------------------------------------
 echo ""
 echo "==> Creating Infisical folder '${APP_NAME_TITLE}' in prod..."
@@ -507,7 +531,7 @@ print(m['id'] if m else '')
 fi
 
 # ---------------------------------------------------------------------------
-# 13. Cloudflare tunnel config (only for new/unknown domains)
+# 14. Cloudflare tunnel config (only for new/unknown domains)
 # ---------------------------------------------------------------------------
 if known_zone "$DOMAIN"; then
   echo ""
@@ -588,6 +612,9 @@ echo "   gitops/applications/${APP_NAME}-production.yaml"
 echo "   gitops/external-secrets/${APP_NAME}-cluster-secret-store.yaml"
 echo "   gitops/kustomization.yaml (patched)"
 echo "   gitops/external-secrets/kustomization.yaml (patched)"
+if ! $NO_GHCR; then
+  echo "   gitops/argocd-image-updater/image-updater-cr.yaml (patched)"
+fi
 if [[ -n "$STORAGE_SIZE" ]]; then
   echo "   gitops/storageclass/${APP_NAME}-production-data-pv.yaml"
 fi
