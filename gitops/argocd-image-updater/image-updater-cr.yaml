@@ -11,6 +11,10 @@ spec:
   writeBackConfig:
     method: argocd
   applicationRefs:
+    - namePattern: "iddh-members-production"
+      images:
+        - alias: members
+          imageName: ghcr.io/iddh-com-br/members:main
     - namePattern: "werify-production"
       images:
         - alias: werify
