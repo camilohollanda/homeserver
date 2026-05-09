@@ -131,58 +131,58 @@ create_dns_route() {
 }
 
 # ---------------------------------------------------------------------------
-# Step 1: Verify cloudflared login on the VM
+# Step 1: Discover existing tunnel on the VM
 # ---------------------------------------------------------------------------
+# We read the tunnel UUID from the running config or the credentials file
+# rather than calling `cloudflared tunnel list`, so this script works even if
+# /root/.cloudflared/cert.pem (origin cert from `cloudflared tunnel login`) was
+# rotated or deleted — the tunnel itself runs from the per-tunnel JSON creds.
 echo ""
-echo "Step 1: Checking cloudflared login on VM (${K3S_SSH})..."
-
-if ssh "$K3S_SSH" "test -f /root/.cloudflared/cert.pem" 2>/dev/null; then
-  echo "✓ cert.pem exists on VM."
-else
-  echo ""
-  echo "ERROR: cloudflared is not logged in on the VM."
-  echo "This is a one-time step. SSH into the VM and run:"
-  echo ""
-  echo "  ssh ${K3S_SSH}"
-  echo "  sudo cloudflared tunnel login"
-  echo ""
-  echo "Then re-run this script."
-  exit 1
-fi
-
-# ---------------------------------------------------------------------------
-# Step 2: Get or create the tunnel (runs on VM via SSH)
-# ---------------------------------------------------------------------------
-echo ""
-echo "Step 2: Setting up tunnel '${TUNNEL_NAME}'..."
+echo "Step 1: Looking for existing tunnel on VM (${K3S_SSH})..."
 
 TUNNEL_ID=$(ssh "$K3S_SSH" \
-  "sudo cloudflared tunnel list 2>/dev/null | grep -E '^\S+\s+${TUNNEL_NAME}\s+' | awk '{print \$1}'" \
+  "sudo grep -E '^tunnel:' /etc/cloudflared/config.yml 2>/dev/null | awk '{print \$2}'" \
   || echo "")
 
-if [ -n "$TUNNEL_ID" ]; then
-  echo "✓ Tunnel '${TUNNEL_NAME}' already exists (ID: ${TUNNEL_ID})"
-else
-  echo "Creating new tunnel '${TUNNEL_NAME}'..."
-  ssh "$K3S_SSH" "sudo cloudflared tunnel create ${TUNNEL_NAME}"
-
+if [ -z "$TUNNEL_ID" ]; then
   TUNNEL_ID=$(ssh "$K3S_SSH" \
-    "sudo cloudflared tunnel list | grep -E '^\S+\s+${TUNNEL_NAME}\s+' | awk '{print \$1}'" \
+    "sudo ls /root/.cloudflared/ 2>/dev/null | grep -E '^[a-f0-9-]{36}\.json$' | head -1 | sed 's/\.json$//'" \
     || echo "")
+fi
 
-  if [ -z "$TUNNEL_ID" ]; then
-    echo "Error: tunnel created but could not read its ID."
-    echo "Run on the VM: sudo cloudflared tunnel list"
+if [ -n "$TUNNEL_ID" ]; then
+  echo "✓ Found existing tunnel (ID: ${TUNNEL_ID})"
+else
+  echo "No existing tunnel found on VM."
+  if ssh "$K3S_SSH" "test -f /root/.cloudflared/cert.pem" 2>/dev/null; then
+    echo "Creating new tunnel '${TUNNEL_NAME}'..."
+    ssh "$K3S_SSH" "sudo cloudflared tunnel create ${TUNNEL_NAME}"
+    TUNNEL_ID=$(ssh "$K3S_SSH" \
+      "sudo ls /root/.cloudflared/ | grep -E '^[a-f0-9-]{36}\.json$' | head -1 | sed 's/\.json$//'" \
+      || echo "")
+    if [ -z "$TUNNEL_ID" ]; then
+      echo "Error: tunnel created but could not read its ID."
+      exit 1
+    fi
+    echo "✓ Tunnel created (ID: ${TUNNEL_ID})"
+  else
+    echo ""
+    echo "ERROR: no tunnel found and cloudflared is not logged in."
+    echo "SSH into the VM and run:"
+    echo "  ssh ${K3S_SSH}"
+    echo "  sudo cloudflared tunnel login"
+    echo "  sudo cloudflared tunnel create ${TUNNEL_NAME}"
+    echo ""
+    echo "Then re-run this script."
     exit 1
   fi
-  echo "✓ Tunnel created (ID: ${TUNNEL_ID})"
 fi
 
 # ---------------------------------------------------------------------------
-# Step 3: Write config.yml on VM via SSH
+# Step 2: Write config.yml on VM via SSH
 # ---------------------------------------------------------------------------
 echo ""
-echo "Step 3: Writing /etc/cloudflared/config.yml on VM..."
+echo "Step 2: Writing /etc/cloudflared/config.yml on VM..."
 
 ssh "$K3S_SSH" "sudo mkdir -p /etc/cloudflared"
 
@@ -210,10 +210,10 @@ EOF
 echo "✓ config.yml written."
 
 # ---------------------------------------------------------------------------
-# Step 4: DNS routes (Cloudflare API, runs locally)
+# Step 3: DNS routes (Cloudflare API, runs locally)
 # ---------------------------------------------------------------------------
 echo ""
-echo "Step 4: Configuring DNS routes..."
+echo "Step 3: Configuring DNS routes..."
 
 if [ -z "$CF_API_TOKEN" ]; then
   echo ""
@@ -242,10 +242,10 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Step 5: Install service if needed (runs on VM via SSH)
+# Step 4: Install service if needed (runs on VM via SSH)
 # ---------------------------------------------------------------------------
 echo ""
-echo "Step 5: Checking cloudflared systemd service on VM..."
+echo "Step 4: Checking cloudflared systemd service on VM..."
 
 if ssh "$K3S_SSH" "test -f /etc/systemd/system/cloudflared.service" 2>/dev/null; then
   echo "✓ Service already installed."
@@ -256,10 +256,10 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Step 6: Reload and restart service on VM
+# Step 5: Reload and restart service on VM
 # ---------------------------------------------------------------------------
 echo ""
-echo "Step 6: Reloading cloudflared on VM..."
+echo "Step 5: Reloading cloudflared on VM..."
 
 ssh "$K3S_SSH" "sudo systemctl daemon-reload && sudo systemctl enable cloudflared --quiet"
 
