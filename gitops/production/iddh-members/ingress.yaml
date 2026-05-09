@@ -6,7 +6,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-  - host: iddhmembros.prakash.com.br
+  - host: membros.iddh.com.br
     http:
       paths:
       - path: /
