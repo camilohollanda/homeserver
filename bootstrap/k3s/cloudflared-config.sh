@@ -200,6 +200,10 @@ ingress:
     service: http://${INGRESS_NGINX_IP}:${INGRESS_NGINX_PORT}
   - hostname: "prakash.com.br"
     service: http://${INGRESS_NGINX_IP}:${INGRESS_NGINX_PORT}
+  - hostname: "*.iddh.com.br"
+    service: http://${INGRESS_NGINX_IP}:${INGRESS_NGINX_PORT}
+  - hostname: "iddh.com.br"
+    service: http://${INGRESS_NGINX_IP}:${INGRESS_NGINX_PORT}
   - service: http_status:404
 EOF
 
@@ -230,6 +234,8 @@ if [ -n "$CF_API_TOKEN" ]; then
   create_dns_route "${TUNNEL_NAME}" "*.werify.app" "${TUNNEL_ID}"
   create_dns_route "${TUNNEL_NAME}" "prakash.com.br" "${TUNNEL_ID}"
   create_dns_route "${TUNNEL_NAME}" "*.prakash.com.br" "${TUNNEL_ID}"
+  create_dns_route "${TUNNEL_NAME}" "iddh.com.br" "${TUNNEL_ID}"
+  create_dns_route "${TUNNEL_NAME}" "*.iddh.com.br" "${TUNNEL_ID}"
 else
   echo "⚠️  No API token provided — skipping DNS configuration."
   echo "   Re-run with: CF_API_TOKEN=xxx ./cloudflared-config.sh"
