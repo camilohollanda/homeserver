@@ -30,7 +30,10 @@ locals {
     cores     = 2
     memory_mb = 4096
     disk_size = 20
-    tags      = "secrets,infisical"
+    # Garage object data lives on this disk (mounted at /var/lib/garage/data).
+    # Backed by the 4TB ZFS pool 'tank' (see var.tank_storage).
+    garage_data_size = 500
+    tags             = "secrets,infisical,garage"
   }
 
   ai_vm = {

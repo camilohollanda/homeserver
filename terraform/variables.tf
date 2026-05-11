@@ -60,6 +60,12 @@ variable "storage" {
   default     = "local-lvm"
 }
 
+variable "tank_storage" {
+  description = "Proxmox storage backed by the 4TB ZFS pool 'tank' (bulk data disks)"
+  type        = string
+  default     = "tank"
+}
+
 variable "bridge" {
   description = "Proxmox network bridge (e.g. vmbr0)"
   type        = string

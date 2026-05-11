@@ -15,6 +15,12 @@
 #
 # Optional env vars:
 #   INFISICAL_SSH            - SSH target (default: deployer@192.168.20.22)
+#   SKIP_DB_SETUP=1          - Skip the postgres provision step (use when the
+#                              db already exists and you're just re-pushing app
+#                              config). When set, POSTGRES_SSH is unused and
+#                              the password parsing from INFISICAL_DB_URI is
+#                              skipped — but INFISICAL_DB_URI itself is still
+#                              required for the app's .env.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -49,12 +55,32 @@ echo ""
 
 wait_ssh "$INFISICAL_SSH"
 
-echo "==> Provisioning Infisical database on postgres VM..."
-echo "    (requires POSTGRES_SSH and the postgres VM to be running)"
-POSTGRES_SSH="${POSTGRES_SSH:-deployer@192.168.20.21}"
-DB_NAME=infisical DB_USER=infisical \
-  DB_PASSWORD="$(echo "$INFISICAL_DB_URI" | grep -oP '(?<=:)[^@]+(?=@)')" \
-  REMOTE_HOST="$POSTGRES_SSH" bash "${SCRIPT_DIR}/db-setup.sh"
+if [[ "${SKIP_DB_SETUP:-0}" == "1" ]]; then
+  echo "==> SKIP_DB_SETUP=1 — skipping postgres provisioning step"
+else
+  echo "==> Provisioning Infisical database on postgres VM..."
+  echo "    (requires POSTGRES_SSH and the postgres VM to be running)"
+  echo "    (set SKIP_DB_SETUP=1 to bypass when the db is already provisioned)"
+  POSTGRES_SSH="${POSTGRES_SSH:-deployer@192.168.20.21}"
+  # Extract the password from postgres://user:password@host:port/db using
+  # portable bash parameter expansion (avoids GNU-only `grep -P`).
+  _pw_enc="${INFISICAL_DB_URI#*://*:}"
+  _pw_enc="${_pw_enc%%@*}"
+  if [[ -z "$_pw_enc" || "$_pw_enc" == "$INFISICAL_DB_URI" ]]; then
+    echo "Error: could not parse password from INFISICAL_DB_URI." >&2
+    echo "Expected format: postgres://user:password@host:port/db" >&2
+    exit 1
+  fi
+  # URL-decode (the URI carries the percent-encoded form, but pg client libs
+  # send the *decoded* password to the server, so postgres must store the
+  # decoded form). Use python for a portable, correct decode — `printf %b`
+  # does not interpret \xHH on macOS, and that mismatch silently corrupts
+  # passwords containing /, +, =, etc.
+  command -v python3 >/dev/null || { echo "Error: python3 required for URL-decoding"; exit 1; }
+  _pw=$(ENC="$_pw_enc" python3 -c "import os,sys,urllib.parse; sys.stdout.write(urllib.parse.unquote(os.environ['ENC']))")
+  DB_NAME=infisical DB_USER=infisical DB_PASSWORD="$_pw" \
+    REMOTE_HOST="$POSTGRES_SSH" bash "${SCRIPT_DIR}/db-setup.sh"
+fi
 
 echo ""
 echo "==> Running Infisical install on VM..."
