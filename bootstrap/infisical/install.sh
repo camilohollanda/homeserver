@@ -28,6 +28,11 @@ if [[ "$EUID" -ne 0 ]]; then
   exit 1
 fi
 
+if [[ ! -f /opt/services/docker-compose.yml ]]; then
+  echo "Error: shared services proxy not installed. Run bootstrap/services/install.sh first." >&2
+  exit 1
+fi
+
 echo "==> Installing base dependencies..."
 apt-get update -qq
 apt-get install -y -qq ca-certificates curl gnupg certbot python3-certbot-dns-cloudflare
@@ -60,19 +65,6 @@ fi
 echo ""
 echo "==> Obtaining Let's Encrypt certificate for ${INFISICAL_DOMAIN}..."
 
-mkdir -p /etc/letsencrypt/renewal-hooks/deploy
-
-cat > /etc/letsencrypt/cloudflare.ini <<INI
-dns_cloudflare_api_token = ${CF_API_TOKEN}
-INI
-chmod 600 /etc/letsencrypt/cloudflare.ini
-
-cat > /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh <<'HOOK'
-#!/bin/bash
-docker exec infisical-nginx nginx -s reload
-HOOK
-chmod 755 /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
-
 if [ ! -d "/etc/letsencrypt/live/${INFISICAL_DOMAIN}" ]; then
   certbot certonly \
     --dns-cloudflare \
@@ -103,8 +95,6 @@ ENV
 chmod 600 /opt/infisical/.env
 
 cat > /opt/infisical/docker-compose.yml <<'COMPOSE'
-version: "3.9"
-
 services:
   redis:
     image: redis:7-alpine
@@ -123,7 +113,7 @@ services:
     container_name: infisical
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     env_file:
       - .env
     depends_on:
@@ -135,19 +125,6 @@ services:
       timeout: 10s
       retries: 5
 
-  nginx:
-    image: nginx:alpine
-    container_name: infisical-nginx
-    restart: unless-stopped
-    ports:
-      - "443:443"
-      - "80:80"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - /etc/letsencrypt:/etc/letsencrypt:ro
-    depends_on:
-      - infisical
-
 volumes:
   redis_data:
 
@@ -156,41 +133,40 @@ networks:
     name: infisical-network
 COMPOSE
 
-# nginx.conf references the domain — substitute it
-cat > /opt/infisical/nginx.conf <<NGINX
-events { worker_connections 1024; }
+# vhost served by the shared services proxy (/opt/services)
+cat > /opt/services/conf.d/infisical.conf <<NGINX
+upstream infisical_upstream { server 127.0.0.1:8080; }
 
-http {
-  upstream infisical { server infisical:8080; }
+server {
+  listen 80;
+  server_name ${INFISICAL_DOMAIN};
+  location / { return 301 https://\$host\$request_uri; }
+}
 
-  server {
-    listen 80;
-    server_name ${INFISICAL_DOMAIN};
-    location / { return 301 https://\$host\$request_uri; }
-  }
+server {
+  listen 443 ssl;
+  server_name ${INFISICAL_DOMAIN};
 
-  server {
-    listen 443 ssl;
-    server_name ${INFISICAL_DOMAIN};
+  ssl_certificate     /etc/letsencrypt/live/${INFISICAL_DOMAIN}/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/${INFISICAL_DOMAIN}/privkey.pem;
+  ssl_protocols TLSv1.2 TLSv1.3;
+  ssl_ciphers   HIGH:!aNULL:!MD5;
 
-    ssl_certificate     /etc/letsencrypt/live/${INFISICAL_DOMAIN}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/${INFISICAL_DOMAIN}/privkey.pem;
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers   HIGH:!aNULL:!MD5;
-
-    location / {
-      proxy_pass http://infisical;
-      proxy_set_header Host              \$host;
-      proxy_set_header X-Real-IP         \$remote_addr;
-      proxy_set_header X-Forwarded-For   \$proxy_add_x_forwarded_for;
-      proxy_set_header X-Forwarded-Proto \$scheme;
-      proxy_http_version 1.1;
-      proxy_set_header Upgrade    \$http_upgrade;
-      proxy_set_header Connection "upgrade";
-    }
+  location / {
+    proxy_pass http://infisical_upstream;
+    proxy_set_header Host              \$host;
+    proxy_set_header X-Real-IP         \$remote_addr;
+    proxy_set_header X-Forwarded-For   \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade    \$http_upgrade;
+    proxy_set_header Connection "upgrade";
   }
 }
 NGINX
+
+# Drop the legacy nginx.conf if it's still around from a previous install
+rm -f /opt/infisical/nginx.conf
 
 cat > /etc/systemd/system/infisical.service <<'SVC'
 [Unit]
@@ -222,6 +198,9 @@ if systemctl is-active --quiet infisical; then
 else
   systemctl start infisical
 fi
+
+# Reload the shared services proxy so the new/updated vhost takes effect
+docker exec services nginx -s reload 2>/dev/null || systemctl restart services
 
 echo ""
 echo "✓ Infisical is running at https://${INFISICAL_DOMAIN}"

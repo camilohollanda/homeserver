@@ -32,6 +32,17 @@ resource "proxmox_virtual_environment_vm" "infisical" {
     size         = local.infisical_vm.disk_size
   }
 
+  # Garage object data disk — backed by the 4TB ZFS pool 'tank'.
+  # Mounted at /var/lib/garage/data inside the VM (handled by bootstrap/garage/install.sh).
+  disk {
+    datastore_id = var.tank_storage
+    file_format  = "raw"
+    interface    = "scsi1"
+    size         = local.infisical_vm.garage_data_size
+    discard      = "on"
+    cache        = "none"
+  }
+
   network_device {
     bridge = var.bridge
     model  = "virtio"
