@@ -32,75 +32,11 @@
       },
       "gridPos": {
         "h": 6,
-        "w": 12,
+        "w": 24,
         "x": 0,
         "y": 0
       },
-      "id": 3,
-      "options": {
-        "calculate": false,
-        "cellGap": 1,
-        "color": {
-          "exponent": 0.5,
-          "fill": "dark-orange",
-          "mode": "scheme",
-          "reverse": false,
-          "scale": "exponential",
-          "scheme": "Oranges",
-          "steps": 64
-        },
-        "filterValues": {
-          "le": 1e-9
-        },
-        "legend": {
-          "show": true
-        },
-        "rowsFrame": {
-          "layout": "auto"
-        },
-        "showValue": "never",
-        "tooltip": {
-          "mode": "single",
-          "showColorScale": false,
-          "yHistogram": false
-        },
-        "yAxis": {
-          "axisPlacement": "left",
-          "reverse": false
-        }
-      },
-      "pluginVersion": "12.3.1",
-      "targets": [
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "P8E80F9AEF21F6940"
-          },
-          "editorMode": "code",
-          "expr": "sum by (level) (count_over_time({namespace=\"werify-production\", app=\"werify\"} [$__auto]))",
-          "queryType": "range",
-          "refId": "A"
-        }
-      ],
-      "title": "Log volume by level — PRODUCTION",
-      "type": "heatmap"
-    },
-    {
-      "datasource": {
-        "type": "loki",
-        "uid": "P8E80F9AEF21F6940"
-      },
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 6,
-        "w": 12,
-        "x": 12,
-        "y": 0
-      },
-      "id": 4,
+      "id": 1,
       "options": {
         "calculate": false,
         "cellGap": 1,
@@ -146,7 +82,7 @@
           "refId": "A"
         }
       ],
-      "title": "Log volume by level — STAGING",
+      "title": "Log volume by level",
       "type": "heatmap"
     },
     {
@@ -159,62 +95,14 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 14,
+        "h": 18,
         "w": 24,
         "x": 0,
         "y": 6
       },
-      "id": 1,
-      "options": {
-        "dedupStrategy": "none",
-        "enableInfiniteScrolling": true,
-        "enableLogDetails": true,
-        "fontSize": "small",
-        "prettifyLogMessage": false,
-        "showControls": true,
-        "showLabels": false,
-        "showTime": false,
-        "sortOrder": "Descending",
-        "syntaxHighlighting": true,
-        "wrapLogMessage": true
-      },
-      "pluginVersion": "12.3.1",
-      "targets": [
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "P8E80F9AEF21F6940"
-          },
-          "direction": "backward",
-          "editorMode": "code",
-          "expr": "{namespace=\"werify-production\", app=\"werify\"} | json | line_format `{{ if .message }}{{ .time | default \"-\" }} {{ .severity | default \"-\" }} {{ .message }}{{ else }}{{ __line__ }}{{ end }}`\n",
-          "key": "Q-8780d3d0-4d75-4c0f-9f17-6835a0c92702-1",
-          "queryType": "range",
-          "refId": "A"
-        }
-      ],
-      "title": "Werify PRODUCTION",
-      "type": "logs"
-    },
-    {
-      "datasource": {
-        "type": "loki",
-        "uid": "P8E80F9AEF21F6940"
-      },
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 14,
-        "w": 24,
-        "x": 0,
-        "y": 20
-      },
       "id": 2,
       "options": {
         "dedupStrategy": "none",
-        "detailsMode": "inline",
         "enableInfiniteScrolling": true,
         "enableLogDetails": true,
         "fontSize": "small",
@@ -236,18 +124,20 @@
           "direction": "backward",
           "editorMode": "code",
           "expr": "{namespace=\"werify-staging\", app=\"werify\"} | json | line_format `{{ if .message }}{{ .time | default \"-\" }} {{ .severity | default \"-\" }} {{ .message }}{{ else }}{{ __line__ }}{{ end }}`\n",
-          "key": "Q-8780d3d0-4d75-4c0f-9f17-6835a0c92702-1",
           "queryType": "range",
           "refId": "A"
         }
       ],
-      "title": "Werify STAGING",
+      "title": "Logs",
       "type": "logs"
     }
   ],
   "preload": false,
   "schemaVersion": 42,
-  "tags": [],
+  "tags": [
+    "werify",
+    "staging"
+  ],
   "templating": {
     "list": []
   },
@@ -257,7 +147,7 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Werify",
-  "uid": "adljkc8",
-  "version": 4
+  "title": "Werify — staging",
+  "uid": "werify-staging",
+  "version": 1
 }
