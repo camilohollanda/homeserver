@@ -24,7 +24,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "cf8e0hc105rswf"
+        "uid": "P8E80F9AEF21F6940"
       },
       "fieldConfig": {
         "defaults": {},
@@ -74,7 +74,7 @@
         {
           "datasource": {
             "type": "loki",
-            "uid": "cf8e0hc105rswf"
+            "uid": "P8E80F9AEF21F6940"
           },
           "editorMode": "code",
           "expr": "sum by (level) (count_over_time({namespace=\"werify-production\", app=\"werify\"} [$__auto]))",
@@ -88,7 +88,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "cf8e0hc105rswf"
+        "uid": "P8E80F9AEF21F6940"
       },
       "fieldConfig": {
         "defaults": {},
@@ -138,7 +138,7 @@
         {
           "datasource": {
             "type": "loki",
-            "uid": "cf8e0hc105rswf"
+            "uid": "P8E80F9AEF21F6940"
           },
           "editorMode": "code",
           "expr": "sum by (level) (count_over_time({namespace=\"werify-staging\", app=\"werify\"} [$__auto]))",
@@ -183,7 +183,7 @@
         {
           "datasource": {
             "type": "loki",
-            "uid": "cf8e0hc105rswf"
+            "uid": "P8E80F9AEF21F6940"
           },
           "direction": "backward",
           "editorMode": "code",
@@ -231,7 +231,7 @@
         {
           "datasource": {
             "type": "loki",
-            "uid": "cf8e0hc105rswf"
+            "uid": "P8E80F9AEF21F6940"
           },
           "direction": "backward",
           "editorMode": "code",
