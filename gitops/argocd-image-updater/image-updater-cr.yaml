@@ -23,3 +23,7 @@ spec:
       images:
         - alias: werify
           imageName: ghcr.io/prem-prakash/werify:staging
+    - namePattern: "iddh-members-staging"
+      images:
+        - alias: iddh-members
+          imageName: ghcr.io/iddh-com-br/members:staging

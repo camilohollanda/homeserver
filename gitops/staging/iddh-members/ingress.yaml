@@ -1,0 +1,18 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: iddh-members
+  namespace: iddh-members-staging
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: iddh-members-staging.prakash.com.br
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: iddh-members
+            port:
+              number: 4000
