@@ -21,6 +21,23 @@ data:
           - role: pod
         pipeline_stages:
           - cri: {}
+          # Parse JSON logs only from apps known to emit LoggerJSON.Formatters.Basic.
+          # Other pods (Grafana, Loki, Promtail, etc.) emit plain text and are left alone.
+          - match:
+              selector: '{namespace=~"werify-.+|iddh-members-.+"}'
+              stages:
+                - json:
+                    expressions:
+                      level: severity
+                      time: time
+                - labels:
+                    level:
+                - timestamp:
+                    source: time
+                    format: RFC3339Nano
+                    fallback_formats:
+                      - RFC3339
+                    action_on_failure: skip
         relabel_configs:
           # Keep only pods with logs
           - source_labels: [__meta_kubernetes_pod_container_name]
@@ -58,6 +75,8 @@ kind: DaemonSet
 metadata:
   name: promtail
   namespace: loki
+  annotations:
+    reloader.stakater.com/auto: "true"
 spec:
   selector:
     matchLabels:
