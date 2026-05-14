@@ -32,75 +32,11 @@
       },
       "gridPos": {
         "h": 6,
-        "w": 12,
+        "w": 24,
         "x": 0,
         "y": 0
       },
-      "id": 3,
-      "options": {
-        "calculate": false,
-        "cellGap": 1,
-        "color": {
-          "exponent": 0.5,
-          "fill": "dark-orange",
-          "mode": "scheme",
-          "reverse": false,
-          "scale": "exponential",
-          "scheme": "Oranges",
-          "steps": 64
-        },
-        "filterValues": {
-          "le": 1e-9
-        },
-        "legend": {
-          "show": true
-        },
-        "rowsFrame": {
-          "layout": "auto"
-        },
-        "showValue": "never",
-        "tooltip": {
-          "mode": "single",
-          "showColorScale": false,
-          "yHistogram": false
-        },
-        "yAxis": {
-          "axisPlacement": "left",
-          "reverse": false
-        }
-      },
-      "pluginVersion": "12.3.1",
-      "targets": [
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "P8E80F9AEF21F6940"
-          },
-          "editorMode": "code",
-          "expr": "sum by (level) (count_over_time({namespace=\"iddh-members-production\", app=\"iddh-members\"} [$__auto]))",
-          "queryType": "range",
-          "refId": "A"
-        }
-      ],
-      "title": "Log volume by level — PRODUCTION",
-      "type": "heatmap"
-    },
-    {
-      "datasource": {
-        "type": "loki",
-        "uid": "P8E80F9AEF21F6940"
-      },
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 6,
-        "w": 12,
-        "x": 12,
-        "y": 0
-      },
-      "id": 4,
+      "id": 1,
       "options": {
         "calculate": false,
         "cellGap": 1,
@@ -146,7 +82,7 @@
           "refId": "A"
         }
       ],
-      "title": "Log volume by level — STAGING",
+      "title": "Log volume by level",
       "type": "heatmap"
     },
     {
@@ -159,56 +95,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 14,
+        "h": 18,
         "w": 24,
         "x": 0,
         "y": 6
-      },
-      "id": 1,
-      "options": {
-        "dedupStrategy": "none",
-        "enableInfiniteScrolling": true,
-        "enableLogDetails": true,
-        "fontSize": "small",
-        "prettifyLogMessage": false,
-        "showControls": true,
-        "showLabels": false,
-        "showTime": false,
-        "sortOrder": "Descending",
-        "syntaxHighlighting": true,
-        "wrapLogMessage": true
-      },
-      "pluginVersion": "12.3.1",
-      "targets": [
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "P8E80F9AEF21F6940"
-          },
-          "direction": "backward",
-          "editorMode": "code",
-          "expr": "{namespace=\"iddh-members-production\", app=\"iddh-members\"} | json | line_format `{{ if .message }}{{ .time | default \"-\" }} {{ .severity | default \"-\" }} {{ .message }}{{ else }}{{ __line__ }}{{ end }}`\n",
-          "queryType": "range",
-          "refId": "A"
-        }
-      ],
-      "title": "IDDH Members PRODUCTION",
-      "type": "logs"
-    },
-    {
-      "datasource": {
-        "type": "loki",
-        "uid": "P8E80F9AEF21F6940"
-      },
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 14,
-        "w": 24,
-        "x": 0,
-        "y": 20
       },
       "id": 2,
       "options": {
@@ -238,13 +128,16 @@
           "refId": "A"
         }
       ],
-      "title": "IDDH Members STAGING",
+      "title": "Logs",
       "type": "logs"
     }
   ],
   "preload": false,
   "schemaVersion": 42,
-  "tags": [],
+  "tags": [
+    "iddh-members",
+    "staging"
+  ],
   "templating": {
     "list": []
   },
@@ -254,7 +147,7 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "IDDH Members",
-  "uid": "iddh-members",
+  "title": "IDDH Members — staging",
+  "uid": "iddh-members-staging",
   "version": 1
 }
