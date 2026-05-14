@@ -196,18 +196,22 @@ ${PULL_SECRETS_SECTION}
         ports:
         - containerPort: ${PORT}
           name: http
+        startupProbe:
+          httpGet:
+            path: /health
+            port: ${PORT}
+          periodSeconds: 2
+          failureThreshold: 30
         readinessProbe:
           httpGet:
             path: /health
             port: ${PORT}
-          initialDelaySeconds: 10
           periodSeconds: 5
           timeoutSeconds: 3
         livenessProbe:
           httpGet:
             path: /health
             port: ${PORT}
-          initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 3
         envFrom:
