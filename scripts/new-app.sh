@@ -5,8 +5,9 @@
 #   -d, --domain        Domain name for the app (e.g. myapp.com or app.prakash.com.br)
 #   -r, --repo          Container image (e.g. ghcr.io/owner/myapp)
 #   -n, --name          App name slug (default: derived from repo basename)
+#   -e, --env           Environment: production or staging (default: production)
 #   -p, --port          Container port (default: 4000 — Phoenix/Elixir default; use 80 for others)
-#   -t, --tag           Image tag (default: main)
+#   -t, --tag           Image tag (default: main for production, staging for staging)
 #       --storage       Add persistent storage, e.g. --storage 10Gi:/app/uploads
 #       --no-ghcr       Skip GHCR pull secret (image is public or not on GHCR)
 #       --dry-run       Print files to stdout instead of writing them
@@ -23,8 +24,10 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 DOMAIN=""
 IMAGE=""
 APP_NAME=""
+ENV="production"
 PORT="4000"
-TAG="main"
+TAG=""
+TAG_SET=false
 STORAGE_SIZE=""
 STORAGE_MOUNT=""
 NO_GHCR=false
@@ -38,8 +41,9 @@ while [[ $# -gt 0 ]]; do
     -d|--domain)   DOMAIN="$2";   shift 2 ;;
     -r|--repo)     IMAGE="$2";    shift 2 ;;
     -n|--name)     APP_NAME="$2"; shift 2 ;;
+    -e|--env)      ENV="$2";      shift 2 ;;
     -p|--port)     PORT="$2";     shift 2 ;;
-    -t|--tag)      TAG="$2";      shift 2 ;;
+    -t|--tag)      TAG="$2"; TAG_SET=true; shift 2 ;;
     --storage)
       # format: SIZE:MOUNT_PATH  e.g. 10Gi:/app/uploads
       STORAGE_SIZE="${2%%:*}"
@@ -49,7 +53,7 @@ while [[ $# -gt 0 ]]; do
     --no-ghcr)  NO_GHCR=true;  shift ;;
     --dry-run)  DRY_RUN=true;  shift ;;
     -h|--help)
-      sed -n '2,15p' "$0" | sed 's/^# \?//'
+      sed -n '2,17p' "$0" | sed 's/^# \?//'
       exit 0
       ;;
     *) echo "Unknown option: $1"; exit 1 ;;
@@ -65,12 +69,29 @@ if [[ -z "$DOMAIN" || -z "$IMAGE" ]]; then
   exit 1
 fi
 
+if [[ "$ENV" != "production" && "$ENV" != "staging" ]]; then
+  echo "Error: --env must be 'production' or 'staging' (got '$ENV')."
+  exit 1
+fi
+
+# Map env → Infisical environmentSlug (production maps to the short 'prod' slug)
+if [[ "$ENV" == "production" ]]; then
+  INFISICAL_ENV="prod"
+else
+  INFISICAL_ENV="staging"
+fi
+
+# Default image tag depends on env unless explicitly set
+if ! $TAG_SET; then
+  if [[ "$ENV" == "staging" ]]; then TAG="staging"; else TAG="main"; fi
+fi
+
 # Derive app name from image basename if not provided
 if [[ -z "$APP_NAME" ]]; then
   APP_NAME="$(basename "$IMAGE" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g')"
 fi
 
-NAMESPACE="${APP_NAME}-production"
+NAMESPACE="${APP_NAME}-${ENV}"
 ARGOCD_REPO="https://github.com/prem-prakash/homeserver.git"
 INFISICAL_HOST="https://infisical.internal.prakash.com.br"
 INFISICAL_PROJECT="homeserver-1jj1"
@@ -78,8 +99,8 @@ INFISICAL_PROJECT="homeserver-1jj1"
 APP_NAME_TITLE="$(tr '[:lower:]' '[:upper:]' <<< "${APP_NAME:0:1}")${APP_NAME:1}"
 
 # Directories that will be written
-MANIFESTS_DIR="${REPO_ROOT}/gitops/production/${APP_NAME}"
-ARGOCD_APP="${REPO_ROOT}/gitops/applications/${APP_NAME}-production.yaml"
+MANIFESTS_DIR="${REPO_ROOT}/gitops/${ENV}/${APP_NAME}"
+ARGOCD_APP="${REPO_ROOT}/gitops/applications/${APP_NAME}-${ENV}.yaml"
 SECRET_STORE="${REPO_ROOT}/gitops/external-secrets/${APP_NAME}-cluster-secret-store.yaml"
 KUSTOMIZATION="${REPO_ROOT}/gitops/external-secrets/kustomization.yaml"
 GITOPS_KUSTOMIZATION="${REPO_ROOT}/gitops/kustomization.yaml"
@@ -115,7 +136,7 @@ known_zone() {
 # 1. namespace.yaml
 # ---------------------------------------------------------------------------
 echo ""
-echo "==> Generating GitOps manifests for '${APP_NAME}' → ${DOMAIN}"
+echo "==> Generating GitOps manifests for '${APP_NAME}' (${ENV}) → ${DOMAIN}"
 echo ""
 
 write_file "${MANIFESTS_DIR}/namespace.yaml" \
@@ -252,7 +273,7 @@ metadata:
 spec:
   refreshInterval: 5m
   secretStoreRef:
-    name: ${APP_NAME}-production
+    name: ${APP_NAME}-${ENV}
     kind: ClusterSecretStore
   target:
     name: secrets
@@ -316,16 +337,16 @@ spec:
   accessModes:
     - ReadWriteOnce
   storageClassName: local-path-static
-  volumeName: ${APP_NAME}-production-data
+  volumeName: ${APP_NAME}-${ENV}-data
   resources:
     requests:
       storage: ${STORAGE_SIZE}"
 
-  write_file "${REPO_ROOT}/gitops/storageclass/${APP_NAME}-production-data-pv.yaml" \
+  write_file "${REPO_ROOT}/gitops/storageclass/${APP_NAME}-${ENV}-data-pv.yaml" \
 "apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: ${APP_NAME}-production-data
+  name: ${APP_NAME}-${ENV}-data
 spec:
   capacity:
     storage: ${STORAGE_SIZE}
@@ -334,7 +355,7 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: local-path-static
   local:
-    path: /mnt/k8s-persistent/pvs/${APP_NAME}-production-data
+    path: /mnt/k8s-persistent/pvs/${APP_NAME}-${ENV}-data
   nodeAffinity:
     required:
       nodeSelectorTerms:
@@ -375,14 +396,14 @@ write_file "${ARGOCD_APP}" \
 "apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: ${APP_NAME}-production
+  name: ${APP_NAME}-${ENV}
   namespace: argocd
 spec:
   project: default
   source:
     repoURL: ${ARGOCD_REPO}
     targetRevision: main
-    path: gitops/production/${APP_NAME}
+    path: gitops/${ENV}/${APP_NAME}
   destination:
     server: https://kubernetes.default.svc
     namespace: ${NAMESPACE}
@@ -396,16 +417,16 @@ spec:
 # ---------------------------------------------------------------------------
 # 9. ClusterSecretStore for the new app
 # ---------------------------------------------------------------------------
-write_file "${SECRET_STORE}" \
-"# =============================================================================
+SECRET_STORE_HEADER="# =============================================================================
 # ClusterSecretStores for ${APP_NAME}
 # Pulls secrets from Infisical project \"homeserver\", path \"/${APP_NAME_TITLE}/\"
-# Add your secrets in Infisical under: prod → /${APP_NAME_TITLE}/
-# =============================================================================
-apiVersion: external-secrets.io/v1
+# Add your secrets in Infisical under: ${INFISICAL_ENV} → /${APP_NAME_TITLE}/
+# ============================================================================="
+
+SECRET_STORE_BODY="apiVersion: external-secrets.io/v1
 kind: ClusterSecretStore
 metadata:
-  name: ${APP_NAME}-production
+  name: ${APP_NAME}-${ENV}
 spec:
   provider:
     infisical:
@@ -422,8 +443,31 @@ spec:
             key: clientSecret
       secretsScope:
         projectSlug: ${INFISICAL_PROJECT}
-        environmentSlug: prod
+        environmentSlug: ${INFISICAL_ENV}
         secretsPath: \"/${APP_NAME_TITLE}/\""
+
+if $DRY_RUN; then
+  echo "--- ${SECRET_STORE} ---"
+  if [[ -f "$SECRET_STORE" ]]; then
+    echo "(append new store with --- separator)"
+    echo "---"
+  else
+    echo "$SECRET_STORE_HEADER"
+  fi
+  echo "$SECRET_STORE_BODY"
+  echo ""
+else
+  if [[ -f "$SECRET_STORE" ]] && grep -qE "^  name: ${APP_NAME}-${ENV}\$" "$SECRET_STORE"; then
+    echo "  skipped: ClusterSecretStore ${APP_NAME}-${ENV} already in $(basename "$SECRET_STORE")"
+  elif [[ -f "$SECRET_STORE" ]]; then
+    printf '\n---\n%s\n' "$SECRET_STORE_BODY" >> "$SECRET_STORE"
+    echo "  appended: ${SECRET_STORE#"$REPO_ROOT/"} (added ${APP_NAME}-${ENV})"
+  else
+    mkdir -p "$(dirname "$SECRET_STORE")"
+    printf '%s\n%s\n' "$SECRET_STORE_HEADER" "$SECRET_STORE_BODY" > "$SECRET_STORE"
+    echo "  wrote: ${SECRET_STORE#"$REPO_ROOT/"}"
+  fi
+fi
 
 # ---------------------------------------------------------------------------
 # 10. Patch gitops/external-secrets/kustomization.yaml
@@ -445,14 +489,14 @@ fi
 # ---------------------------------------------------------------------------
 # 11. Patch gitops/kustomization.yaml (root app-of-apps list)
 # ---------------------------------------------------------------------------
-NEW_APP_RESOURCE="  - applications/${APP_NAME}-production.yaml"
+NEW_APP_RESOURCE="  - applications/${APP_NAME}-${ENV}.yaml"
 if $DRY_RUN; then
   echo "--- patch: gitops/kustomization.yaml ---"
   echo "  append: ${NEW_APP_RESOURCE}"
   echo ""
 else
-  if grep -qF "applications/${APP_NAME}-production.yaml" "${GITOPS_KUSTOMIZATION}"; then
-    echo "  skipped: applications/${APP_NAME}-production.yaml already in gitops/kustomization.yaml"
+  if grep -qF "applications/${APP_NAME}-${ENV}.yaml" "${GITOPS_KUSTOMIZATION}"; then
+    echo "  skipped: applications/${APP_NAME}-${ENV}.yaml already in gitops/kustomization.yaml"
   else
     echo "${NEW_APP_RESOURCE}" >> "${GITOPS_KUSTOMIZATION}"
     echo "  patched: gitops/kustomization.yaml"
@@ -463,7 +507,7 @@ fi
 # 12. Patch gitops/argocd-image-updater/image-updater-cr.yaml
 # ---------------------------------------------------------------------------
 if ! $NO_GHCR; then
-  NEW_IMAGE_UPDATER_ENTRY="    - namePattern: \"${APP_NAME}-production\"
+  NEW_IMAGE_UPDATER_ENTRY="    - namePattern: \"${APP_NAME}-${ENV}\"
       images:
         - alias: ${APP_NAME}
           imageName: ${IMAGE}:${TAG}"
@@ -473,8 +517,8 @@ if ! $NO_GHCR; then
     echo "$NEW_IMAGE_UPDATER_ENTRY"
     echo ""
   else
-    if grep -qF "namePattern: \"${APP_NAME}-production\"" "${IMAGE_UPDATER_CR}"; then
-      echo "  skipped: ${APP_NAME}-production already in image-updater-cr.yaml"
+    if grep -qF "namePattern: \"${APP_NAME}-${ENV}\"" "${IMAGE_UPDATER_CR}"; then
+      echo "  skipped: ${APP_NAME}-${ENV} already in image-updater-cr.yaml"
     else
       echo "${NEW_IMAGE_UPDATER_ENTRY}" >> "${IMAGE_UPDATER_CR}"
       echo "  patched: gitops/argocd-image-updater/image-updater-cr.yaml"
@@ -486,16 +530,16 @@ fi
 # 13. Create Infisical secrets folder via API
 # ---------------------------------------------------------------------------
 echo ""
-echo "==> Creating Infisical folder '${APP_NAME_TITLE}' in prod..."
+echo "==> Creating Infisical folder '${APP_NAME_TITLE}' in ${INFISICAL_ENV}..."
 
 if $DRY_RUN; then
   echo "--- Infisical API ---"
   echo "  POST ${INFISICAL_HOST}/api/v1/folders"
-  echo "  { environment: prod, name: ${APP_NAME_TITLE}, path: / }"
+  echo "  { environment: ${INFISICAL_ENV}, name: ${APP_NAME_TITLE}, path: / }"
   echo ""
 elif [[ -z "${INFISICAL_CLIENT_ID:-}" || -z "${INFISICAL_CLIENT_SECRET:-}" ]]; then
   echo "  skipped: INFISICAL_CLIENT_ID / INFISICAL_CLIENT_SECRET not set"
-  echo "  Create the folder manually in Infisical: prod → /${APP_NAME_TITLE}/"
+  echo "  Create the folder manually in Infisical: ${INFISICAL_ENV} → /${APP_NAME_TITLE}/"
 else
   _token=$(curl -sf -X POST "${INFISICAL_HOST}/api/v1/auth/universal-auth/login" \
     -H "Content-Type: application/json" \
@@ -503,7 +547,7 @@ else
     | python3 -c "import sys,json; print(json.load(sys.stdin)['accessToken'])" 2>/dev/null) || _token=""
 
   if [[ -z "$_token" ]]; then
-    echo "  WARNING: Infisical authentication failed — create folder manually: prod → /${APP_NAME_TITLE}/"
+    echo "  WARNING: Infisical authentication failed — create folder manually: ${INFISICAL_ENV} → /${APP_NAME_TITLE}/"
   else
     _workspace_id=$(curl -sf "${INFISICAL_HOST}/api/v1/workspaces" \
       -H "Authorization: Bearer ${_token}" \
@@ -515,16 +559,16 @@ print(m['id'] if m else '')
 " 2>/dev/null) || _workspace_id=""
 
     if [[ -z "$_workspace_id" ]]; then
-      echo "  WARNING: workspace '${INFISICAL_PROJECT}' not found — create folder manually: prod → /${APP_NAME_TITLE}/"
+      echo "  WARNING: workspace '${INFISICAL_PROJECT}' not found — create folder manually: ${INFISICAL_ENV} → /${APP_NAME_TITLE}/"
     else
       _http=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${INFISICAL_HOST}/api/v1/folders" \
         -H "Content-Type: application/json" \
         -H "Authorization: Bearer ${_token}" \
-        -d "{\"workspaceId\":\"${_workspace_id}\",\"environment\":\"prod\",\"name\":\"${APP_NAME_TITLE}\",\"path\":\"/\"}")
+        -d "{\"workspaceId\":\"${_workspace_id}\",\"environment\":\"${INFISICAL_ENV}\",\"name\":\"${APP_NAME_TITLE}\",\"path\":\"/\"}")
       case "$_http" in
-        200|201) echo "  ✓ folder created: prod → /${APP_NAME_TITLE}/" ;;
-        400|409) echo "  ✓ folder already exists: prod → /${APP_NAME_TITLE}/" ;;
-        *)       echo "  WARNING: unexpected response (HTTP ${_http}) — create folder manually: prod → /${APP_NAME_TITLE}/" ;;
+        200|201) echo "  ✓ folder created: ${INFISICAL_ENV} → /${APP_NAME_TITLE}/" ;;
+        400|409) echo "  ✓ folder already exists: ${INFISICAL_ENV} → /${APP_NAME_TITLE}/" ;;
+        *)       echo "  WARNING: unexpected response (HTTP ${_http}) — create folder manually: ${INFISICAL_ENV} → /${APP_NAME_TITLE}/" ;;
       esac
     fi
   fi
@@ -607,8 +651,8 @@ echo " App '${APP_NAME}' scaffolded successfully!"
 echo "================================================================"
 echo ""
 echo " Files written:"
-echo "   gitops/production/${APP_NAME}/"
-echo "   gitops/applications/${APP_NAME}-production.yaml"
+echo "   gitops/${ENV}/${APP_NAME}/"
+echo "   gitops/applications/${APP_NAME}-${ENV}.yaml"
 echo "   gitops/external-secrets/${APP_NAME}-cluster-secret-store.yaml"
 echo "   gitops/kustomization.yaml (patched)"
 echo "   gitops/external-secrets/kustomization.yaml (patched)"
@@ -616,18 +660,18 @@ if ! $NO_GHCR; then
   echo "   gitops/argocd-image-updater/image-updater-cr.yaml (patched)"
 fi
 if [[ -n "$STORAGE_SIZE" ]]; then
-  echo "   gitops/storageclass/${APP_NAME}-production-data-pv.yaml"
+  echo "   gitops/storageclass/${APP_NAME}-${ENV}-data-pv.yaml"
 fi
 echo ""
 echo " Next steps:"
 echo ""
 echo " 1. Add secrets to Infisical (folder created automatically if credentials were set)"
-echo "    Project : ${INFISICAL_PROJECT}  Env: prod  Path: /${APP_NAME_TITLE}/"
+echo "    Project : ${INFISICAL_PROJECT}  Env: ${INFISICAL_ENV}  Path: /${APP_NAME_TITLE}/"
 echo ""
 if [[ -n "$STORAGE_SIZE" ]]; then
   echo " 2. Create the storage directory on the k3s VM:"
   echo "    ssh deployer@192.168.20.11 \\"
-  echo "      'sudo mkdir -p /mnt/k8s-persistent/pvs/${APP_NAME}-production-data'"
+  echo "      'sudo mkdir -p /mnt/k8s-persistent/pvs/${APP_NAME}-${ENV}-data'"
   echo ""
   echo " 3. Commit and push — Argo CD will sync automatically."
 else
