@@ -17,5 +17,4 @@ resources:
   - applications/loki.yaml
   - applications/iddh-members-production.yaml
   - applications/iddh-members-staging.yaml
-  - applications/ntfy.yaml
   - applications/apprise.yaml

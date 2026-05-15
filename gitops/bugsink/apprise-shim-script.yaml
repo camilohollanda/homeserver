@@ -9,7 +9,7 @@ data:
     """Translate Bugsink Slack-format webhooks into Apprise JSON POSTs.
 
     POST /hook/<tag>  -> Apprise /notify/<APPRISE_KEY>  (body.tag = <tag>)
-    Apprise holds the ntfy credentials and per-topic URL mapping.
+    Apprise holds the destination credentials and per-tag URL routing.
     """
     import json
     import logging
