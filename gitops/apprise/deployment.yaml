@@ -26,6 +26,9 @@ spec:
           value: "yes"
         - name: APPRISE_STATEFUL_MODE
           value: "simple"
+        # Constrain gunicorn workers (default scales with CPU count and OOMs)
+        - name: APPRISE_WORKER_COUNT
+          value: "2"
         readinessProbe:
           httpGet:
             path: /
@@ -45,10 +48,10 @@ spec:
           readOnly: true
         resources:
           requests:
-            memory: "64Mi"
+            memory: "128Mi"
             cpu: "20m"
           limits:
-            memory: "256Mi"
+            memory: "512Mi"
             cpu: "500m"
       volumes:
       - name: config
