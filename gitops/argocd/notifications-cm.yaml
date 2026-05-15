@@ -1,0 +1,92 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-notifications-cm
+  namespace: argocd
+data:
+  context: |
+    argocdUrl: https://argocd.internal.prakash.com.br
+
+  service.webhook.ntfy: |
+    url: https://ntfy.prakash.com.br
+    headers:
+    - name: Authorization
+      value: Bearer $ntfy-token
+
+  template.app-deployed: |
+    webhook:
+      ntfy:
+        method: POST
+        path: /argocd
+        body: |
+          {{.app.metadata.name}} synced to {{.app.status.operationState.syncResult.revision | trunc 7}} ({{.app.status.health.status}})
+        headers:
+        - name: Title
+          value: "Deployed: {{.app.metadata.name}}"
+        - name: Tags
+          value: "rocket"
+        - name: Priority
+          value: "3"
+        - name: Click
+          value: "{{.context.argocdUrl}}/applications/{{.app.metadata.name}}"
+
+  template.app-sync-failed: |
+    webhook:
+      ntfy:
+        method: POST
+        path: /argocd
+        body: |
+          {{.app.metadata.name}} sync FAILED at {{.app.status.operationState.syncResult.revision | default .app.status.sync.revision | trunc 7}}
+          {{.app.status.operationState.message}}
+        headers:
+        - name: Title
+          value: "Sync failed: {{.app.metadata.name}}"
+        - name: Tags
+          value: "rotating_light"
+        - name: Priority
+          value: "5"
+        - name: Click
+          value: "{{.context.argocdUrl}}/applications/{{.app.metadata.name}}"
+
+  template.app-health-degraded: |
+    webhook:
+      ntfy:
+        method: POST
+        path: /argocd
+        body: |
+          {{.app.metadata.name}} is {{.app.status.health.status}}
+          {{.app.status.health.message}}
+        headers:
+        - name: Title
+          value: "Degraded: {{.app.metadata.name}}"
+        - name: Tags
+          value: "warning"
+        - name: Priority
+          value: "4"
+        - name: Click
+          value: "{{.context.argocdUrl}}/applications/{{.app.metadata.name}}"
+
+  trigger.on-deployed: |
+    - description: Application is synced and healthy
+      send: [app-deployed]
+      when: app.status.operationState != nil and app.status.operationState.phase in ['Succeeded'] and app.status.health.status == 'Healthy'
+      oncePer: app.status.operationState.syncResult.revision
+
+  trigger.on-sync-failed: |
+    - description: Application sync failed
+      send: [app-sync-failed]
+      when: app.status.operationState != nil and app.status.operationState.phase in ['Error', 'Failed']
+      oncePer: app.status.operationState.syncResult.revision
+
+  trigger.on-health-degraded: |
+    - description: Application has degraded
+      send: [app-health-degraded]
+      when: app.status.health.status == 'Degraded'
+
+  subscriptions: |
+    - recipients:
+      - webhook:ntfy
+      triggers:
+      - on-deployed
+      - on-sync-failed
+      - on-health-degraded
