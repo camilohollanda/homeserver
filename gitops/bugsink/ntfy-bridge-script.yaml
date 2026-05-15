@@ -1,0 +1,135 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ntfy-bridge-script
+  namespace: bugsink
+data:
+  bridge.py: |
+    #!/usr/bin/env python3
+    """Translate Bugsink's Slack-compatible webhook POSTs into ntfy publishes."""
+    import base64
+    import json
+    import logging
+    import os
+    import re
+    import sys
+    import urllib.request
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    NTFY_URL = os.environ["NTFY_URL"].rstrip("/")
+    NTFY_USER = os.environ["NTFY_USER"]
+    NTFY_PASSWORD = os.environ["NTFY_PASSWORD"]
+    TOPIC_FALLBACK = os.environ.get("TOPIC_FALLBACK", "bugsink")
+    LISTEN_PORT = int(os.environ.get("LISTEN_PORT", "8080"))
+
+    BASIC_AUTH = "Basic " + base64.b64encode(
+        f"{NTFY_USER}:{NTFY_PASSWORD}".encode()
+    ).decode()
+
+    TOPIC_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        stream=sys.stdout,
+    )
+    log = logging.getLogger("bridge")
+
+    def header_safe(value: str, limit: int = 250) -> str:
+        # ntfy headers are HTTP headers; strip CR/LF and cap length.
+        cleaned = (value or "").replace("\r", " ").replace("\n", " ").strip()
+        return cleaned[:limit]
+
+    def translate(payload: dict) -> tuple[str, dict]:
+        attachment = (payload.get("attachments") or [{}])[0]
+        title = attachment.get("title") or payload.get("text") or "Bugsink alert"
+        body = attachment.get("text") or payload.get("text") or title
+        link = attachment.get("title_link") or ""
+
+        color = (attachment.get("color") or "").lower()
+        if color in ("danger", "#e01e5a", "#ff0000"):
+            priority, tag = "4", "rotating_light"
+        elif color in ("warning", "#ffcc00"):
+            priority, tag = "3", "warning"
+        else:
+            priority, tag = "3", "bug"
+
+        headers = {
+            "Authorization": BASIC_AUTH,
+            "Title": header_safe(title),
+            "Priority": priority,
+            "Tags": tag,
+            "Markdown": "yes",
+        }
+        if link:
+            headers["Click"] = header_safe(link, 1000)
+        return body, headers
+
+    def publish(topic: str, body: str, headers: dict) -> None:
+        req = urllib.request.Request(
+            f"{NTFY_URL}/{topic}",
+            data=body.encode("utf-8"),
+            headers=headers,
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            resp.read()
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, fmt, *args):
+            log.info("%s - %s", self.address_string(), fmt % args)
+
+        def do_GET(self):
+            if self.path == "/healthz":
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b"ok")
+                return
+            self.send_response(404)
+            self.end_headers()
+
+        def do_POST(self):
+            # Accept /hook/<topic>  (use <topic> as ntfy topic),
+            # or /hook and /  (fall back to TOPIC_FALLBACK).
+            parts = [p for p in self.path.split("/") if p]
+            if not parts or parts[0] != "hook":
+                if self.path != "/":
+                    self.send_response(404)
+                    self.end_headers()
+                    return
+                topic = TOPIC_FALLBACK
+            elif len(parts) == 1:
+                topic = TOPIC_FALLBACK
+            elif len(parts) == 2 and TOPIC_RE.match(parts[1]):
+                topic = parts[1]
+            else:
+                self.send_response(400)
+                self.end_headers()
+                return
+            length = int(self.headers.get("Content-Length") or 0)
+            raw = self.rfile.read(length) if length else b"{}"
+            try:
+                payload = json.loads(raw or b"{}")
+            except json.JSONDecodeError as exc:
+                log.warning("bad json: %s", exc)
+                self.send_response(400)
+                self.end_headers()
+                return
+            try:
+                body, headers = translate(payload)
+                publish(topic, body, headers)
+            except Exception as exc:
+                log.exception("ntfy publish failed: %s", exc)
+                self.send_response(502)
+                self.end_headers()
+                return
+            log.info("forwarded topic=%s title=%r", topic, headers.get("Title"))
+            self.send_response(204)
+            self.end_headers()
+
+    if __name__ == "__main__":
+        log.info(
+            "bridge listening on :%d -> %s/<topic-from-path> (fallback=%s)",
+            LISTEN_PORT, NTFY_URL, TOPIC_FALLBACK,
+        )
+        ThreadingHTTPServer(("0.0.0.0", LISTEN_PORT), Handler).serve_forever()

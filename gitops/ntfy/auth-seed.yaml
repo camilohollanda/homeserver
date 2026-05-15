@@ -1,0 +1,61 @@
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: ntfy-publishers
+  namespace: ntfy
+spec:
+  refreshInterval: 5m
+  secretStoreRef:
+    name: shared
+    kind: ClusterSecretStore
+  target:
+    name: ntfy-publishers
+    creationPolicy: Owner
+  data:
+    - secretKey: argocd-password
+      remoteRef:
+        key: NTFY_PUBLISHER_ARGOCD_PASSWORD
+    - secretKey: bugsink-password
+      remoteRef:
+        key: NTFY_PUBLISHER_BUGSINK_PASSWORD
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ntfy-auth-seed
+  namespace: ntfy
+data:
+  # Seeds ntfy users + ACL declaratively. Re-runs idempotently on every pod start.
+  # Adds users `argocd` and `bugsink` with write-only access to any topic.
+  seed.sh: |
+    #!/bin/sh
+    set -eu
+
+    : "${ARGOCD_PASSWORD:?missing}"
+    : "${BUGSINK_PASSWORD:?missing}"
+
+    ensure_user() {
+      user="$1" pass="$2"
+      if NTFY_PASSWORD="$pass" ntfy user add --ignore-exists "$user" 2>&1 | grep -qi "already exists\|added"; then
+        :
+      fi
+      # Force password to match upstream secret on every reconcile.
+      NTFY_PASSWORD="$pass" ntfy user change-pass "$user" >/dev/null
+      echo "seeded user: $user"
+    }
+
+    ensure_access() {
+      user="$1" topic="$2" perm="$3"
+      ntfy access "$user" "$topic" "$perm" >/dev/null
+      echo "access: $user $topic $perm"
+    }
+
+    ensure_user argocd  "$ARGOCD_PASSWORD"
+    ensure_user bugsink "$BUGSINK_PASSWORD"
+
+    # Wildcard: write to any topic. Tighten here if you want per-app patterns
+    # (e.g. ensure_access argocd 'werify-*' write-only).
+    ensure_access argocd  '*' write-only
+    ensure_access bugsink '*' write-only
+
+    echo "auth seed complete"

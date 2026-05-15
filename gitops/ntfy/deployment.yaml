@@ -17,6 +17,29 @@ spec:
       labels:
         app: ntfy
     spec:
+      initContainers:
+      - name: auth-seed
+        image: binwiederhier/ntfy:v2.22.0
+        command: ["/bin/sh", "/seed/seed.sh"]
+        env:
+        - name: ARGOCD_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ntfy-publishers
+              key: argocd-password
+        - name: BUGSINK_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ntfy-publishers
+              key: bugsink-password
+        volumeMounts:
+        - name: config
+          mountPath: /etc/ntfy
+        - name: cache
+          mountPath: /var/cache/ntfy
+        - name: seed
+          mountPath: /seed
+          readOnly: true
       containers:
       - name: ntfy
         image: binwiederhier/ntfy:v2.22.0
@@ -57,6 +80,10 @@ spec:
       - name: cache
         persistentVolumeClaim:
           claimName: ntfy-cache
+      - name: seed
+        configMap:
+          name: ntfy-auth-seed
+          defaultMode: 0755
 ---
 apiVersion: v1
 kind: Service

@@ -40,9 +40,9 @@ spec:
     name: notify-watcher-secret
     creationPolicy: Owner
   data:
-    - secretKey: ntfy-token
+    - secretKey: ntfy-password
       remoteRef:
-        key: NTFY_ARGOCD_TOKEN
+        key: NTFY_PUBLISHER_ARGOCD_PASSWORD
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -69,14 +69,16 @@ spec:
           image: alpine/k8s:1.32.6
           command: ["/bin/sh", "/scripts/watch.sh"]
           env:
-            - name: NTFY_TOKEN
+            - name: NTFY_USER
+              value: argocd
+            - name: NTFY_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: notify-watcher-secret
-                  key: ntfy-token
+                  key: ntfy-password
             - name: NTFY_URL
-              value: https://ntfy.prakash.com.br
-            - name: NTFY_TOPIC
+              value: http://ntfy.ntfy.svc.cluster.local
+            - name: TOPIC_FALLBACK
               value: argocd
             - name: ARGOCD_URL
               value: https://argocd.internal.prakash.com.br
