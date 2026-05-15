@@ -22,16 +22,11 @@ spec:
         image: binwiederhier/ntfy:v2.22.0
         command: ["/bin/sh", "/seed/seed.sh"]
         env:
-        - name: ARGOCD_PASSWORD
+        - name: PUBLISHER_PASSWORD
           valueFrom:
             secretKeyRef:
               name: ntfy-publishers
-              key: argocd-password
-        - name: BUGSINK_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: ntfy-publishers
-              key: bugsink-password
+              key: publisher-password
         volumeMounts:
         - name: config
           mountPath: /etc/ntfy

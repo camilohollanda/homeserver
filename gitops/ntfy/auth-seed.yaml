@@ -12,12 +12,9 @@ spec:
     name: ntfy-publishers
     creationPolicy: Owner
   data:
-    - secretKey: argocd-password
+    - secretKey: publisher-password
       remoteRef:
-        key: NTFY_PUBLISHER_ARGOCD_PASSWORD
-    - secretKey: bugsink-password
-      remoteRef:
-        key: NTFY_PUBLISHER_BUGSINK_PASSWORD
+        key: NTFY_PUBLISHER_PASSWORD
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -25,37 +22,15 @@ metadata:
   name: ntfy-auth-seed
   namespace: ntfy
 data:
-  # Seeds ntfy users + ACL declaratively. Re-runs idempotently on every pod start.
-  # Adds users `argocd` and `bugsink` with write-only access to any topic.
+  # Seeds the single `publisher` user with write-only access to any topic.
+  # Re-runs idempotently on every pod start.
   seed.sh: |
     #!/bin/sh
     set -eu
 
-    : "${ARGOCD_PASSWORD:?missing}"
-    : "${BUGSINK_PASSWORD:?missing}"
+    : "${PUBLISHER_PASSWORD:?missing}"
 
-    ensure_user() {
-      user="$1" pass="$2"
-      if NTFY_PASSWORD="$pass" ntfy user add --ignore-exists "$user" 2>&1 | grep -qi "already exists\|added"; then
-        :
-      fi
-      # Force password to match upstream secret on every reconcile.
-      NTFY_PASSWORD="$pass" ntfy user change-pass "$user" >/dev/null
-      echo "seeded user: $user"
-    }
-
-    ensure_access() {
-      user="$1" topic="$2" perm="$3"
-      ntfy access "$user" "$topic" "$perm" >/dev/null
-      echo "access: $user $topic $perm"
-    }
-
-    ensure_user argocd  "$ARGOCD_PASSWORD"
-    ensure_user bugsink "$BUGSINK_PASSWORD"
-
-    # Wildcard: write to any topic. Tighten here if you want per-app patterns
-    # (e.g. ensure_access argocd 'werify-*' write-only).
-    ensure_access argocd  '*' write-only
-    ensure_access bugsink '*' write-only
-
-    echo "auth seed complete"
+    NTFY_PASSWORD="$PUBLISHER_PASSWORD" ntfy user add --ignore-exists publisher >/dev/null 2>&1 || true
+    NTFY_PASSWORD="$PUBLISHER_PASSWORD" ntfy user change-pass publisher >/dev/null
+    ntfy access publisher '*' write-only >/dev/null
+    echo "seeded user: publisher (write-only on *)"

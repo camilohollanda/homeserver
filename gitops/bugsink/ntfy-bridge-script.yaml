@@ -6,8 +6,11 @@ metadata:
 data:
   bridge.py: |
     #!/usr/bin/env python3
-    """Translate Bugsink's Slack-compatible webhook POSTs into ntfy publishes."""
-    import base64
+    """Translate Bugsink Slack-format webhooks into Apprise JSON POSTs.
+
+    POST /hook/<tag>  -> Apprise /notify/<APPRISE_KEY>?tag=<tag>
+    Apprise holds the ntfy credentials and per-topic URL mapping.
+    """
     import json
     import logging
     import os
@@ -16,17 +19,12 @@ data:
     import urllib.request
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-    NTFY_URL = os.environ["NTFY_URL"].rstrip("/")
-    NTFY_USER = os.environ["NTFY_USER"]
-    NTFY_PASSWORD = os.environ["NTFY_PASSWORD"]
-    TOPIC_FALLBACK = os.environ.get("TOPIC_FALLBACK", "bugsink")
+    APPRISE_URL = os.environ["APPRISE_URL"].rstrip("/")
+    APPRISE_KEY = os.environ.get("APPRISE_KEY", "homeserver")
+    TAG_FALLBACK = os.environ.get("TAG_FALLBACK", "bugsink")
     LISTEN_PORT = int(os.environ.get("LISTEN_PORT", "8080"))
 
-    BASIC_AUTH = "Basic " + base64.b64encode(
-        f"{NTFY_USER}:{NTFY_PASSWORD}".encode()
-    ).decode()
-
-    TOPIC_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
+    TAG_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 
     logging.basicConfig(
         level=logging.INFO,
@@ -35,41 +33,33 @@ data:
     )
     log = logging.getLogger("bridge")
 
-    def header_safe(value: str, limit: int = 250) -> str:
-        # ntfy headers are HTTP headers; strip CR/LF and cap length.
-        cleaned = (value or "").replace("\r", " ").replace("\n", " ").strip()
-        return cleaned[:limit]
+    COLOR_TO_TYPE = {
+        "danger": "failure", "#e01e5a": "failure", "#ff0000": "failure",
+        "warning": "warning", "#ffcc00": "warning",
+        "good": "success", "#36a64f": "success",
+    }
 
-    def translate(payload: dict) -> tuple[str, dict]:
+    def translate(payload: dict, tag: str) -> dict:
         attachment = (payload.get("attachments") or [{}])[0]
         title = attachment.get("title") or payload.get("text") or "Bugsink alert"
         body = attachment.get("text") or payload.get("text") or title
         link = attachment.get("title_link") or ""
-
-        color = (attachment.get("color") or "").lower()
-        if color in ("danger", "#e01e5a", "#ff0000"):
-            priority, tag = "4", "rotating_light"
-        elif color in ("warning", "#ffcc00"):
-            priority, tag = "3", "warning"
-        else:
-            priority, tag = "3", "bug"
-
-        headers = {
-            "Authorization": BASIC_AUTH,
-            "Title": header_safe(title),
-            "Priority": priority,
-            "Tags": tag,
-            "Markdown": "yes",
-        }
+        ntype = COLOR_TO_TYPE.get((attachment.get("color") or "").lower(), "info")
         if link:
-            headers["Click"] = header_safe(link, 1000)
-        return body, headers
+            body = f"{body}\n\n[View issue]({link})"
+        return {
+            "title": title,
+            "body": body,
+            "tag": tag,
+            "type": ntype,
+            "format": "markdown",
+        }
 
-    def publish(topic: str, body: str, headers: dict) -> None:
+    def publish(apprise_payload: dict) -> None:
         req = urllib.request.Request(
-            f"{NTFY_URL}/{topic}",
-            data=body.encode("utf-8"),
-            headers=headers,
+            f"{APPRISE_URL}/notify/{APPRISE_KEY}",
+            data=json.dumps(apprise_payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=10) as resp:
@@ -89,19 +79,17 @@ data:
             self.end_headers()
 
         def do_POST(self):
-            # Accept /hook/<topic>  (use <topic> as ntfy topic),
-            # or /hook and /  (fall back to TOPIC_FALLBACK).
             parts = [p for p in self.path.split("/") if p]
             if not parts or parts[0] != "hook":
                 if self.path != "/":
                     self.send_response(404)
                     self.end_headers()
                     return
-                topic = TOPIC_FALLBACK
+                tag = TAG_FALLBACK
             elif len(parts) == 1:
-                topic = TOPIC_FALLBACK
-            elif len(parts) == 2 and TOPIC_RE.match(parts[1]):
-                topic = parts[1]
+                tag = TAG_FALLBACK
+            elif len(parts) == 2 and TAG_RE.match(parts[1]):
+                tag = parts[1]
             else:
                 self.send_response(400)
                 self.end_headers()
@@ -115,21 +103,21 @@ data:
                 self.send_response(400)
                 self.end_headers()
                 return
+            apprise_payload = translate(payload, tag)
             try:
-                body, headers = translate(payload)
-                publish(topic, body, headers)
+                publish(apprise_payload)
             except Exception as exc:
-                log.exception("ntfy publish failed: %s", exc)
+                log.exception("apprise publish failed: %s", exc)
                 self.send_response(502)
                 self.end_headers()
                 return
-            log.info("forwarded topic=%s title=%r", topic, headers.get("Title"))
+            log.info("forwarded tag=%s title=%r", tag, apprise_payload["title"])
             self.send_response(204)
             self.end_headers()
 
     if __name__ == "__main__":
         log.info(
-            "bridge listening on :%d -> %s/<topic-from-path> (fallback=%s)",
-            LISTEN_PORT, NTFY_URL, TOPIC_FALLBACK,
+            "bridge listening on :%d -> %s/notify/%s (fallback tag=%s)",
+            LISTEN_PORT, APPRISE_URL, APPRISE_KEY, TAG_FALLBACK,
         )
         ThreadingHTTPServer(("0.0.0.0", LISTEN_PORT), Handler).serve_forever()

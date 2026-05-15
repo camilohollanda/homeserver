@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: apprise
+  name: apprise
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: apprise
+  template:
+    metadata:
+      labels:
+        app: apprise
+    spec:
+      containers:
+      - name: apprise
+        image: caronc/apprise:1.1.7
+        ports:
+        - containerPort: 8000
+          name: http
+        env:
+        - name: APPRISE_CONFIG_LOCK
+          value: "yes"
+        - name: APPRISE_STATEFUL_MODE
+          value: "simple"
+        readinessProbe:
+          httpGet:
+            path: /status
+            port: 8000
+          initialDelaySeconds: 3
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /status
+            port: 8000
+          initialDelaySeconds: 15
+          periodSeconds: 30
+        volumeMounts:
+        - name: config
+          mountPath: /config/homeserver
+          readOnly: true
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "20m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+      volumes:
+      - name: config
+        secret:
+          secretName: apprise-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: apprise
+  namespace: apprise
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  selector:
+    app: apprise
