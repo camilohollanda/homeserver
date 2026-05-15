@@ -26,24 +26,6 @@ subjects:
     name: notify-watcher
     namespace: argocd
 ---
-apiVersion: external-secrets.io/v1
-kind: ExternalSecret
-metadata:
-  name: notify-watcher-secret
-  namespace: argocd
-spec:
-  refreshInterval: 5m
-  secretStoreRef:
-    name: shared
-    kind: ClusterSecretStore
-  target:
-    name: notify-watcher-secret
-    creationPolicy: Owner
-  data:
-    - secretKey: ntfy-password
-      remoteRef:
-        key: NTFY_PUBLISHER_ARGOCD_PASSWORD
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -69,17 +51,10 @@ spec:
           image: alpine/k8s:1.32.6
           command: ["/bin/sh", "/scripts/watch.sh"]
           env:
-            - name: NTFY_USER
-              value: argocd
-            - name: NTFY_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: notify-watcher-secret
-                  key: ntfy-password
-            - name: NTFY_URL
-              value: http://ntfy.ntfy.svc.cluster.local
-            - name: TOPIC_FALLBACK
-              value: argocd
+            - name: APPRISE_URL
+              value: http://apprise.apprise.svc.cluster.local
+            - name: APPRISE_KEY
+              value: homeserver
             - name: ARGOCD_URL
               value: https://argocd.internal.prakash.com.br
             - name: INTERVAL
