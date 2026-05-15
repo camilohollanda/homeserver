@@ -1,0 +1,63 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: notify-watcher-script
+  namespace: argocd
+data:
+  watch.sh: |
+    #!/bin/sh
+    set -eu
+
+    : "${NTFY_URL:=https://ntfy.prakash.com.br}"
+    : "${NTFY_TOPIC:=argocd}"
+    : "${NTFY_TOKEN:?NTFY_TOKEN required}"
+    : "${ARGOCD_URL:=https://argocd.internal.prakash.com.br}"
+    : "${INTERVAL:=30}"
+
+    ANNOTATION_KEY="ntfy-watcher.io/last-revision"
+
+    log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] $*"; }
+
+    notify() {
+      ns="$1" name="$2" rev="$3" health="$4"
+      short=$(printf '%s' "$rev" | cut -c1-7)
+      title="Deployed: ${name}"
+      body="${name} synced to ${short} (${health})"
+      click="${ARGOCD_URL}/applications/${ns}/${name}"
+      if curl -fsS -X POST \
+           -H "Authorization: Bearer ${NTFY_TOKEN}" \
+           -H "Title: ${title}" \
+           -H "Tags: rocket" \
+           -H "Priority: 3" \
+           -H "Click: ${click}" \
+           -d "${body}" \
+           "${NTFY_URL}/${NTFY_TOPIC}" >/dev/null; then
+        kubectl annotate -n "${ns}" "application/${name}" \
+          "${ANNOTATION_KEY}=${rev}" --overwrite >/dev/null
+        log "notified ${ns}/${name} -> ${short}"
+      else
+        log "notify FAILED ${ns}/${name} -> ${short} (will retry)"
+      fi
+    }
+
+    log "watcher starting (topic=${NTFY_TOPIC}, interval=${INTERVAL}s)"
+
+    while true; do
+      kubectl get applications -A -o json 2>/dev/null \
+        | jq -r --arg key "$ANNOTATION_KEY" '
+            .items[]
+            | select(.status.operationState.phase == "Succeeded")
+            | select(.status.health.status == "Healthy")
+            | . as $a
+            | ($a.status.operationState.syncResult.revision // "") as $cur
+            | (($a.metadata.annotations // {})[$key] // "") as $last
+            | select($cur != "" and $cur != $last)
+            | [$a.metadata.namespace, $a.metadata.name, $cur, $a.status.health.status]
+            | @tsv
+          ' \
+        | while IFS="$(printf '\t')" read -r ns name rev health; do
+            [ -z "${name:-}" ] && continue
+            notify "$ns" "$name" "$rev" "$health"
+          done || log "tick failed (continuing)"
+      sleep "$INTERVAL"
+    done
