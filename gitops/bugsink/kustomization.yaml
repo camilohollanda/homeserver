@@ -7,5 +7,5 @@ resources:
   - external-secret.yaml
   - deployment.yaml
   - ingress.yaml
-  - ntfy-bridge-script.yaml
-  - ntfy-bridge.yaml
+  - apprise-shim-script.yaml
+  - apprise-shim.yaml
