@@ -44,7 +44,8 @@ spec:
           failureThreshold: 5
         volumeMounts:
         - name: config
-          mountPath: /config/homeserver
+          mountPath: /config/homeserver.yml
+          subPath: config.yml
           readOnly: true
         resources:
           requests:
