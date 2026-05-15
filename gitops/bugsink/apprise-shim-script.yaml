@@ -1,14 +1,14 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: ntfy-bridge-script
+  name: apprise-shim-script
   namespace: bugsink
 data:
-  bridge.py: |
+  shim.py: |
     #!/usr/bin/env python3
     """Translate Bugsink Slack-format webhooks into Apprise JSON POSTs.
 
-    POST /hook/<tag>  -> Apprise /notify/<APPRISE_KEY>?tag=<tag>
+    POST /hook/<tag>  -> Apprise /notify/<APPRISE_KEY>  (body.tag = <tag>)
     Apprise holds the ntfy credentials and per-topic URL mapping.
     """
     import json
@@ -31,7 +31,7 @@ data:
         format="%(asctime)s %(levelname)s %(message)s",
         stream=sys.stdout,
     )
-    log = logging.getLogger("bridge")
+    log = logging.getLogger("shim")
 
     COLOR_TO_TYPE = {
         "danger": "failure", "#e01e5a": "failure", "#ff0000": "failure",
@@ -117,7 +117,7 @@ data:
 
     if __name__ == "__main__":
         log.info(
-            "bridge listening on :%d -> %s/notify/%s (fallback tag=%s)",
+            "shim listening on :%d -> %s/notify/%s (fallback tag=%s)",
             LISTEN_PORT, APPRISE_URL, APPRISE_KEY, TAG_FALLBACK,
         )
         ThreadingHTTPServer(("0.0.0.0", LISTEN_PORT), Handler).serve_forever()
