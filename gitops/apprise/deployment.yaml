@@ -28,16 +28,17 @@ spec:
           value: "simple"
         readinessProbe:
           httpGet:
-            path: /status
+            path: /
             port: 8000
-          initialDelaySeconds: 3
+          initialDelaySeconds: 10
           periodSeconds: 10
         livenessProbe:
           httpGet:
-            path: /status
+            path: /
             port: 8000
-          initialDelaySeconds: 15
+          initialDelaySeconds: 30
           periodSeconds: 30
+          failureThreshold: 5
         volumeMounts:
         - name: config
           mountPath: /config/homeserver
