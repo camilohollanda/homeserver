@@ -17,7 +17,7 @@ echo "Installing Argo CD..."
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
 kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/v3.2.12/manifests/install.yaml
 
 echo "Waiting for Argo CD to be ready..."
 kubectl wait --namespace argocd \
