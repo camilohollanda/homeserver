@@ -1,0 +1,97 @@
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: ntfy-bridge-secret
+  namespace: bugsink
+spec:
+  refreshInterval: 5m
+  secretStoreRef:
+    name: shared
+    kind: ClusterSecretStore
+  target:
+    name: ntfy-bridge-secret
+    creationPolicy: Owner
+  data:
+    - secretKey: ntfy-password
+      remoteRef:
+        key: NTFY_PUBLISHER_BUGSINK_PASSWORD
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ntfy-bridge
+  namespace: bugsink
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ntfy-bridge
+  template:
+    metadata:
+      labels:
+        app: ntfy-bridge
+    spec:
+      containers:
+        - name: bridge
+          image: python:3.13-alpine
+          command: ["python", "/scripts/bridge.py"]
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: NTFY_URL
+              value: http://ntfy.ntfy.svc.cluster.local
+            - name: TOPIC_FALLBACK
+              value: bugsink
+            - name: NTFY_USER
+              value: bugsink
+            - name: NTFY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ntfy-bridge-secret
+                  key: ntfy-password
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          volumeMounts:
+            - name: script
+              mountPath: /scripts
+              readOnly: true
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "10m"
+            limits:
+              memory: "128Mi"
+              cpu: "100m"
+      volumes:
+        - name: script
+          configMap:
+            name: ntfy-bridge-script
+            defaultMode: 0755
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ntfy-bridge
+  namespace: bugsink
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
+      name: http
+  selector:
+    app: ntfy-bridge
