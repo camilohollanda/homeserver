@@ -31,9 +31,8 @@ data:
       short=$(printf '%s' "$rev" | cut -c1-7)
       click="${ARGOCD_URL}/applications/${ns}/${name}"
       title="Deployed: ${name}"
-      body="${name} synced to \`${short}\` (${health})
-
-[View in ArgoCD](${click})"
+      body=$(printf '%s synced to `%s` (%s)\n\n[View in ArgoCD](%s)' \
+        "$name" "$short" "$health" "$click")
 
       if [ -n "${tag_override:-}" ]; then
         tag=$(sanitize_tag "$tag_override")
