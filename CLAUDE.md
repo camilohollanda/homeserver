@@ -82,6 +82,6 @@ All env vars defaulting to "auto-generated random" use `openssl rand -base64 32 
 
 - Bootstrap: `bootstrap/smtp4dev/{install,setup}.sh`
 - Domain: `smtp4dev.internal.prakash.com.br` (web UI, basic-auth, TLS via shared nginx)
-- SMTP listener: `192.168.20.22:2525` — no auth, no TLS, LAN-only. Point dev app `SMTP_HOST/PORT` here.
+- SMTP listener: `192.168.20.22:2525` **and** `192.168.20.22:587` (both reach the same container; 587 exists for apps that hardcode the submission port). No auth, no TLS, LAN-only.
 - Persistence: `/opt/smtp4dev/data` (sqlite + message store on the OS disk — fine, retention is bounded by `NumberOfMessagesToKeep`).
 - This is **for development email capture only.** Real outbound mail still goes through whatever production SMTP each app is configured with.

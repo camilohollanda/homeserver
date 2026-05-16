@@ -113,13 +113,14 @@ services:
     restart: unless-stopped
     ports:
       - "0.0.0.0:${SMTP4DEV_SMTP_PORT}:25"
+      - "0.0.0.0:587:25"
       - "127.0.0.1:${SMTP4DEV_HTTP_PORT}:80"
     environment:
       ServerOptions__HostName: ${SMTP4DEV_DOMAIN}
       ServerOptions__Urls: http://*:80
-      ServerOptions__BasicAuthEnabled: "true"
-      ServerOptions__BasicAuthUsername: ${SMTP4DEV_BASIC_USER}
-      ServerOptions__BasicAuthPassword: ${SMTP4DEV_BASIC_PASS}
+      ServerOptions__WebAuthenticationRequired: "true"
+      ServerOptions__Users__0__Username: ${SMTP4DEV_BASIC_USER}
+      ServerOptions__Users__0__Password: ${SMTP4DEV_BASIC_PASS}
       ServerOptions__NumberOfMessagesToKeep: ${SMTP4DEV_KEEP_MSGS}
       ServerOptions__NumberOfSessionsToKeep: ${SMTP4DEV_KEEP_SESSIONS}
       ServerOptions__Database: /smtp4dev/database.db
@@ -211,4 +212,5 @@ docker exec services nginx -s reload 2>/dev/null || systemctl restart services
 echo ""
 echo "✓ smtp4dev is running."
 echo "  Web UI:        https://${SMTP4DEV_DOMAIN}  (user: ${SMTP4DEV_BASIC_USER})"
-echo "  SMTP listener: 192.168.20.22:${SMTP4DEV_SMTP_PORT}  (no auth, no TLS — dev only)"
+echo "  SMTP listener: 192.168.20.22:${SMTP4DEV_SMTP_PORT} and 192.168.20.22:587"
+echo "                 (no auth, no TLS — dev only)"
