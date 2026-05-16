@@ -30,6 +30,8 @@ config:
       api_url: https://ghcr.io
       prefix: ghcr.io
       credentials: "secret:argocd/ghcr-image-updater#creds"
+extraArgs:
+  - --interval=30s
 EOF
 
 # Install via Helm
