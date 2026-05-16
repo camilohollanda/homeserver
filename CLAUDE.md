@@ -18,7 +18,7 @@ A new piece of infra usually lives in exactly one of these, not multiple.
 | 115  | ai-gpu          | 192.168.20.30  | Whisper + Ollama. GPU passthrough.                              |
 | 116  | media-server    | 192.168.20.40  | Jellyfin / *arr stack (local nginx proxy, no TLS).              |
 
-\* Terraform still calls VM 114 `infisical` for legacy reasons; in practice it's a multi-tenant **services VM** hosting Infisical, Garage, smtp4dev, … behind a shared nginx.
+\* Terraform still calls VM 114 `infisical` for legacy reasons; in practice it's a multi-tenant **services VM** hosting Infisical, Garage, Mailpit, … behind a shared nginx.
 
 ## Services VM (114) — the pattern to copy
 
@@ -40,12 +40,12 @@ The services VM hosts multiple unrelated docker apps behind **one shared nginx**
 
 Hard rules when adding a new service here:
 
-1. **Don't bind 80/443 in the app's compose** — the shared nginx owns them. Bind on `127.0.0.1:<some-port>` and have nginx proxy to it. Exception: services that legitimately need a non-HTTP listener reachable from the LAN (e.g. smtp4dev's SMTP port) bind on `0.0.0.0:<non-conflicting-port>`.
+1. **Don't bind 80/443 in the app's compose** — the shared nginx owns them. Bind on `127.0.0.1:<some-port>` and have nginx proxy to it. Exception: services that legitimately need a non-HTTP listener reachable from the LAN (e.g. Mailpit's SMTP port) bind on `0.0.0.0:<non-conflicting-port>`.
 2. **One vhost file per app** in `/opt/services/conf.d/<app>.conf`. After writing it, reload with `docker exec services nginx -s reload`.
 3. **Use the shared cert tooling** — `bootstrap/services/install.sh` already provisions certbot + the Cloudflare DNS-01 plugin and writes a renewal hook that reloads the shared nginx. Just call `certbot certonly --dns-cloudflare …` from your app installer.
 4. **Prereq guard at the top of every app installer**: bail if `/opt/services/docker-compose.yml` is missing — that means the services proxy hasn't been set up yet.
 
-Live examples to crib from: `bootstrap/infisical/install.sh`, `bootstrap/garage/install.sh`, `bootstrap/smtp4dev/install.sh`. They're all the same shape.
+Live examples to crib from: `bootstrap/infisical/install.sh`, `bootstrap/garage/install.sh`, `bootstrap/mailpit/install.sh`. They're all the same shape.
 
 ## Bootstrap script convention
 
@@ -67,7 +67,7 @@ All env vars defaulting to "auto-generated random" use `openssl rand -base64 32 
 
 ## Secrets
 
-- Long-lived secrets live in **Infisical** (project `homeserver`). After running an app's `setup.sh`, the final echo block lists which keys to store and under which path (e.g. `/Garage/`, `/smtp4dev/`).
+- Long-lived secrets live in **Infisical** (project `homeserver`). After running an app's `setup.sh`, the final echo block lists which keys to store and under which path (e.g. `/Garage/`, `/mailpit/`).
 - K3s apps consume Infisical secrets via the **External Secrets Operator** — see `gitops/external-secrets/`.
 - Never check generated secrets into git; the `setup.sh` scripts print them once and expect you to copy them into Infisical.
 
@@ -76,12 +76,12 @@ All env vars defaulting to "auto-generated random" use `openssl rand -base64 32 
 - **VM 114 was originally just for Infisical.** Old comments/scripts may still say "Infisical VM" — treat it as the services VM and never put logic into one app's installer that other apps would need. Shared concerns (Docker install, certbot, the nginx proxy) belong in `bootstrap/services/install.sh`.
 - **Don't reformat `/dev/sdb` on VM 114** — it's the Garage data disk (ext4, label `garage-data`). `bootstrap/garage/install.sh` refuses to overwrite a non-ext4 filesystem there; preserve that guard if you touch disk logic.
 - **The renewal hook reloads only the shared nginx** (`docker exec services nginx -s reload`). If you add a service whose cert needs *its own* reload (rare), add another hook in `/etc/letsencrypt/renewal-hooks/deploy/`.
-- **Port 25 is often blocked / privileged.** New SMTP-ish services on VM 114 should bind a non-25 port (smtp4dev defaults to 2525) unless there's a concrete reason otherwise.
+- **Port 25 is often blocked / privileged.** New SMTP-ish services on VM 114 should bind a non-25 port (Mailpit defaults to 2525) unless there's a concrete reason otherwise.
 
-## smtp4dev specifically
+## Mailpit specifically
 
-- Bootstrap: `bootstrap/smtp4dev/{install,setup}.sh`
-- Domain: `smtp4dev.internal.prakash.com.br` (web UI, basic-auth, TLS via shared nginx)
-- SMTP listener: `192.168.20.22:2525` **and** `192.168.20.22:587` (both reach the same container; 587 exists for apps that hardcode the submission port). No auth, no TLS, LAN-only.
-- Persistence: `/opt/smtp4dev/data` (sqlite + message store on the OS disk — fine, retention is bounded by `NumberOfMessagesToKeep`).
+- Bootstrap: `bootstrap/mailpit/{install,setup}.sh`
+- Domain: `mailpit.internal.prakash.com.br` (web UI, basic-auth, TLS via shared nginx)
+- SMTP listener: `mailpit.internal.prakash.com.br:2525` **and** `:587` (both reach the same container; 587 exists for apps that hardcode the submission port). **STARTTLS + AUTH PLAIN/LOGIN required** (`MP_SMTP_REQUIRE_STARTTLS=true` + `MP_SMTP_AUTH`); SMTP credentials are the same as the web UI basic-auth user. Connect by hostname, not IP — the LE cert is bound to the FQDN.
+- Persistence: `/opt/mailpit/data/mailpit.db` (sqlite — fine, retention is bounded by `MP_MAX_MESSAGES`).
 - This is **for development email capture only.** Real outbound mail still goes through whatever production SMTP each app is configured with.

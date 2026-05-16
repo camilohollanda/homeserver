@@ -1,25 +1,25 @@
 #!/usr/bin/env bash
-# Provisions smtp4dev on the services VM (vmid 114, IP .22).
+# Provisions Mailpit on the services VM (vmid 114, IP .22).
 # Runs from your local machine — SSHes into the VM for all remote operations.
 #
 # Usage:
-#   ./bootstrap/smtp4dev/setup.sh
+#   ./bootstrap/mailpit/setup.sh
 #
 # Required env vars:
 #   CF_API_TOKEN         - Cloudflare API token (Zone.DNS Edit)
 #   LETSENCRYPT_EMAIL    - Email for Let's Encrypt notifications
 #
 # Optional env vars (auto-generated if unset):
-#   SMTP4DEV_BASIC_USER  - default: admin
-#   SMTP4DEV_BASIC_PASS  - generated random 32-char if unset
+#   MAILPIT_BASIC_USER   - default: admin
+#   MAILPIT_BASIC_PASS   - generated random 32-char if unset
 #
 # Optional knobs:
-#   SMTP4DEV_DOMAIN      - default: smtp4dev.internal.prakash.com.br
-#   SMTP4DEV_SSH         - default: deployer@192.168.20.22
-#   SMTP4DEV_VERSION     - default: 3.6.1
-#   SMTP4DEV_SMTP_PORT   - default: 2525
-#   SMTP4DEV_HTTP_PORT   - default: 5080 (loopback, fronted by shared nginx)
-#   SMTP4DEV_VM_IP       - IP to point the domain at (default: 192.168.20.22)
+#   MAILPIT_DOMAIN       - default: mailpit.internal.prakash.com.br
+#   MAILPIT_SSH          - default: deployer@192.168.20.22
+#   MAILPIT_VERSION      - default: v1.20.7
+#   MAILPIT_SMTP_PORT    - default: 2525
+#   MAILPIT_HTTP_PORT    - default: 5080 (loopback, fronted by shared nginx)
+#   MAILPIT_VM_IP        - IP to point the domain at (default: 192.168.20.22)
 #   SKIP_DNS=1           - Skip Cloudflare DNS automation
 set -euo pipefail
 
@@ -96,66 +96,66 @@ ensure_a_record() {
   fi
 }
 
-SMTP4DEV_SSH="${SMTP4DEV_SSH:-deployer@192.168.20.22}"
-SMTP4DEV_VM_IP="${SMTP4DEV_VM_IP:-192.168.20.22}"
-export SMTP4DEV_DOMAIN="${SMTP4DEV_DOMAIN:-smtp4dev.internal.prakash.com.br}"
-export SMTP4DEV_VERSION="${SMTP4DEV_VERSION:-3.6.1}"
-export SMTP4DEV_SMTP_PORT="${SMTP4DEV_SMTP_PORT:-2525}"
-export SMTP4DEV_HTTP_PORT="${SMTP4DEV_HTTP_PORT:-5080}"
-export SMTP4DEV_BASIC_USER="${SMTP4DEV_BASIC_USER:-admin}"
-export SMTP4DEV_BASIC_PASS="${SMTP4DEV_BASIC_PASS:-$(openssl rand -base64 32 | tr -d '=+/' | cut -c1-32)}"
+MAILPIT_SSH="${MAILPIT_SSH:-deployer@192.168.20.22}"
+MAILPIT_VM_IP="${MAILPIT_VM_IP:-192.168.20.22}"
+export MAILPIT_DOMAIN="${MAILPIT_DOMAIN:-mailpit.internal.prakash.com.br}"
+export MAILPIT_VERSION="${MAILPIT_VERSION:-v1.20.7}"
+export MAILPIT_SMTP_PORT="${MAILPIT_SMTP_PORT:-2525}"
+export MAILPIT_HTTP_PORT="${MAILPIT_HTTP_PORT:-5080}"
+export MAILPIT_BASIC_USER="${MAILPIT_BASIC_USER:-admin}"
+export MAILPIT_BASIC_PASS="${MAILPIT_BASIC_PASS:-$(openssl rand -base64 32 | tr -d '=+/' | cut -c1-32)}"
 
 check_env CF_API_TOKEN LETSENCRYPT_EMAIL
 
 echo "=============================================="
-echo "  smtp4dev Setup"
-echo "  Target:   ${SMTP4DEV_SSH}"
-echo "  Domain:   ${SMTP4DEV_DOMAIN}"
-echo "  Version:  ${SMTP4DEV_VERSION}"
-echo "  SMTP:     ${SMTP4DEV_VM_IP}:${SMTP4DEV_SMTP_PORT}"
+echo "  Mailpit Setup"
+echo "  Target:   ${MAILPIT_SSH}"
+echo "  Domain:   ${MAILPIT_DOMAIN}"
+echo "  Version:  ${MAILPIT_VERSION}"
+echo "  SMTP:     ${MAILPIT_VM_IP}:${MAILPIT_SMTP_PORT}"
 echo "=============================================="
 echo ""
 
-wait_ssh "$SMTP4DEV_SSH"
+wait_ssh "$MAILPIT_SSH"
 
 # DNS record — auto-created via Cloudflare
 if [[ "${SKIP_DNS:-0}" == "1" ]]; then
   echo "==> SKIP_DNS=1 — skipping Cloudflare A-record step"
-  echo "    Manually ensure: ${SMTP4DEV_DOMAIN} -> ${SMTP4DEV_VM_IP}"
+  echo "    Manually ensure: ${MAILPIT_DOMAIN} -> ${MAILPIT_VM_IP}"
 else
   command -v jq >/dev/null || { echo "Error: 'jq' is required for DNS automation"; exit 1; }
-  echo "==> Resolving Cloudflare zone for ${SMTP4DEV_DOMAIN}..."
-  ZONE_ID="$(get_zone_id "$SMTP4DEV_DOMAIN")"
+  echo "==> Resolving Cloudflare zone for ${MAILPIT_DOMAIN}..."
+  ZONE_ID="$(get_zone_id "$MAILPIT_DOMAIN")"
   if [[ -z "$ZONE_ID" ]]; then
-    echo "Error: no Cloudflare zone found for ${SMTP4DEV_DOMAIN}." >&2
+    echo "Error: no Cloudflare zone found for ${MAILPIT_DOMAIN}." >&2
     echo "  The CF_API_TOKEN must have Zone.Read for the parent zone, and the" >&2
     echo "  zone must already exist in your Cloudflare account." >&2
     echo "  Set SKIP_DNS=1 to bypass and create the record manually." >&2
     exit 1
   fi
   echo "  Zone: ${ZONE_ID}"
-  echo "==> Ensuring A record ${SMTP4DEV_DOMAIN} -> ${SMTP4DEV_VM_IP}..."
-  ensure_a_record "$ZONE_ID" "$SMTP4DEV_DOMAIN" "$SMTP4DEV_VM_IP"
+  echo "==> Ensuring A record ${MAILPIT_DOMAIN} -> ${MAILPIT_VM_IP}..."
+  ensure_a_record "$ZONE_ID" "$MAILPIT_DOMAIN" "$MAILPIT_VM_IP"
 fi
 
 echo ""
-echo "==> Running smtp4dev install on VM..."
-REMOTE_HOST="$SMTP4DEV_SSH" bash "${SCRIPT_DIR}/install.sh"
+echo "==> Running Mailpit install on VM..."
+REMOTE_HOST="$MAILPIT_SSH" bash "${SCRIPT_DIR}/install.sh"
 
 echo ""
 echo "=============================================="
-echo "  smtp4dev setup complete!"
+echo "  Mailpit setup complete!"
 echo "=============================================="
 echo ""
-echo "  Web UI:        https://${SMTP4DEV_DOMAIN}"
-echo "    user:        ${SMTP4DEV_BASIC_USER}"
-echo "    pass:        ${SMTP4DEV_BASIC_PASS}"
+echo "  Web UI:        https://${MAILPIT_DOMAIN}"
+echo "    user:        ${MAILPIT_BASIC_USER}"
+echo "    pass:        ${MAILPIT_BASIC_PASS}"
 echo ""
-echo "  SMTP endpoint: ${SMTP4DEV_VM_IP}:${SMTP4DEV_SMTP_PORT}  (and ${SMTP4DEV_VM_IP}:587)"
-echo "    No auth, no TLS. Reachable on the 192.168.20.0/24 LAN — point any"
-echo "    app's SMTP_HOST/PORT at this for dev email capture."
+echo "  SMTP endpoint: ${MAILPIT_DOMAIN}:${MAILPIT_SMTP_PORT}  (and ${MAILPIT_DOMAIN}:587)"
+echo "    STARTTLS + AUTH PLAIN/LOGIN required. Connect by hostname, not IP."
+echo "    SMTP user/pass = the web UI user/pass."
 echo ""
-echo "  Store credentials in Infisical (project homeserver, path /smtp4dev/):"
-echo "    SMTP4DEV_BASIC_USER=${SMTP4DEV_BASIC_USER}"
-echo "    SMTP4DEV_BASIC_PASS=${SMTP4DEV_BASIC_PASS}"
+echo "  Store credentials in Infisical (project homeserver, path /mailpit/):"
+echo "    MAILPIT_BASIC_USER=${MAILPIT_BASIC_USER}"
+echo "    MAILPIT_BASIC_PASS=${MAILPIT_BASIC_PASS}"
 echo ""
