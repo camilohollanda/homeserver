@@ -3,5 +3,6 @@ kind: Kustomization
 
 resources:
   - namespace.yaml
+  - pvc.yaml
   - loki.yaml
   - promtail.yaml
