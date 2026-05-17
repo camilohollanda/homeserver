@@ -44,7 +44,15 @@ data:
       alertmanager_url: http://localhost:9093
 
     limits_config:
-      retention_period: 168h  # 7 days
+      retention_period: 4320h  # 180 days
+
+    compactor:
+      working_directory: /loki/compactor
+      compaction_interval: 10m
+      retention_enabled: true
+      retention_delete_delay: 2h
+      retention_delete_worker_count: 150
+      delete_request_store: filesystem
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -53,6 +61,8 @@ metadata:
   namespace: loki
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: loki
@@ -86,7 +96,8 @@ spec:
         configMap:
           name: loki-config
       - name: storage
-        emptyDir: {}
+        persistentVolumeClaim:
+          claimName: loki-storage
 ---
 apiVersion: v1
 kind: Service

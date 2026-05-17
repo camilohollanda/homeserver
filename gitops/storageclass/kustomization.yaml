@@ -6,3 +6,4 @@ resources:
   - werify-staging-uploads-pv.yaml
   - werify-production-uploads-pv.yaml
   - bugsink-data-pv.yaml
+  - loki-storage-pv.yaml
