@@ -24,19 +24,25 @@ resource "proxmox_virtual_environment_vm" "ai_gpu" {
   machine = "q35"
 
   # Disable Secure Boot - required for NVIDIA drivers (unsigned kernel modules)
+  # local-lvm (SSD) — matches scsi0; the efi disk was migrated outside Terraform.
   efi_disk {
-    datastore_id      = var.storage
+    datastore_id      = "local-lvm"
     pre_enrolled_keys = false
     type              = "4m"
   }
 
   scsi_hardware = "virtio-scsi-single"
 
+  # local-lvm (SSD) — not var.storage (tank-vm HDD). Disk was migrated
+  # outside Terraform to put model loads on faster media.
   disk {
-    datastore_id = var.storage
+    datastore_id = "local-lvm"
     file_format  = "raw"
     interface    = "scsi0"
     size         = local.ai_vm.disk_size
+    discard      = "on"
+    ssd          = true
+    iothread     = true
   }
 
   network_device {
@@ -80,6 +86,11 @@ resource "proxmox_virtual_environment_vm" "ai_gpu" {
     order      = 3
     up_delay   = 120 # Give time for GPU initialization
     down_delay = 60
+  }
+
+  lifecycle {
+    # Cloud-init only runs on first boot; YAML edits shouldn't force VM replacement.
+    ignore_changes = [initialization]
   }
 }
 

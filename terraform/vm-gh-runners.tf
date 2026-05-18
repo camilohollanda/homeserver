@@ -25,11 +25,17 @@ resource "proxmox_virtual_environment_vm" "gh_runners" {
 
   scsi_hardware = "virtio-scsi-single"
 
+  # CI workload is many-small-files I/O — pinned to local-lvm (SSD-backed)
+  # rather than the default var.storage (tank-vm, 7200 RPM HDD) to avoid
+  # head-thrash when multiple ephemeral runners build concurrently.
   disk {
-    datastore_id = var.storage
+    datastore_id = "local-lvm"
     file_format  = "raw"
     interface    = "scsi0"
     size         = local.gh_runners_vm.disk_size
+    discard      = "on"
+    ssd          = true
+    iothread     = true
   }
 
   network_device {
