@@ -30,6 +30,12 @@ resource "proxmox_virtual_environment_vm" "media_server" {
     file_format  = "raw"
     interface    = "scsi0"
     size         = local.media_vm.disk_size
+    discard      = "on"
+    # ssd=false: this VM lives on tank-vm (HDD) by design — bulk media on
+    # 4TB spinning storage. Tell the guest it's rotational so the kernel
+    # picks an HDD-appropriate I/O scheduler.
+    ssd          = false
+    iothread     = true
   }
 
   network_device {
@@ -65,6 +71,11 @@ resource "proxmox_virtual_environment_vm" "media_server" {
     order      = 4
     up_delay   = 120
     down_delay = 60
+  }
+
+  lifecycle {
+    # Cloud-init only runs on first boot; YAML edits shouldn't force VM replacement.
+    ignore_changes = [initialization]
   }
 }
 

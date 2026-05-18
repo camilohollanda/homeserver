@@ -25,11 +25,17 @@ resource "proxmox_virtual_environment_vm" "infisical" {
 
   scsi_hardware = "virtio-scsi-single"
 
+  # local-lvm (SSD) — not var.storage (tank-vm HDD). The OS disk lives on
+  # SSD; the Garage data disk on scsi1 below intentionally lives on tank-vm
+  # for bulk object storage.
   disk {
-    datastore_id = var.storage
+    datastore_id = "local-lvm"
     file_format  = "raw"
     interface    = "scsi0"
     size         = local.infisical_vm.disk_size
+    discard      = "on"
+    ssd          = true
+    iothread     = true
   }
 
   # Garage object data disk — backed by the 4TB ZFS pool 'tank'.
@@ -79,6 +85,11 @@ resource "proxmox_virtual_environment_vm" "infisical" {
   }
 
   depends_on = [proxmox_virtual_environment_vm.db_postgres]
+
+  lifecycle {
+    # Cloud-init only runs on first boot; YAML edits shouldn't force VM replacement.
+    ignore_changes = [initialization]
+  }
 }
 
 resource "proxmox_virtual_environment_file" "infisical_cloud_init" {

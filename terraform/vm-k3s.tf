@@ -25,11 +25,16 @@ resource "proxmox_virtual_environment_vm" "k3s_apps" {
 
   scsi_hardware = "virtio-scsi-single"
 
+  # local-lvm (SSD) — not var.storage (tank-vm HDD). K3s workloads are
+  # latency-sensitive, and the disk was migrated to SSD outside Terraform.
   disk {
-    datastore_id = var.storage
+    datastore_id = "local-lvm"
     file_format  = "raw"
     interface    = "scsi0"
     size         = local.k3s_vm.disk_size
+    discard      = "on"
+    ssd          = true
+    iothread     = true
   }
 
   network_device {

@@ -25,11 +25,16 @@ resource "proxmox_virtual_environment_vm" "db_postgres" {
 
   scsi_hardware = "virtio-scsi-single"
 
+  # local-lvm (SSD) — not var.storage (tank-vm HDD). DB workloads benefit
+  # significantly from SSD; the migration happened outside Terraform.
   disk {
-    datastore_id = var.storage
+    datastore_id = "local-lvm"
     file_format  = "raw"
     interface    = "scsi0"
     size         = local.db_vm.disk_size
+    discard      = "on"
+    ssd          = true
+    iothread     = true
   }
 
   # Data disk (scsi1) is managed manually in Proxmox for persistence
@@ -76,8 +81,10 @@ resource "proxmox_virtual_environment_vm" "db_postgres" {
     # To intentionally destroy: temporarily set to false, apply, then destroy
     prevent_destroy = true
 
-    # Ignore manually-attached data disk (scsi1) managed outside Terraform
-    ignore_changes = [disk]
+    # - disk: ignore manually-attached data disk (scsi1) managed outside Terraform
+    # - initialization: cloud-init only runs on first boot; YAML edits don't
+    #   propagate to running VMs and shouldn't force replacement.
+    ignore_changes = [disk, initialization]
   }
 }
 
