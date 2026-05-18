@@ -57,4 +57,14 @@ locals {
     disk_size = 300
     tags      = "media,jellyfin,qbittorrent,radarr,sonarr"
   }
+
+  gh_runners_vm = {
+    name      = "gh-runners"
+    vmid      = 117
+    ip_cidr   = "192.168.20.50/24"
+    cores     = 8
+    memory_mb = 16384
+    disk_size = 60 # Docker layer cache + Elixir build artifacts + per-instance runner copies
+    tags      = "ci,github-actions,runners"
+  }
 }
