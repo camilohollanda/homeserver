@@ -354,6 +354,14 @@ Type=simple
 User=runner
 Group=runner
 WorkingDirectory=/opt/runners/%i
+# Per-instance BEAM tool state — two runners share the same `runner` user, so
+# pointing MIX_HOME/HEX_HOME/REBAR_CACHE_DIR at the instance dir avoids races
+# on ~runner/.mix when both run setup-beam concurrently. (One such race left
+# an archive with an empty elixir_version in ~runner/.mix/archives, which
+# bricks `mix local.rebar` because Mix.start scans archives at boot.)
+Environment=MIX_HOME=/opt/runners/%i/.mix
+Environment=HEX_HOME=/opt/runners/%i/.hex
+Environment=REBAR_CACHE_DIR=/opt/runners/%i/.cache/rebar3
 EnvironmentFile=/etc/gh-runners/env
 EnvironmentFile=/etc/gh-runners/instances/%i.env
 ExecStart=/usr/local/sbin/gh-runner-run-instance %i
