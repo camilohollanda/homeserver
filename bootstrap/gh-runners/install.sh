@@ -16,7 +16,7 @@
 # account/org the App is installed on.
 #
 # Optional env vars:
-#   RUNNERS_PER_REPO         - Ephemeral runner slots per repo (default: 2)
+#   RUNNERS_PER_REPO         - Ephemeral runner slots per repo (default: 4)
 #   RUNNER_VERSION           - actions/runner release version (default: 2.328.0)
 #   RUNNER_LABELS            - Comma-separated labels (default: "self-hosted,linux,homeserver")
 if [[ -n "${REMOTE_HOST:-}" ]]; then
@@ -42,7 +42,7 @@ fi
 : "${GH_APP_PRIVATE_KEY:?must be set}"
 : "${GH_REPOS:?must be set}"
 
-RUNNERS_PER_REPO="${RUNNERS_PER_REPO:-2}"
+RUNNERS_PER_REPO="${RUNNERS_PER_REPO:-4}"
 RUNNER_VERSION="${RUNNER_VERSION:-2.334.0}"
 RUNNER_LABELS="${RUNNER_LABELS:-self-hosted,linux,homeserver}"
 

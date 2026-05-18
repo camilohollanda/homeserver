@@ -18,7 +18,7 @@
 #
 # Optional env vars:
 #   GH_RUNNERS_SSH             - default: deployer@192.168.20.50
-#   RUNNERS_PER_REPO           - default: 2
+#   RUNNERS_PER_REPO           - default: 4
 #   RUNNER_VERSION             - default: 2.328.0
 #   RUNNER_LABELS              - default: "self-hosted,linux,homeserver"
 set -euo pipefail
@@ -43,7 +43,7 @@ wait_ssh() {
 }
 
 GH_RUNNERS_SSH="${GH_RUNNERS_SSH:-deployer@192.168.20.50}"
-export RUNNERS_PER_REPO="${RUNNERS_PER_REPO:-2}"
+export RUNNERS_PER_REPO="${RUNNERS_PER_REPO:-4}"
 export RUNNER_VERSION="${RUNNER_VERSION:-2.334.0}"
 export RUNNER_LABELS="${RUNNER_LABELS:-self-hosted,linux,homeserver}"
 
