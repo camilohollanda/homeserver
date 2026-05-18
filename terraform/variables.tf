@@ -63,7 +63,7 @@ variable "storage" {
 variable "tank_storage" {
   description = "Proxmox storage backed by the 4TB ZFS pool 'tank' (bulk data disks)"
   type        = string
-  default     = "tank"
+  default     = "tank-vm"
 }
 
 variable "bridge" {
