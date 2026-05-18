@@ -28,6 +28,9 @@ bootstrap/
 ├── media/                  # media-server VM (192.168.20.40)
 │   ├── setup.sh
 │   └── README.md
+├── gh-runners/             # gh-runners VM (192.168.20.50)
+│   ├── setup.sh
+│   └── install.sh
 ├── dns/                    # DNS helpers (Cloudflare Zero Trust Internal DNS)
 │   └── zero-trust-internal-dns.sh
 └── README.md               # This file
@@ -96,6 +99,38 @@ ssh deployer@192.168.20.30
 sudo /opt/bootstrap/setup.sh
 # Reboot if prompted for NVIDIA driver, then run again
 ```
+
+#### GitHub Actions Runners (gh-runners VM)
+
+Self-hosted, ephemeral, JIT-registered runners (one job per process, fresh
+state every time). Registered **per repo** via a GitHub App.
+
+Prerequisites:
+- A GitHub App with permissions `Administration: R/W`, `Actions: R/W`,
+  `Metadata: R`, installed on every account/org that owns a repo in
+  `GH_REPOS`. Per-repo installation IDs are auto-discovered at runtime,
+  so repos can span multiple owners (org + personal account, etc.).
+
+```bash
+export GH_APP_CLIENT_ID=<client id>     # shown on the App's settings page
+export GH_APP_PRIVATE_KEY_FILE=/path/to/app-private-key.pem
+export GH_REPOS="iddh-com-br/members,prem-prakash/werify"
+# optional: RUNNERS_PER_REPO (default 2), RUNNER_VERSION, RUNNER_LABELS
+
+./bootstrap/gh-runners/setup.sh
+```
+
+Workflows in those repos must opt in with:
+
+```yaml
+runs-on: [self-hosted, linux, homeserver]
+```
+
+Operational:
+- Status: `systemctl status 'gh-runner@*'`
+- Logs:   `journalctl -u 'gh-runner@*' -f`
+- Adding/removing a repo: update `GH_REPOS` and re-run `setup.sh` (idempotent;
+  orphan instances are disabled and cleaned up).
 
 #### Media Server (media-server VM)
 

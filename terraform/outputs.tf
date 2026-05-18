@@ -43,6 +43,11 @@ output "media_services" {
   }
 }
 
+output "gh_runners_vm_ip" {
+  description = "IP address for the GitHub Actions self-hosted runners VM"
+  value       = split("/", local.gh_runners_vm.ip_cidr)[0]
+}
+
 output "media_proxy_urls" {
   description = "Local domain URLs via reverse proxy (no ports)"
   value = {
