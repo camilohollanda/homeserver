@@ -175,13 +175,17 @@ SUDO
 chmod 440 /etc/sudoers.d/runner
 
 # ---------------------------------------------------------------------------
-# Shared BEAM install dir — workflows can point setup-beam's
-# INSTALL_DIR_FOR_OTP / INSTALL_DIR_FOR_ELIXIR at /opt/beam/<lang>-<version>
-# so every runner instance writes/reads OTP at the same absolute path.
-# Dialyzer PLTs (which embed absolute paths to .beam files) then stay valid
-# across instances, so PLT caches can be shared.
+# Shared runner tool cache — setup-beam (and any @actions/tool-cache user)
+# installs OTP/Elixir/etc into $RUNNER_TOOL_CACHE, which defaults per-runner
+# to <runner-dir>/_work/_tool. Per-instance paths break Dialyzer PLT caches
+# across instances because PLTs embed absolute paths to OTP's .beam files.
+# Pointing every instance at the same dir means the OTP install lives at one
+# absolute path host-wide, so a PLT built on members-1 is valid on members-2.
+# Mode 0775 so two concurrent setup-beam runs (same version) don't fight
+# over directory creation. @actions/tool-cache uses a `.complete` marker
+# file, so the race window is small but non-zero on a cold cache.
 # ---------------------------------------------------------------------------
-install -d -m 0755 -o runner -g runner /opt/beam
+install -d -m 0775 -o runner -g runner /opt/runner-tool-cache
 
 # ---------------------------------------------------------------------------
 # actions/runner binary
@@ -362,6 +366,7 @@ WorkingDirectory=/opt/runners/%i
 Environment=MIX_HOME=/opt/runners/%i/.mix
 Environment=HEX_HOME=/opt/runners/%i/.hex
 Environment=REBAR_CACHE_DIR=/opt/runners/%i/.cache/rebar3
+Environment=RUNNER_TOOL_CACHE=/opt/runner-tool-cache
 EnvironmentFile=/etc/gh-runners/env
 EnvironmentFile=/etc/gh-runners/instances/%i.env
 ExecStart=/usr/local/sbin/gh-runner-run-instance %i
