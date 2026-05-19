@@ -54,6 +54,12 @@ spec:
           value: "8000"
         - name: BEHIND_HTTPS_PROXY
           value: "true"
+        # Apprise-shim is reachable only on the k3s service CIDR (10.43.0.0/16),
+        # which bugsink's non-global IP guard rejects. The allow list does NOT
+        # bypass that guard (see alerts/service_backends/webhook_security.py),
+        # so we have to disable it outright.
+        - name: ALERTS_WEBHOOK_DENY_NON_GLOBAL
+          value: "false"
         volumeMounts:
         - name: data
           mountPath: /data
