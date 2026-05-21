@@ -21,6 +21,12 @@
 #   RUNNERS_PER_REPO           - default: 4
 #   RUNNER_VERSION             - default: 2.328.0
 #   RUNNER_LABELS              - default: "self-hosted,linux,homeserver"
+#   ACTIONS_RESULTS_URL        - Self-hosted gha-cache URL (e.g.
+#                                https://gha-cache.internal.prakash.com.br/).
+#                                When set, install.sh patches each Runner.Worker.dll
+#                                so the runner stops overwriting this value,
+#                                and points all jobs at the self-hosted cache.
+#                                Leave unset to keep using GitHub's cache.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -46,6 +52,7 @@ GH_RUNNERS_SSH="${GH_RUNNERS_SSH:-deployer@192.168.20.50}"
 export RUNNERS_PER_REPO="${RUNNERS_PER_REPO:-4}"
 export RUNNER_VERSION="${RUNNER_VERSION:-2.334.0}"
 export RUNNER_LABELS="${RUNNER_LABELS:-self-hosted,linux,homeserver}"
+export ACTIONS_RESULTS_URL="${ACTIONS_RESULTS_URL:-}"
 
 check_env GH_APP_CLIENT_ID GH_APP_PRIVATE_KEY_FILE GH_REPOS
 
@@ -64,6 +71,11 @@ echo "  Repos:            ${GH_REPOS}"
 echo "  Runners per repo: ${RUNNERS_PER_REPO}"
 echo "  Runner version:   ${RUNNER_VERSION}"
 echo "  Labels:           ${RUNNER_LABELS}"
+if [[ -n "$ACTIONS_RESULTS_URL" ]]; then
+  echo "  Cache server:     ${ACTIONS_RESULTS_URL}"
+else
+  echo "  Cache server:     (none — using GitHub-hosted cache)"
+fi
 echo "=============================================="
 echo ""
 
