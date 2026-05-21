@@ -19,6 +19,10 @@
 #   RUNNERS_PER_REPO         - Ephemeral runner slots per repo (default: 4)
 #   RUNNER_VERSION           - actions/runner release version (default: 2.328.0)
 #   RUNNER_LABELS            - Comma-separated labels (default: "self-hosted,linux,homeserver")
+#   ACTIONS_RESULTS_URL      - Self-hosted cache server URL (must end with /).
+#                              When set, every runner binary is patched so it
+#                              doesn't overwrite this value at job start, and
+#                              the URL is injected into each instance's env.
 if [[ -n "${REMOTE_HOST:-}" ]]; then
   { printf 'export %s=%q\n' \
       GH_APP_CLIENT_ID         "${GH_APP_CLIENT_ID:-}" \
@@ -26,7 +30,8 @@ if [[ -n "${REMOTE_HOST:-}" ]]; then
       GH_REPOS                 "${GH_REPOS:-}" \
       RUNNERS_PER_REPO         "${RUNNERS_PER_REPO:-}" \
       RUNNER_VERSION           "${RUNNER_VERSION:-}" \
-      RUNNER_LABELS            "${RUNNER_LABELS:-}"
+      RUNNER_LABELS            "${RUNNER_LABELS:-}" \
+      ACTIONS_RESULTS_URL      "${ACTIONS_RESULTS_URL:-}"
     cat "$0"
   } | ssh "$REMOTE_HOST" "sudo bash -s"
   exit $?
@@ -45,6 +50,25 @@ fi
 RUNNERS_PER_REPO="${RUNNERS_PER_REPO:-4}"
 RUNNER_VERSION="${RUNNER_VERSION:-2.334.0}"
 RUNNER_LABELS="${RUNNER_LABELS:-self-hosted,linux,homeserver}"
+ACTIONS_RESULTS_URL="${ACTIONS_RESULTS_URL:-}"
+
+# Cache-server URL must end with a slash per falcondev docs; tolerate either form.
+if [[ -n "$ACTIONS_RESULTS_URL" && "${ACTIONS_RESULTS_URL: -1}" != "/" ]]; then
+  ACTIONS_RESULTS_URL="${ACTIONS_RESULTS_URL}/"
+fi
+
+# Renames the env-var lookup ACTIONS_RESULTS_URL → ACTIONS_RESULTS_ORL inside
+# Runner.Worker.dll (string is UTF-16LE, hence the \x00 between each ASCII
+# byte). Stops the runner from overwriting whatever ACTIONS_RESULTS_URL we
+# inject via systemd at job start. Idempotent: sed silently no-ops on
+# already-patched binaries. If actions/runner ever ships a build where this
+# byte sequence has moved, runs will quietly fall back to GitHub's cache —
+# revisit the pattern at https://gha-cache-server.falcondev.io/getting-started
+patch_runner_worker_dll() {
+  local dll="$1"
+  [[ -f "$dll" ]] || return 0
+  sed -i 's/\x41\x00\x43\x00\x54\x00\x49\x00\x4F\x00\x4E\x00\x53\x00\x5F\x00\x52\x00\x45\x00\x53\x00\x55\x00\x4C\x00\x54\x00\x53\x00\x5F\x00\x55\x00\x52\x00\x4C\x00/\x41\x00\x43\x00\x54\x00\x49\x00\x4F\x00\x4E\x00\x53\x00\x5F\x00\x52\x00\x45\x00\x53\x00\x55\x00\x4C\x00\x54\x00\x53\x00\x5F\x00\x4F\x00\x52\x00\x4C\x00/g' "$dll"
+}
 
 ARCH="$(dpkg --print-architecture)"
 case "$ARCH" in
@@ -215,6 +239,13 @@ if [[ "$INSTALLED_VERSION" != "$RUNNER_VERSION" ]]; then
   echo "$RUNNER_VERSION" > "$RUNNER_VERSION_FILE"
 fi
 
+# Patch the source runner's Runner.Worker.dll so per-instance copies inherit
+# the patch via `cp -a` below. No-op when ACTIONS_RESULTS_URL is unset (i.e.
+# user wants the default GitHub cache behaviour).
+if [[ -n "$ACTIONS_RESULTS_URL" ]]; then
+  patch_runner_worker_dll "${RUNNER_DIR}/bin/Runner.Worker.dll"
+fi
+
 # ---------------------------------------------------------------------------
 # Helper scripts in /usr/local/sbin (kept out of /opt/actions-runner so they
 # don't get copied into every per-instance dir).
@@ -339,6 +370,7 @@ cat > "$ETC_DIR/env" <<ENVFILE
 GH_APP_CLIENT_ID=${GH_APP_CLIENT_ID}
 GH_APP_PRIVATE_KEY_PATH=${ETC_DIR}/private-key.pem
 RUNNER_LABELS=${RUNNER_LABELS}
+ACTIONS_RESULTS_URL=${ACTIONS_RESULTS_URL}
 ENVFILE
 chown root:runner "$ETC_DIR/env"
 chmod 0640 "$ETC_DIR/env"
@@ -415,6 +447,12 @@ for repo_spec in "${REPOS[@]}"; do
       cp -a "${RUNNER_DIR}/." "${INSTANCE_DIR}/"
       chown -R runner:runner "$INSTANCE_DIR"
     fi
+    # Idempotently re-patch existing instances too. Newly-copied dirs above
+    # inherit the patched source dll already; this catches instances created
+    # by older installs that ran before cache-server support landed.
+    if [[ -n "$ACTIONS_RESULTS_URL" ]]; then
+      patch_runner_worker_dll "${INSTANCE_DIR}/bin/Runner.Worker.dll"
+    fi
     cat > "${ETC_DIR}/instances/${INSTANCE}.env" <<ENV
 GH_OWNER=${OWNER}
 GH_REPO=${REPO}
@@ -458,6 +496,10 @@ echo "  Repos:            ${GH_REPOS}"
 echo "  Runners per repo: ${RUNNERS_PER_REPO}"
 echo "  Labels:           ${RUNNER_LABELS}"
 echo "  Runner version:   ${RUNNER_VERSION}"
+echo ""
+if [[ -n "$ACTIONS_RESULTS_URL" ]]; then
+  echo "  Cache server:     ${ACTIONS_RESULTS_URL}  (Runner.Worker.dll patched)"
+fi
 echo ""
 echo "  Status:  systemctl status 'gh-runner@*'"
 echo "  Logs:    journalctl -u 'gh-runner@*' -f"
