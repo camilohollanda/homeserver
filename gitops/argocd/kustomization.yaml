@@ -4,5 +4,4 @@ kind: Kustomization
 resources:
   - argocd-server-service.yaml
   - ingress.yaml
-  - notify-watcher-script.yaml
-  - notify-watcher.yaml
+  - notifications-cm.yaml
