@@ -20,7 +20,7 @@ data:
         body: |
           {
             "title": "Deployed: {{.app.metadata.name}}",
-            "body": "{{.app.metadata.name}} synced to `{{slice .app.status.sync.revision 0 7}}` ({{.app.status.health.status}})\n\n[View in ArgoCD](https://argocd.internal.prakash.com.br/applications/{{.app.metadata.namespace}}/{{.app.metadata.name}})",
+            "body": "{{.app.metadata.name}} synced to `{{trunc 7 .app.status.sync.revision}}` ({{.app.status.health.status}})\n\n[View in ArgoCD](https://argocd.internal.prakash.com.br/applications/{{.app.metadata.namespace}}/{{.app.metadata.name}})",
             "tag": "{{.app.metadata.name}}",
             "type": "info",
             "format": "markdown"
@@ -31,12 +31,13 @@ data:
   # whole point of this controller swap: kustomize overrides are written
   # exactly once per image-updater patch, whereas summary.images briefly
   # flickers during a rolling update and caused the old shell watcher to
-  # double-fire.
+  # double-fire. The optional-chained access (`?.`) keeps the expression
+  # valid for apps that have no kustomize block at all.
   trigger.on-deployed: |
     - description: Application is synced and healthy
       send: [app-deployed]
       when: app.status.operationState.phase in ['Succeeded'] and app.status.health.status == 'Healthy' and app.status.sync.status == 'Synced'
-      oncePer: app.status.sync.revision + ',' + string(app.spec.source.kustomize.images)
+      oncePer: app.status.sync.revision + ',' + string(app.spec.source?.kustomize?.images)
 
   # Default subscription — every Application notifies, no per-app
   # annotations required. Mirrors the old watcher's "notify everything"
