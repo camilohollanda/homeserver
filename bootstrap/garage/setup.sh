@@ -6,7 +6,9 @@
 #   ./bootstrap/garage/setup.sh
 #
 # Required env vars:
-#   CF_API_TOKEN         - Cloudflare API token (Zone.DNS Edit)
+#   CF_API_TOKEN         - Cloudflare API token (used on the VM by certbot for the
+#                          DNS-01 challenge; no DNS records are created by this script —
+#                          A records are managed in terraform/cloudflare-dns.tf)
 #   LETSENCRYPT_EMAIL    - Email for Let's Encrypt notifications
 #
 # Optional env vars (auto-generated if unset):
@@ -18,8 +20,6 @@
 #   GARAGE_SSH           - default: deployer@192.168.20.22
 #   GARAGE_VERSION       - default: v1.0.1
 #   GARAGE_DATA_DEVICE   - default: /dev/sdb
-#   GARAGE_VM_IP         - IP to point garage.internal at (default: 192.168.20.22)
-#   SKIP_DNS=1           - Skip Cloudflare DNS automation (default: auto-created)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -40,64 +40,7 @@ wait_ssh() {
   done
   echo "✓ SSH ready"
 }
-get_zone_id() {
-  # Look up the Cloudflare zone whose name is the longest suffix of $1.
-  # Mirrors the helper in bootstrap/k3s/cloudflared-config.sh.
-  local domain="$1"
-  domain="${domain#\*.}"
-
-  local zones
-  zones=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?per_page=50" \
-    -H "Authorization: Bearer ${CF_API_TOKEN}" \
-    -H "Content-Type: application/json")
-
-  if [ "$(echo "$zones" | jq -r '.success')" != "true" ]; then
-    echo "Error: Cloudflare zones lookup failed." >&2
-    echo "$zones" | jq -r '.errors[]? | "  - \(.message)"' >&2
-    return 1
-  fi
-
-  local best_id="" best_name=""
-  while IFS=$'\t' read -r id name; do
-    if [[ "$domain" == "$name" ]] || [[ "$domain" == *".$name" ]]; then
-      if [ ${#name} -gt ${#best_name} ]; then
-        best_id="$id"; best_name="$name"
-      fi
-    fi
-  done < <(echo "$zones" | jq -r '.result[] | "\(.id)\t\(.name)"')
-
-  echo "$best_id"
-}
-ensure_a_record() {
-  local zone_id="$1" hostname="$2" ip="$3" existing record_id
-  existing=$(curl -s -X GET \
-    "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records?type=A&name=${hostname}" \
-    -H "Authorization: Bearer ${CF_API_TOKEN}" -H "Content-Type: application/json")
-  if [ "$(echo "$existing" | jq -r '.success')" != "true" ]; then
-    echo "Error: Cloudflare DNS query failed for ${hostname}." >&2
-    echo "$existing" | jq -r '.errors[]? | "  - \(.message)"' >&2
-    return 1
-  fi
-  record_id=$(echo "$existing" | jq -r '.result[0].id // empty')
-  if [ -n "$record_id" ]; then
-    echo "  Updating A record: ${hostname} -> ${ip}"
-    curl -s -X PUT \
-      "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records/${record_id}" \
-      -H "Authorization: Bearer ${CF_API_TOKEN}" -H "Content-Type: application/json" \
-      --data "{\"type\":\"A\",\"name\":\"${hostname}\",\"content\":\"${ip}\",\"ttl\":1}" \
-      | jq -e '.success' >/dev/null
-  else
-    echo "  Creating A record: ${hostname} -> ${ip}"
-    curl -s -X POST \
-      "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records" \
-      -H "Authorization: Bearer ${CF_API_TOKEN}" -H "Content-Type: application/json" \
-      --data "{\"type\":\"A\",\"name\":\"${hostname}\",\"content\":\"${ip}\",\"ttl\":1}" \
-      | jq -e '.success' >/dev/null
-  fi
-}
-
 GARAGE_SSH="${GARAGE_SSH:-deployer@192.168.20.22}"
-GARAGE_VM_IP="${GARAGE_VM_IP:-192.168.20.22}"
 export GARAGE_DOMAIN="${GARAGE_DOMAIN:-garage.internal.prakash.com.br}"
 export GARAGE_VERSION="${GARAGE_VERSION:-v1.0.1}"
 export GARAGE_DATA_DEVICE="${GARAGE_DATA_DEVICE:-/dev/sdb}"
@@ -117,27 +60,11 @@ echo ""
 
 wait_ssh "$GARAGE_SSH"
 
-# DNS record — auto-created via Cloudflare (zone resolved from GARAGE_DOMAIN)
-if [[ "${SKIP_DNS:-0}" == "1" ]]; then
-  echo "==> SKIP_DNS=1 — skipping Cloudflare A-record step"
-  echo "    Manually ensure: ${GARAGE_DOMAIN} -> ${GARAGE_VM_IP}"
-else
-  command -v jq >/dev/null || { echo "Error: 'jq' is required for DNS automation"; exit 1; }
-  echo "==> Resolving Cloudflare zone for ${GARAGE_DOMAIN}..."
-  ZONE_ID="$(get_zone_id "$GARAGE_DOMAIN")"
-  if [[ -z "$ZONE_ID" ]]; then
-    echo "Error: no Cloudflare zone found for ${GARAGE_DOMAIN}." >&2
-    echo "  The CF_API_TOKEN must have Zone.Read for the parent zone, and the" >&2
-    echo "  zone must already exist in your Cloudflare account." >&2
-    echo "  Set SKIP_DNS=1 to bypass and create the record manually." >&2
-    exit 1
-  fi
-  echo "  Zone: ${ZONE_ID}"
-  echo "==> Ensuring A record ${GARAGE_DOMAIN} -> ${GARAGE_VM_IP}..."
-  ensure_a_record "$ZONE_ID" "$GARAGE_DOMAIN" "$GARAGE_VM_IP"
-fi
+# DNS for ${GARAGE_DOMAIN} is managed by terraform/cloudflare-dns.tf
+# (resource cloudflare_dns_record.internal_a["garage"]). Make sure that record
+# exists before running this script — otherwise certbot's DNS-01 challenge will
+# work but the service won't be reachable by name.
 
-echo ""
 echo "==> Sanity check: data disk attached to VM?"
 if ! ssh "$GARAGE_SSH" "test -b ${GARAGE_DATA_DEVICE}"; then
   cat <<EOF >&2
