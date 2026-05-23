@@ -39,18 +39,24 @@ data:
             "format": "markdown"
           }
 
-  # Fires once per (git rev + kustomize image override) tuple. Using
-  # spec.source.kustomize.images instead of status.summary.images is the
-  # whole point of this controller swap: kustomize overrides are written
-  # exactly once per image-updater patch, whereas summary.images briefly
-  # flickers during a rolling update and caused the old shell watcher to
-  # double-fire. The optional-chained access (`?.`) keeps the expression
-  # valid for apps that have no kustomize block at all.
+  # Fires once per kustomize image-override tuple. Deliberately *not* keyed
+  # on app.status.sync.revision: that would re-fire for every app on every
+  # gitops commit (since all apps share targetRevision: main), even when the
+  # commit only touched an unrelated configmap. Keying on the image tuple
+  # means we only ping when argocd-image-updater actually rotates a digest,
+  # which is the event humans care about. Apps without kustomize images
+  # (helm-only / umbrella / config-only) will fire once after this change
+  # lands and then stay quiet — that's fine, manual gitops pushes don't
+  # need a confirmation ping because the pusher already knows.
+  #
+  # The operationState != nil guard avoids a "cannot fetch phase from <nil>"
+  # eval error for apps that have no operationState yet (e.g. the app-of-
+  # apps umbrella before its first sync completes).
   trigger.on-deployed: |
     - description: Application is synced and healthy
       send: [app-deployed]
-      when: app.status.operationState.phase in ['Succeeded'] and app.status.health.status == 'Healthy' and app.status.sync.status == 'Synced'
-      oncePer: app.status.sync.revision + ',' + string(app.spec.source?.kustomize?.images)
+      when: app.status.operationState != nil and app.status.operationState.phase in ['Succeeded'] and app.status.health.status == 'Healthy' and app.status.sync.status == 'Synced'
+      oncePer: string(app.spec.source?.kustomize?.images)
 
   # Health-degraded covers the common "image updater bumped the digest, new
   # pod CrashLoopBackOff, rollout never reached Healthy" case — kubernetes
