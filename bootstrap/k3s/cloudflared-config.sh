@@ -13,6 +13,12 @@ CF_API_TOKEN="${CF_API_TOKEN:-}"
 INGRESS_NGINX_IP="127.0.0.1"
 INGRESS_NGINX_PORT="80"
 
+# Garage S3 (lives on the services VM, not in k3s — cloudflared talks directly
+# across the LAN to its S3 port. Requests are SigV4-signed so this LAN path is
+# auth'd.)
+GARAGE_S3_IP="192.168.20.22"
+GARAGE_S3_PORT="3900"
+
 # ---------------------------------------------------------------------------
 # Local dependency check
 # ---------------------------------------------------------------------------
@@ -55,18 +61,71 @@ check_dns_record() {
     -H "Content-Type: application/json"
 }
 
+# Print Cloudflare's reported status once per script invocation when an API
+# call has failed in a way that suggests it might not be our problem (5xx, or
+# the legacy `{"code":1000,"error":...}` envelope CF returns at the gateway).
+CF_STATUS_CHECKED=""
+cf_status_check() {
+  [ -n "$CF_STATUS_CHECKED" ] && return
+  CF_STATUS_CHECKED=1
+  local cf_status
+  cf_status=$(curl -s --max-time 5 "https://www.cloudflarestatus.com/api/v2/status.json" 2>/dev/null \
+    | jq -r '.status.description // empty' 2>/dev/null)
+  if [ -z "$cf_status" ]; then
+    echo "    (Could not reach https://www.cloudflarestatus.com/ to check CF status)"
+  elif [[ "$cf_status" != *"All Systems Operational"* ]]; then
+    echo "    ⚠️  Cloudflare status: ${cf_status}"
+    echo "       https://www.cloudflarestatus.com/ — retry once resolved."
+  else
+    echo "    (Cloudflare reports all systems operational — issue may be account/zone-specific)"
+  fi
+}
+
+# Curl POST/PUT JSON and report a useful failure: HTTP status, parsed message
+# if present, otherwise the raw body. Triggers a CF status check on 5xx or the
+# code:1000 gateway envelope. Echoes the body so callers can keep parsing it.
+cf_api_write() {
+  local method="$1" url="$2" data="$3" context="$4"
+  local raw http_status body
+  raw=$(curl -s -w "\n__HTTP_STATUS__:%{http_code}" -X "$method" "$url" \
+    -H "Authorization: Bearer ${CF_API_TOKEN}" \
+    -H "Content-Type: application/json" \
+    --data "$data")
+  http_status="${raw##*__HTTP_STATUS__:}"
+  body="${raw%$'\n'__HTTP_STATUS__:*}"
+
+  if echo "$body" | jq -e '.success == true' &>/dev/null; then
+    echo "$body"
+    return 0
+  fi
+
+  local msg
+  msg=$(echo "$body" | jq -r '.errors[0].message // empty' 2>/dev/null)
+  if [ -n "$msg" ]; then
+    echo "  ✗ ${context}: ${msg} (HTTP ${http_status})" >&2
+  else
+    echo "  ✗ ${context}: HTTP ${http_status}" >&2
+    echo "    Raw response:" >&2
+    echo "$body" | sed 's/^/      /' >&2
+  fi
+
+  # 5xx or the legacy { code: 1000, error: ... } gateway envelope -> likely CF-side
+  if [[ "$http_status" =~ ^5 ]] || echo "$body" | jq -e '.code == 1000' &>/dev/null; then
+    cf_status_check >&2
+  fi
+
+  return 1
+}
+
 create_cname_via_api() {
   local zone_id="$1" hostname="$2" tunnel_id="$3"
   local target="${tunnel_id}.cfargotunnel.com"
-  local response
-  response=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records" \
-    -H "Authorization: Bearer ${CF_API_TOKEN}" \
-    -H "Content-Type: application/json" \
-    --data "{\"type\":\"CNAME\",\"name\":\"${hostname}\",\"content\":\"${target}\",\"ttl\":1,\"proxied\":true}")
-  if [ "$(echo "$response" | jq -r '.success')" == "true" ]; then
+  if cf_api_write POST \
+    "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records" \
+    "{\"type\":\"CNAME\",\"name\":\"${hostname}\",\"content\":\"${target}\",\"ttl\":1,\"proxied\":true}" \
+    "Create CNAME failed" >/dev/null; then
     echo "  ✓ CNAME record created"
   else
-    echo "  ✗ API error: $(echo "$response" | jq -r '.errors[0].message // "Unknown error"')"
     return 1
   fi
 }
@@ -74,15 +133,12 @@ create_cname_via_api() {
 update_cname_via_api() {
   local zone_id="$1" record_id="$2" hostname="$3" tunnel_id="$4"
   local target="${tunnel_id}.cfargotunnel.com"
-  local response
-  response=$(curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records/${record_id}" \
-    -H "Authorization: Bearer ${CF_API_TOKEN}" \
-    -H "Content-Type: application/json" \
-    --data "{\"type\":\"CNAME\",\"name\":\"${hostname}\",\"content\":\"${target}\",\"ttl\":1,\"proxied\":true}")
-  if [ "$(echo "$response" | jq -r '.success')" == "true" ]; then
+  if cf_api_write PUT \
+    "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records/${record_id}" \
+    "{\"type\":\"CNAME\",\"name\":\"${hostname}\",\"content\":\"${target}\",\"ttl\":1,\"proxied\":true}" \
+    "Update CNAME failed" >/dev/null; then
     echo "  ✓ CNAME record updated"
   else
-    echo "  ✗ API error: $(echo "$response" | jq -r '.errors[0].message // "Unknown error"')"
     return 1
   fi
 }
@@ -192,6 +248,13 @@ tunnel: ${TUNNEL_ID}
 credentials-file: /root/.cloudflared/${TUNNEL_ID}.json
 
 ingress:
+  # Garage S3 — must come BEFORE the wildcards below; cloudflared matches in order.
+  - hostname: "storage.werify.app"
+    service: http://${GARAGE_S3_IP}:${GARAGE_S3_PORT}
+  - hostname: "storage-staging.werify.app"
+    service: http://${GARAGE_S3_IP}:${GARAGE_S3_PORT}
+  - hostname: "storage.iddh.com.br"
+    service: http://${GARAGE_S3_IP}:${GARAGE_S3_PORT}
   - hostname: "*.werify.app"
     service: http://${INGRESS_NGINX_IP}:${INGRESS_NGINX_PORT}
   - hostname: "werify.app"
@@ -233,6 +296,10 @@ if [ -n "$CF_API_TOKEN" ]; then
   create_dns_route "${TUNNEL_NAME}" "prakash.com.br" "${TUNNEL_ID}"
   create_dns_route "${TUNNEL_NAME}" "*.prakash.com.br" "${TUNNEL_ID}"
   create_dns_route "${TUNNEL_NAME}" "membros.iddh.com.br" "${TUNNEL_ID}"
+  # storage.werify.app is already covered by the *.werify.app CNAME above —
+  # no specific record needed. iddh.com.br has no wildcard, so storage.iddh.com.br
+  # still needs its own CNAME.
+  create_dns_route "${TUNNEL_NAME}" "storage.iddh.com.br" "${TUNNEL_ID}"
 else
   echo "⚠️  No API token provided — skipping DNS configuration."
   echo "   Re-run with: CF_API_TOKEN=xxx ./cloudflared-config.sh"
