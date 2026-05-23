@@ -20,22 +20,15 @@ resource "cloudflare_zero_trust_tunnel_cloudflared" "homeserver" {
 }
 
 locals {
-  # Match the order from bootstrap/k3s/cloudflared-config.sh — cloudflared
-  # evaluates ingress rules top-to-bottom, so the storage hostnames must
-  # come before the *.werify.app wildcard.
-  ingress_nginx_origin = "http://127.0.0.1:80"      # ingress-nginx on the k3s VM (loopback — cloudflared lives on same host)
-  garage_s3_origin     = "http://192.168.20.22:3900" # Garage on the services VM, across the LAN
+  ingress_nginx_origin = "http://127.0.0.1:80" # ingress-nginx on the k3s VM (loopback — cloudflared lives on same host)
 
   tunnel_ingress = [
-    { hostname = "storage.werify.app",         service = local.garage_s3_origin },
-    { hostname = "storage-staging.werify.app", service = local.garage_s3_origin },
-    { hostname = "storage.iddh.com.br",        service = local.garage_s3_origin },
-    { hostname = "*.werify.app",               service = local.ingress_nginx_origin },
-    { hostname = "werify.app",                 service = local.ingress_nginx_origin },
-    { hostname = "*.prakash.com.br",           service = local.ingress_nginx_origin },
-    { hostname = "prakash.com.br",             service = local.ingress_nginx_origin },
-    { hostname = "membros.iddh.com.br",        service = local.ingress_nginx_origin },
-    { service  = "http_status:404" },
+    { hostname = "*.werify.app", service = local.ingress_nginx_origin },
+    { hostname = "werify.app", service = local.ingress_nginx_origin },
+    { hostname = "*.prakash.com.br", service = local.ingress_nginx_origin },
+    { hostname = "prakash.com.br", service = local.ingress_nginx_origin },
+    { hostname = "membros.iddh.com.br", service = local.ingress_nginx_origin },
+    { service = "http_status:404" },
   ]
 }
 

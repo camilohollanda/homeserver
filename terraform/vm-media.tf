@@ -34,8 +34,8 @@ resource "proxmox_virtual_environment_vm" "media_server" {
     # ssd=false: this VM lives on tank-vm (HDD) by design — bulk media on
     # 4TB spinning storage. Tell the guest it's rotational so the kernel
     # picks an HDD-appropriate I/O scheduler.
-    ssd          = false
-    iothread     = true
+    ssd      = false
+    iothread = true
   }
 
   network_device {

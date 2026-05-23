@@ -6,7 +6,7 @@ resource "proxmox_virtual_environment_vm" "ai_gpu" {
   tags        = split(",", local.ai_vm.tags)
 
   clone {
-    vm_id     = var.template_vmid_debian12_nvidia  # Debian 12 + NVIDIA drivers pre-installed
+    vm_id     = var.template_vmid_debian12_nvidia # Debian 12 + NVIDIA drivers pre-installed
     node_name = var.pm_node
     full      = true
   }

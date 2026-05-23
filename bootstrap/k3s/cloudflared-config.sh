@@ -67,7 +67,10 @@ else
     echo ""
     echo "Then re-run this script. After it succeeds, set TF var"
     echo "  cloudflare_tunnel_id = \"<the tunnel ID printed above>\""
-    echo "and run terraform/cloudflare-imports.sh to bring it under management."
+    echo "and import the tunnel:"
+    echo "  cd terraform"
+    echo "  terraform import cloudflare_zero_trust_tunnel_cloudflared.homeserver \\"
+    echo "    \"\$TF_VAR_cloudflare_account_id/<the tunnel ID>\""
     exit 1
   fi
 fi

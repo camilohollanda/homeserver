@@ -22,21 +22,19 @@ locals {
   # Order doesn't matter here (it's a map), but the corresponding tunnel
   # ingress rules in cloudflare-tunnel.tf must be ordered correctly.
   public_tunnel_records = {
-    werify_apex        = { zone = "werify_app",     name = "werify.app" }
-    werify_wildcard    = { zone = "werify_app",     name = "*.werify.app" }
-    prakash_apex       = { zone = "prakash_com_br", name = "prakash.com.br" }
-    prakash_wildcard   = { zone = "prakash_com_br", name = "*.prakash.com.br" }
-    membros_iddh       = { zone = "iddh_com_br",    name = "membros.iddh.com.br" }
-    storage_iddh       = { zone = "iddh_com_br",    name = "storage.iddh.com.br" }
-    # storage.werify.app and storage-staging.werify.app are covered by *.werify.app — no separate record
+    werify_apex      = { zone = "werify_app", name = "werify.app" }
+    werify_wildcard  = { zone = "werify_app", name = "*.werify.app" }
+    prakash_apex     = { zone = "prakash_com_br", name = "prakash.com.br" }
+    prakash_wildcard = { zone = "prakash_com_br", name = "*.prakash.com.br" }
+    membros_iddh     = { zone = "iddh_com_br", name = "membros.iddh.com.br" }
   }
 
   # Internal LAN A-records on internal.prakash.com.br.
   # All not proxied (Cloudflare cannot proxy to RFC1918).
   internal_a_records = {
     # services VM (vmid 114) — multi-tenant docker host behind shared nginx
-    garage    = { name = "garage.internal.prakash.com.br",    ip = local.services_vm_ip }
-    mailpit   = { name = "mailpit.internal.prakash.com.br",   ip = local.services_vm_ip }
+    garage    = { name = "garage.internal.prakash.com.br", ip = local.services_vm_ip }
+    mailpit   = { name = "mailpit.internal.prakash.com.br", ip = local.services_vm_ip }
     infisical = { name = "infisical.internal.prakash.com.br", ip = local.services_vm_ip }
     gha_cache = { name = "gha-cache.internal.prakash.com.br", ip = local.services_vm_ip }
 
@@ -46,10 +44,10 @@ locals {
 
     # media stack (vmid 116, all share one VM behind a local nginx)
     jellyfin = { name = "jellyfin.internal.prakash.com.br", ip = local.media_vm_ip }
-    torrent  = { name = "torrent.internal.prakash.com.br",  ip = local.media_vm_ip }
-    radarr   = { name = "radarr.internal.prakash.com.br",   ip = local.media_vm_ip }
-    sonarr   = { name = "sonarr.internal.prakash.com.br",   ip = local.media_vm_ip }
-    bazarr   = { name = "bazarr.internal.prakash.com.br",   ip = local.media_vm_ip }
+    torrent  = { name = "torrent.internal.prakash.com.br", ip = local.media_vm_ip }
+    radarr   = { name = "radarr.internal.prakash.com.br", ip = local.media_vm_ip }
+    sonarr   = { name = "sonarr.internal.prakash.com.br", ip = local.media_vm_ip }
+    bazarr   = { name = "bazarr.internal.prakash.com.br", ip = local.media_vm_ip }
     prowlarr = { name = "prowlarr.internal.prakash.com.br", ip = local.media_vm_ip }
   }
 }

@@ -159,15 +159,15 @@ variable "cloudflare_api_token" {
 }
 
 variable "cloudflare_account_id" {
-  description = "Cloudflare account ID (find under any zone's overview page). Required for tunnel + ruleset resources."
+  description = "Cloudflare account ID (find under any zone's overview page). Required for the tunnel resource."
   type        = string
 }
 
 variable "cloudflare_zone_ids" {
   description = <<-EOT
-    Map of zone name -> zone ID. Populate from `cloudflare-imports.sh discover` or copy from
-    the CF dashboard. The keys are referenced from cloudflare-dns.tf / cloudflare-waf.tf,
-    so don't rename them without updating those files.
+    Map of zone name -> zone ID. Copy from the CF dashboard (any zone's overview page).
+    The keys are referenced from cloudflare-dns.tf, so don't rename them without updating
+    that file.
 
     Note: internal.prakash.com.br is NOT a separate zone — those records live inside
     the prakash.com.br zone as A-records with multi-segment names.

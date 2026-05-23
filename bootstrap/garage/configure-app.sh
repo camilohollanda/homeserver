@@ -2,6 +2,12 @@
 # Provisions a per-app bucket on Garage: bucket + access key + CORS rule.
 # Runs locally; SSHes into the services VM for all Garage operations.
 #
+# NOTE: the CORS step only matters if Garage is reachable from a browser —
+# i.e. the S3 endpoint is exposed to the public internet (e.g. via a
+# Cloudflare Tunnel route). In the current setup Garage is LAN-only behind
+# the shared services nginx, so browsers never hit it directly and CORS is
+# a no-op. The bucket + key + grant steps still apply for server-side use.
+#
 # Usage:
 #   ./configure-app.sh <bucket> <endpoint-host> "<origin1,origin2,...>"
 #
