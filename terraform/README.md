@@ -149,8 +149,76 @@ helm install external-secrets external-secrets/external-secrets \
   -n external-secrets --create-namespace
 ```
 
+## Cloudflare resources
+
+DNS records, the cloudflared tunnel (including its ingress routes), and the
+WAF / rate-limit rules on the public Garage endpoints are managed here too:
+
+- `cloudflare-tunnel.tf` — the `homeserver` tunnel + its remotely-managed
+  ingress block. After this is applied, the on-VM `/etc/cloudflared/config.yml`
+  contains only `tunnel:` + `credentials-file:` — all ingress routes come from
+  Cloudflare and live-reload on `terraform apply`.
+- `cloudflare-dns.tf` — public CNAMEs at the tunnel and internal A-records
+  on `internal.prakash.com.br` for LAN-only services.
+- `cloudflare-waf.tf` — block-unsigned-S3 WAF rule + 100 req / 10 s / IP
+  rate limit on the `storage.*` hostnames.
+
+### First-time migration (one-off)
+
+If your existing Cloudflare account already has the tunnel and records (it
+does — they were created by the older `cloudflared-config.sh` and per-app
+`setup.sh` scripts), import them before applying:
+
+```bash
+cd terraform
+
+# 1. Discover the IDs you need and print a tfvars snippet
+CF_API_TOKEN=xxx ./cloudflare-imports.sh discover
+# → paste output into terraform.tfvars (zone IDs, account ID, tunnel ID)
+
+# 2. Initialize providers
+terraform init
+
+# 3. Import the existing tunnel + all matching DNS records
+CF_API_TOKEN=xxx ./cloudflare-imports.sh import
+
+# 4. Plan — expected diff:
+#    - tunnel: config_src changes from "local" to "cloudflare"
+#    - cloudflare_zero_trust_tunnel_cloudflared_config.homeserver gets populated
+#    - 4 new cloudflare_ruleset resources (WAF + rate-limit, two zones)
+#    - DNS records should show 0 changes
+terraform plan
+
+# 5. Apply when the plan matches your expectation
+terraform apply
+```
+
+**Expected operational impact during step 5:** cloudflared on the k3s VM will
+reload once when the tunnel flips to remotely-managed (config now comes from
+CF instead of from `/etc/cloudflared/config.yml`). In practice this is a
+sub-second blip — connections in flight may briefly retry. If you want to
+avoid even that, drain traffic first (pause your CDN-level rules) before apply.
+
+### After migration, ongoing changes
+
+- **Add a route to the tunnel** → edit `local.tunnel_ingress` in
+  `cloudflare-tunnel.tf`. Cloudflared live-reloads on the next apply; no SSH
+  needed.
+- **Add an internal service** → add an entry to `local.internal_a_records` in
+  `cloudflare-dns.tf`.
+- **Add a public hostname** → add to `local.public_tunnel_records` AND to
+  `local.tunnel_ingress` (CNAME alone is not enough; the tunnel needs to know
+  what to route the host to).
+- **`bootstrap/k3s/cloudflared-config.sh`** is still used for first-time
+  cloudflared install on a fresh k3s VM — it now only writes the minimal
+  config (tunnel ID + credentials path) and registers the systemd service.
+
 ## Notes
 
 - The `.env` file is gitignored and contains sensitive information
 - State files are also gitignored
 - Use `terraform.tfvars` as an alternative if you prefer (also gitignored)
+- `terraform.tfstate` and `terraform.tfvars` were previously tracked in git;
+  they have been untracked. Existing committed history still contains secrets —
+  rotate sensitive values (Proxmox token, CF token, Infisical encryption key,
+  etc.) at your convenience as a follow-up.

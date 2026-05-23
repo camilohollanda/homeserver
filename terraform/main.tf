@@ -6,6 +6,14 @@ terraform {
       source  = "bpg/proxmox"
       version = "0.91.0"
     }
+    cloudflare = {
+      source  = "cloudflare/cloudflare"
+      version = "~> 5.0"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
+    }
     null = {
       source  = "hashicorp/null"
       version = "~> 3.0"
@@ -22,4 +30,8 @@ provider "proxmox" {
     agent    = true
     username = var.pm_ssh_user
   }
+}
+
+provider "cloudflare" {
+  api_token = var.cloudflare_api_token
 }

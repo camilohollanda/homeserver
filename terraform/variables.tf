@@ -153,9 +153,35 @@ variable "pm_ssh_user" {
 
 # Let's Encrypt / Cloudflare configuration (shared)
 variable "cloudflare_api_token" {
-  description = "Cloudflare API token for DNS-01 challenge (Edit zone DNS permission)"
+  description = "Cloudflare API token. Needs: Zone.DNS Edit, Zone.Zone Read, Account.Cloudflare Tunnel Edit. Same token is reused on VMs for DNS-01 cert challenges."
   type        = string
   sensitive   = true
+}
+
+variable "cloudflare_account_id" {
+  description = "Cloudflare account ID (find under any zone's overview page). Required for tunnel + ruleset resources."
+  type        = string
+}
+
+variable "cloudflare_zone_ids" {
+  description = <<-EOT
+    Map of zone name -> zone ID. Populate from `cloudflare-imports.sh discover` or copy from
+    the CF dashboard. The keys are referenced from cloudflare-dns.tf / cloudflare-waf.tf,
+    so don't rename them without updating those files.
+
+    Note: internal.prakash.com.br is NOT a separate zone — those records live inside
+    the prakash.com.br zone as A-records with multi-segment names.
+  EOT
+  type = object({
+    werify_app     = string
+    iddh_com_br    = string
+    prakash_com_br = string
+  })
+}
+
+variable "cloudflare_tunnel_id" {
+  description = "ID of the existing homeserver tunnel (read from /etc/cloudflared/config.yml on the k3s VM). Populated at import time."
+  type        = string
 }
 
 variable "letsencrypt_email" {
