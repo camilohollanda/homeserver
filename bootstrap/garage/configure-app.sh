@@ -72,19 +72,29 @@ echo ""
 echo "==> Applying CORS rule (origins: ${ORIGINS_CSV})..."
 
 IFS=',' read -ra ORIGINS <<< "$ORIGINS_CSV"
-ORIGINS_JSON="$(printf '"%s",' "${ORIGINS[@]}")"
-ORIGINS_JSON="[${ORIGINS_JSON%,}]"
 
-CORS_JSON=$(cat <<JSON
-{
-  "CORSRules": [
+# One CORSRule per origin: S3 (and Garage) only echo the *first* AllowedOrigin
+# of a matched rule back in Access-Control-Allow-Origin, so bundling multiple
+# origins into a single rule silently breaks all origins after the first.
+RULES_JSON=""
+for origin in "${ORIGINS[@]}"; do
+  RULES_JSON+=$(cat <<JSON
     {
-      "AllowedOrigins": ${ORIGINS_JSON},
+      "AllowedOrigins": ["${origin}"],
       "AllowedMethods": ["GET", "PUT", "POST", "HEAD", "DELETE"],
       "AllowedHeaders": ["*"],
       "ExposeHeaders": ["ETag"],
       "MaxAgeSeconds": 3000
-    }
+    },
+JSON
+)
+done
+RULES_JSON="${RULES_JSON%,}"
+
+CORS_JSON=$(cat <<JSON
+{
+  "CORSRules": [
+${RULES_JSON}
   ]
 }
 JSON
