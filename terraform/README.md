@@ -222,7 +222,8 @@ Why this matters:
 - The `.env` file is gitignored and contains sensitive information
 - State files are also gitignored
 - Use `terraform.tfvars` as an alternative if you prefer (also gitignored)
-- `terraform.tfstate` and `terraform.tfvars` were previously tracked in git;
-  they have been untracked. Existing committed history still contains secrets —
-  rotate sensitive values (Proxmox token, CF token, Infisical encryption key,
-  etc.) at your convenience as a follow-up.
+- `terraform.tfstate` and `terraform.tfvars` were previously tracked in git
+  and have been scrubbed from history with `git filter-repo`. Anyone who
+  cloned before the rewrite still has the historical blobs locally — if
+  that's a concern, rotate the secrets (Proxmox token, CF token, Infisical
+  encryption key, etc.) and have them re-clone.
