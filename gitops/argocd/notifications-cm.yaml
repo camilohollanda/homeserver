@@ -26,6 +26,19 @@ data:
             "format": "markdown"
           }
 
+  template.app-failed: |
+    webhook:
+      apprise:
+        method: POST
+        body: |
+          {
+            "title": "FAILED: {{.app.metadata.name}}",
+            "body": "{{.app.metadata.name}} — health=`{{.app.status.health.status}}` sync=`{{.app.status.sync.status}}` rev=`{{trunc 7 .app.status.sync.revision}}`\n{{range .app.status.conditions}}- **{{.type}}**: {{.message}}\n{{end}}\n[View in ArgoCD](https://argocd.internal.prakash.com.br/applications/{{.app.metadata.namespace}}/{{.app.metadata.name}})",
+            "tag": "{{.app.metadata.name}}",
+            "type": "failure",
+            "format": "markdown"
+          }
+
   # Fires once per (git rev + kustomize image override) tuple. Using
   # spec.source.kustomize.images instead of status.summary.images is the
   # whole point of this controller swap: kustomize overrides are written
@@ -39,6 +52,25 @@ data:
       when: app.status.operationState.phase in ['Succeeded'] and app.status.health.status == 'Healthy' and app.status.sync.status == 'Synced'
       oncePer: app.status.sync.revision + ',' + string(app.spec.source?.kustomize?.images)
 
+  # Health-degraded covers the common "image updater bumped the digest, new
+  # pod CrashLoopBackOff, rollout never reached Healthy" case — kubernetes
+  # flips the Deployment to Degraded after progressDeadlineSeconds. oncePer
+  # mirrors on-deployed so a flap-recover-flap on the same revision/image
+  # only pings once.
+  trigger.on-health-degraded: |
+    - description: Application health became Degraded
+      send: [app-failed]
+      when: app.status.health.status == 'Degraded'
+      oncePer: app.status.sync.revision + ',' + string(app.spec.source?.kustomize?.images)
+
+  # Sync-failed covers the other half: manifest invalid, hook failed, the
+  # sync operation itself errored before the workload ever started.
+  trigger.on-sync-failed: |
+    - description: Sync operation failed
+      send: [app-failed]
+      when: app.status.operationState != nil and app.status.operationState.phase in ['Error', 'Failed']
+      oncePer: app.status.operationState.syncResult.revision
+
   # Default subscription — every Application notifies, no per-app
   # annotations required. Mirrors the old watcher's "notify everything"
   # behaviour. Each app's name must have a matching tag entry in the
@@ -48,3 +80,5 @@ data:
       - apprise
       triggers:
       - on-deployed
+      - on-health-degraded
+      - on-sync-failed
