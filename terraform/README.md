@@ -149,8 +149,126 @@ helm install external-secrets external-secrets/external-secrets \
   -n external-secrets --create-namespace
 ```
 
+## Cloudflare resources
+
+DNS records, the cloudflared tunnel (including its ingress routes), and any
+WAF rules on the public Garage endpoints are managed here:
+
+- `cloudflare-tunnel.tf` — the `homeserver` tunnel + its remotely-managed
+  ingress block. The on-VM `/etc/cloudflared/config.yml` contains only
+  `tunnel:` + `credentials-file:` — all ingress routes come from Cloudflare
+  and live-reload on `terraform apply`.
+- `cloudflare-dns.tf` — public CNAMEs at the tunnel and internal A-records
+  for LAN-only services on `*.internal.prakash.com.br` (those records live
+  inside the `prakash.com.br` zone, not a separate delegated zone).
+- `cloudflare-waf.tf` — block-unsigned-S3 WAF rule. **Currently paused**
+  (both resource blocks commented out) while we validate the public storage
+  endpoints with real client traffic. Uncomment + apply to reactivate.
+  No rate-limit ruleset is committed; see "Operational quirks" below.
+
+### Token model — two tokens, different scopes
+
+Cloudflare access is split across two tokens. The split is intentional —
+compromise of one shouldn't grant the powers of the other.
+
+| Token | Env var | Scope | Where it lives | What it does |
+|---|---|---|---|---|
+| **A — narrow** | `CF_API_TOKEN` | `Zone.DNS:Edit` + `Zone:Read` on the 3 zones | `.env` on dev box AND `/etc/letsencrypt/cloudflare.ini` on every VM that uses certbot DNS-01 | certbot's `_acme-challenge.*` TXT writes; nothing else |
+| **B — broad** | `TF_VAR_cloudflare_api_token` | A's scopes **plus** `Account.Cloudflare Tunnel:Edit` and `Zone.Zone WAF:Edit` | `.env` on dev box only — **never copy to a VM** | Terraform provider + `cloudflare-imports.sh` |
+
+Why this matters:
+- If a VM is compromised, the attacker can edit DNS but cannot touch the
+  tunnel ingress or WAF — they can't, e.g., redirect routes to themselves
+  or whitelist their IP.
+- If the dev box is compromised, the attacker gets the broader token, but
+  that's a smaller and more controllable attack surface than 3+ VMs.
+- To rotate Token B alone: create a new token in CF dashboard with the same
+  permissions, swap value of `TF_VAR_cloudflare_api_token` in `.env`, delete
+  the old token. No SSH to any VM. Same recipe for Token A in reverse — but
+  rotating A also requires updating `/etc/letsencrypt/cloudflare.ini` on
+  each VM (currently 3: services, ai, postgres) and restarting certbot.
+
+### Operational quirks worth knowing
+
+- **`config_src` is `ForceNew` in the CF Terraform provider** — but the CF
+  API itself supports changing it in place. If you ever need to flip a
+  tunnel between locally-managed and remotely-managed, do it via the API
+  (`PATCH /accounts/X/cfd_tunnel/Y` with `{"config_src": "..."}`), then
+  `terraform state rm` + `terraform import` the tunnel to refresh state.
+  Letting Terraform handle the change would destroy + recreate the tunnel
+  — new UUID, new credentials JSON, manual cloudflared rewrite on the VM.
+- **Pre-populate the remote-managed config before flipping `config_src`**.
+  When you set `config_src=cloudflare`, cloudflared starts pulling its
+  ingress from CF's stored config — if that store is empty, every request
+  returns 404 until you push a config. Order: PUT the config first, THEN
+  patch `config_src`.
+- **Free-tier rate-limit rulesets are constrained**:
+  - `mitigation_timeout` must be exactly `10` (paid plans can go higher).
+  - 100 req / 10 s / IP is too tight for S3 multipart — a single 1 GB
+    upload at 5 MB parts bursts ~200 requests in seconds and trips the
+    limit. If you re-add a rate limit later, use a wide window (e.g.
+    1000+ req / 60 s / IP).
+- **`internal.prakash.com.br` is not a zone** — those A records live inside
+  the `prakash.com.br` zone with multi-segment names. The older bash
+  scripts hardcoded a zone ID that happened to be `prakash.com.br`'s.
+- **CF token permission changes take a few seconds to propagate** across
+  CF's edges. If Terraform 403s on a tunnel read immediately after you
+  add a scope to the token, retry once — it usually clears within a minute.
+
+### First-time migration (one-off — already done)
+
+These steps were used to bring the existing tunnel, public CNAMEs, and
+internal A-records under Terraform management without an outage. Kept for
+disaster-recovery reference; you should not need to run them again.
+
+```bash
+cd terraform
+
+# 1. Discover the IDs you need and print a tfvars snippet
+./cloudflare-imports.sh discover
+# → paste output into terraform.tfvars (zone IDs, account ID, tunnel ID)
+
+# 2. Initialize providers
+terraform init
+
+# 3. Import the existing tunnel + all matching DNS records
+./cloudflare-imports.sh import
+
+# 4. Flip the tunnel to remotely-managed via API (NOT terraform — see
+#    "Operational quirks"). The PUT first seeds the remote config, then
+#    PATCH flips config_src in place. Re-import after to refresh state.
+
+# 5. Plan + apply normally from here on
+terraform plan
+terraform apply
+```
+
+`./cloudflare-imports.sh` reads `TF_VAR_cloudflare_api_token` from env
+automatically (mise loads it from `.env`). Override with `CF_TF_TOKEN=xxx`
+if needed. **Do not** pass Token A — the import flow needs tunnel + WAF
+read scopes that A doesn't have.
+
+### Ongoing changes — the everyday workflow
+
+- **Add a route to the tunnel** → edit `local.tunnel_ingress` in
+  `cloudflare-tunnel.tf`. Cloudflared live-reloads on the next apply; no SSH.
+- **Add an internal service** → add an entry to `local.internal_a_records` in
+  `cloudflare-dns.tf`.
+- **Add a public hostname** → add to `local.public_tunnel_records` AND to
+  `local.tunnel_ingress` (CNAME alone is not enough; the tunnel needs to
+  know what to route the host to).
+- **Reactivate the WAF** → uncomment the two resource blocks in
+  `cloudflare-waf.tf` and `terraform apply`.
+- **`bootstrap/k3s/cloudflared-config.sh`** is still used for first-time
+  cloudflared install on a fresh k3s VM — it now only writes the minimal
+  config (tunnel ID + credentials path) and registers the systemd service.
+
 ## Notes
 
 - The `.env` file is gitignored and contains sensitive information
 - State files are also gitignored
 - Use `terraform.tfvars` as an alternative if you prefer (also gitignored)
+- `terraform.tfstate` and `terraform.tfvars` were previously tracked in git;
+  they have been untracked. Existing committed history still contains secrets —
+  rotate sensitive values (Proxmox token, CF token, Infisical encryption key,
+  etc.) at your convenience as a follow-up.

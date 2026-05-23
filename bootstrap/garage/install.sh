@@ -145,7 +145,11 @@ rpc_public_addr = "127.0.0.1:3901"
 
 [s3_api]
 s3_region = "${GARAGE_S3_REGION}"
-api_bind_addr = "127.0.0.1:3900"
+# Bound on all interfaces so cloudflared on the k3s VM can reach it over the LAN
+# for public hostnames (storage.werify.app, storage.iddh.com.br). All requests
+# are SigV4-signed; unauthenticated callers get 403. The shared services nginx
+# still proxies the internal vhost via 127.0.0.1:3900 — that path is unchanged.
+api_bind_addr = "0.0.0.0:3900"
 
 [admin]
 api_bind_addr = "127.0.0.1:3903"
@@ -283,9 +287,15 @@ fi
 
 echo ""
 echo "✓ Garage is running."
-echo "  S3 endpoint: https://${GARAGE_DOMAIN}  (region: ${GARAGE_S3_REGION})"
+echo "  S3 endpoint (LAN):    https://${GARAGE_DOMAIN}  (region: ${GARAGE_S3_REGION})"
+echo "  S3 endpoint (public): https://storage.werify.app, https://storage.iddh.com.br"
+echo "                        (served via Cloudflare Tunnel; run bootstrap/k3s/cloudflared-config.sh"
+echo "                         to refresh ingress + DNS routes if they aren't wired yet)"
 echo ""
-echo "  Create a bucket + key:"
+echo "  Per-app provisioning (bucket + key + CORS) — use the helper:"
+echo "    bootstrap/garage/configure-app.sh <bucket> <endpoint-host> '<origin1,origin2,...>'"
+echo ""
+echo "  Manual (no CORS — fine for server-side only):"
 echo "    sudo docker exec garage /garage bucket create myapp"
 echo "    sudo docker exec garage /garage key create myapp-key"
 echo "    sudo docker exec garage /garage bucket allow --read --write --owner myapp --key myapp-key"
