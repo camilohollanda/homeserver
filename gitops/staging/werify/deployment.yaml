@@ -47,6 +47,9 @@ spec:
               port: 4000
             periodSeconds: 10
             timeoutSeconds: 3
+          env:
+            - name: DNS_CLUSTER_QUERY
+              value: cluster.werify-staging.svc.cluster.local
           envFrom:
             - secretRef:
                 name: secrets
@@ -72,6 +75,23 @@ metadata:
   namespace: werify-staging
 spec:
   type: ClusterIP
+  ports:
+    - port: 4000
+      targetPort: 4000
+      protocol: TCP
+      name: http
+  selector:
+    app: werify
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cluster
+  namespace: werify-staging
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
   ports:
     - port: 4000
       targetPort: 4000
