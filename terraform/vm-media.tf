@@ -26,16 +26,16 @@ resource "proxmox_virtual_environment_vm" "media_server" {
   scsi_hardware = "virtio-scsi-single"
 
   disk {
-    datastore_id = var.storage
+    # var.tank_storage (HDD) — not var.storage (local-lvm SSD). Media is bulk
+    # video on a 4TB spinning pool by design. ssd=false tells the guest the
+    # disk is rotational so the kernel picks an HDD-appropriate I/O scheduler.
+    datastore_id = var.tank_storage
     file_format  = "raw"
     interface    = "scsi0"
     size         = local.media_vm.disk_size
     discard      = "on"
-    # ssd=false: this VM lives on tank-vm (HDD) by design — bulk media on
-    # 4TB spinning storage. Tell the guest it's rotational so the kernel
-    # picks an HDD-appropriate I/O scheduler.
-    ssd      = false
-    iothread = true
+    ssd          = false
+    iothread     = true
   }
 
   network_device {
