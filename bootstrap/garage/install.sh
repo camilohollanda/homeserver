@@ -214,8 +214,8 @@ server {
   ssl_protocols TLSv1.2 TLSv1.3;
   ssl_ciphers   HIGH:!aNULL:!MD5;
 
-  # Sized for 5 MB multipart chunks (with header slack); stream straight through
-  client_max_body_size 8m;
+  # Large enough for non-chunked single-shot uploads; chunks stream straight through
+  client_max_body_size 60m;
   proxy_request_buffering off;
   proxy_buffering off;
   proxy_read_timeout 120s;
