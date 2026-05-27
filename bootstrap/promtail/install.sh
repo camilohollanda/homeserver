@@ -84,6 +84,25 @@ scrape_configs:
     pipeline_stages:
       # Strip the Docker JSON envelope so the message body is what shows up in Grafana.
       - docker: {}
+      # Per-container parsers: pull timestamp + level out of the log line so
+      # Grafana doesn't render them twice (its own column + the embedded prefix),
+      # and so 'level' becomes a real Loki label (filterable + colored chip).
+      # Lines that don't match the regex pass through unchanged.
+      #
+      # Garage (Rust tracing): "2026-05-27T20:31:55.470199Z  INFO module: msg"
+      - match:
+          selector: '{container="garage"}'
+          stages:
+            - regex:
+                expression: '^(?P<ts>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z)\s+(?P<level>[A-Z]+)\s+(?P<message>.*)$'
+            - timestamp:
+                source: ts
+                format: RFC3339Nano
+                action_on_failure: skip
+            - labels:
+                level:
+            - output:
+                source: message
 YAML
 
 cat > /opt/promtail/docker-compose.yml <<'COMPOSE'
