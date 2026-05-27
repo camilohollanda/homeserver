@@ -19,7 +19,7 @@
   "links": [],
   "panels": [
     {
-      "datasource": { "type": "loki", "uid": "cf8e0hc105rswf" },
+      "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -54,14 +54,14 @@
       "pluginVersion": "12.3.1",
       "targets": [
         {
-          "datasource": { "type": "loki", "uid": "cf8e0hc105rswf" },
+          "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
           "expr": "sum(rate({host=\"services\", container=\"garage\"}[1m]))",
           "legendFormat": "total",
           "queryType": "range",
           "refId": "A"
         },
         {
-          "datasource": { "type": "loki", "uid": "cf8e0hc105rswf" },
+          "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
           "expr": "sum(rate({host=\"services\", container=\"garage\"} |~ \"(?i)error|fatal|panic\"[1m]))",
           "legendFormat": "errors",
           "queryType": "range",
@@ -72,7 +72,7 @@
       "type": "timeseries"
     },
     {
-      "datasource": { "type": "loki", "uid": "cf8e0hc105rswf" },
+      "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
       "fieldConfig": { "defaults": {}, "overrides": [] },
       "gridPos": { "h": 16, "w": 24, "x": 0, "y": 8 },
       "id": 2,
@@ -92,7 +92,7 @@
       "pluginVersion": "12.3.1",
       "targets": [
         {
-          "datasource": { "type": "loki", "uid": "cf8e0hc105rswf" },
+          "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
           "direction": "backward",
           "editorMode": "code",
           "expr": "{host=\"services\", container=\"garage\"}",

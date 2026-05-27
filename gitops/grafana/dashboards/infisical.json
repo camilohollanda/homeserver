@@ -19,7 +19,7 @@
   "links": [],
   "panels": [
     {
-      "datasource": { "type": "loki", "uid": "cf8e0hc105rswf" },
+      "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -47,7 +47,7 @@
       "pluginVersion": "12.3.1",
       "targets": [
         {
-          "datasource": { "type": "loki", "uid": "cf8e0hc105rswf" },
+          "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
           "expr": "sum by (container) (rate({host=\"services\", compose_project=\"infisical\"}[1m]))",
           "legendFormat": "{{container}}",
           "queryType": "range",
@@ -58,7 +58,7 @@
       "type": "timeseries"
     },
     {
-      "datasource": { "type": "loki", "uid": "cf8e0hc105rswf" },
+      "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -86,7 +86,7 @@
       "pluginVersion": "12.3.1",
       "targets": [
         {
-          "datasource": { "type": "loki", "uid": "cf8e0hc105rswf" },
+          "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
           "expr": "sum by (container) (rate({host=\"services\", compose_project=\"infisical\"} |~ \"(?i)error|fatal|panic\"[1m]))",
           "legendFormat": "{{container}}",
           "queryType": "range",
@@ -97,7 +97,7 @@
       "type": "timeseries"
     },
     {
-      "datasource": { "type": "loki", "uid": "cf8e0hc105rswf" },
+      "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
       "fieldConfig": { "defaults": {}, "overrides": [] },
       "gridPos": { "h": 16, "w": 24, "x": 0, "y": 8 },
       "id": 3,
@@ -117,7 +117,7 @@
       "pluginVersion": "12.3.1",
       "targets": [
         {
-          "datasource": { "type": "loki", "uid": "cf8e0hc105rswf" },
+          "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
           "direction": "backward",
           "editorMode": "code",
           "expr": "{host=\"services\", compose_project=\"infisical\"}",
