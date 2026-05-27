@@ -168,6 +168,9 @@ services:
     environment:
       GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET}
       GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN}
+      # tracing-subscriber emits ANSI colors by default — disable so logs are
+      # readable both in `docker logs garage` and downstream in Loki/Grafana.
+      NO_COLOR: "1"
     volumes:
       - /opt/garage/garage.toml:/etc/garage.toml:ro
       - /var/lib/garage/meta:/var/lib/garage/meta

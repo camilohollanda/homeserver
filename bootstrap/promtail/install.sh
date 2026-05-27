@@ -87,8 +87,11 @@ scrape_configs:
       # Strip ANSI color codes — Garage (and likely other Rust apps) emit them
       # even when stdout is piped. Without this, downstream regex stages can't
       # anchor on real content because the line starts with ESC[...m.
+      # NOTE: replace's `expression` must include capture groups — only captured
+      # text is replaced, not the entire match. The outer group here makes the
+      # whole ANSI sequence the captured text so it gets stripped.
       - replace:
-          expression: '\x1b\[[0-9;]*m'
+          expression: '(\x1b\[[0-9;]*m)'
           replace: ''
       # Per-container parsers: pull timestamp + level out of the log line so
       # Grafana doesn't render them twice (its own column + the embedded prefix),
