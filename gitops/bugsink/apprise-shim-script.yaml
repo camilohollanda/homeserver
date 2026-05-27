@@ -39,14 +39,99 @@ data:
         "good": "success", "#36a64f": "success",
     }
 
+    LINK_RE = re.compile(r"<([^|>]+)\|([^>]*)>")
+    HEADER_PREFIX_RE = re.compile(r"^#+\s*")
+    MRKDWN_FIELD_RE = re.compile(r"^\*([^*]+)\*\s*:\s*(.+)$", re.DOTALL)
+
+    def _strip_md_link(text: str) -> str:
+        return LINK_RE.sub(lambda m: m.group(2) or m.group(1), text or "")
+
+    def _first_link(text: str) -> str:
+        m = LINK_RE.search(text or "")
+        return m.group(1) if m else ""
+
+    def _clean_title(text: str) -> str:
+        return HEADER_PREFIX_RE.sub("", (text or "").strip())
+
+    def _collect_fields(payload: dict) -> dict:
+        # Bugsink's mattermost backend puts {title, value} pairs in attachments[*].fields;
+        # the slack backend puts "*key*: value" mrkdwn strings in blocks[*].fields.
+        fields = {}
+        for attachment in payload.get("attachments") or []:
+            for f in attachment.get("fields") or []:
+                name = (f.get("title") or "").strip().lower()
+                value = (f.get("value") or "").strip()
+                if name and value:
+                    fields[name] = value
+        for block in payload.get("blocks") or []:
+            for f in block.get("fields") or []:
+                m = MRKDWN_FIELD_RE.match((f.get("text") or "").strip())
+                if not m:
+                    continue
+                name = m.group(1).strip().lower()
+                value = m.group(2).strip()
+                if name and value:
+                    fields[name] = value
+        return fields
+
     def translate(payload: dict, tag: str) -> dict:
         attachment = (payload.get("attachments") or [{}])[0]
-        title = attachment.get("title") or payload.get("text") or "Bugsink alert"
-        body = attachment.get("text") or payload.get("text") or title
-        link = attachment.get("title_link") or ""
-        ntype = COLOR_TO_TYPE.get((attachment.get("color") or "").lower(), "info")
+        blocks = payload.get("blocks") or []
+
+        # Issue title: payload.text on the mattermost backend is "### <title>";
+        # on the slack backend it's the plain title; fall back to the header block.
+        raw_title = payload.get("text")
+        if not raw_title:
+            for b in blocks:
+                if b.get("type") == "header":
+                    raw_title = (b.get("text") or {}).get("text")
+                    break
+        raw_title = raw_title or attachment.get("title") or "Bugsink alert"
+        issue_title = _strip_md_link(_clean_title(raw_title))
+
+        # Alert reason ("new issue", "unmute issue", ...) lives in attachment.title
+        # for mattermost, or in the second section block for slack.
+        alert_reason = attachment.get("title") or ""
+        if not alert_reason:
+            for b in blocks[1:]:
+                t = b.get("text")
+                if b.get("type") == "section" and isinstance(t, dict):
+                    alert_reason = (t.get("text") or "").strip()
+                    if alert_reason:
+                        break
+
+        fields = _collect_fields(payload)
+        project = fields.get("project")
+        environment = fields.get("environment")
+        release = fields.get("release")
+
+        link = _first_link(attachment.get("text") or "")
+        if not link:
+            for b in reversed(blocks):
+                t = b.get("text")
+                if isinstance(t, dict):
+                    cand = _first_link(t.get("text") or "")
+                    if cand:
+                        link = cand
+                        break
+        if not link:
+            link = attachment.get("title_link") or ""
+
+        prefix_bits = [p for p in (project, environment) if p]
+        prefix = f"[{' / '.join(prefix_bits)}] " if prefix_bits else ""
+        title = (prefix + issue_title).strip()
+
+        body_lines = []
+        if alert_reason:
+            body_lines.append(alert_reason)
+        if release:
+            body_lines.append(f"release: {release}")
         if link:
-            body = f"{body}\n\n[View issue]({link})"
+            body_lines.append(f"[View issue]({link})")
+        body = "\n\n".join(body_lines) or issue_title
+
+        ntype = COLOR_TO_TYPE.get((attachment.get("color") or "").lower(), "info")
+
         return {
             "title": title,
             "body": body,
