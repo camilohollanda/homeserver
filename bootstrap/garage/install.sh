@@ -214,12 +214,12 @@ server {
   ssl_protocols TLSv1.2 TLSv1.3;
   ssl_ciphers   HIGH:!aNULL:!MD5;
 
-  # S3 needs unbuffered, unbounded body sizes for large object uploads
-  client_max_body_size 0;
+  # Sized for 5 MB multipart chunks (with header slack); stream straight through
+  client_max_body_size 8m;
   proxy_request_buffering off;
   proxy_buffering off;
-  proxy_read_timeout 600s;
-  proxy_send_timeout 600s;
+  proxy_read_timeout 120s;
+  proxy_send_timeout 120s;
 
   location / {
     proxy_pass http://127.0.0.1:3900;
