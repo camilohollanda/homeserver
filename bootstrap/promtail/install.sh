@@ -84,6 +84,12 @@ scrape_configs:
     pipeline_stages:
       # Strip the Docker JSON envelope so the message body is what shows up in Grafana.
       - docker: {}
+      # Strip ANSI color codes — Garage (and likely other Rust apps) emit them
+      # even when stdout is piped. Without this, downstream regex stages can't
+      # anchor on real content because the line starts with ESC[...m.
+      - replace:
+          expression: '\x1b\[[0-9;]*m'
+          replace: ''
       # Per-container parsers: pull timestamp + level out of the log line so
       # Grafana doesn't render them twice (its own column + the embedded prefix),
       # and so 'level' becomes a real Loki label (filterable + colored chip).
