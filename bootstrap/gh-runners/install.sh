@@ -412,7 +412,45 @@ KillSignal=SIGTERM
 [Install]
 WantedBy=multi-user.target
 SVC
+
+# ---------------------------------------------------------------------------
+# Daily Docker cleanup
+# CI jobs use `docker compose up` with images (e.g. postgres) that declare
+# anonymous VOLUMEs. `docker compose down` (without -v) preserves those by
+# design, so on a long-lived runner host they accumulate forever — ~650
+# orphaned anonymous volumes filled the 60G root disk in 10 days. Volume
+# prune is the right hammer: it only touches volumes not attached to a
+# running container, so an in-flight job's postgres is safe.
+# `until` filter is honoured by container/image prune but ignored by volume
+# prune (docker quirk) — that's fine; any volume detached *right now* is
+# already orphaned from a previous job.
+# ---------------------------------------------------------------------------
+cat > /etc/systemd/system/docker-prune.service <<'PRUNESVC'
+[Unit]
+Description=Prune dangling Docker volumes/images/containers
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker system prune --volumes -f --filter until=24h
+PRUNESVC
+
+cat > /etc/systemd/system/docker-prune.timer <<'PRUNETIMER'
+[Unit]
+Description=Daily Docker cleanup on gh-runners
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+PRUNETIMER
+
 systemctl daemon-reload
+systemctl enable --now docker-prune.timer
 
 # ---------------------------------------------------------------------------
 # Per-repo instances
