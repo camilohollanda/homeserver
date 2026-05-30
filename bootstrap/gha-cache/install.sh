@@ -100,12 +100,20 @@ echo ""
 echo "==> Writing gha-cache configuration..."
 mkdir -p /opt/gha-cache/data
 
+# Derive the bare hostname from the S3 endpoint URL for extra_hosts below.
+# Garage runs on this same VM; without this pinning, every cache op does a
+# public-DNS round-trip (we observed intermittent EAI_AGAIN failures).
+GHA_CACHE_S3_HOST="${GHA_CACHE_S3_ENDPOINT#*://}"
+GHA_CACHE_S3_HOST="${GHA_CACHE_S3_HOST%%/*}"
+GHA_CACHE_S3_HOST="${GHA_CACHE_S3_HOST%%:*}"
+
 cat > /opt/gha-cache/.env <<ENV
 GHA_CACHE_VERSION=${GHA_CACHE_VERSION}
 GHA_CACHE_PORT=${GHA_CACHE_PORT}
 GHA_CACHE_DOMAIN=${GHA_CACHE_DOMAIN}
 GHA_CACHE_S3_BUCKET=${GHA_CACHE_S3_BUCKET}
 GHA_CACHE_S3_ENDPOINT=${GHA_CACHE_S3_ENDPOINT}
+GHA_CACHE_S3_HOST=${GHA_CACHE_S3_HOST}
 GHA_CACHE_S3_REGION=${GHA_CACHE_S3_REGION}
 GHA_CACHE_S3_KEY_ID=${GHA_CACHE_S3_KEY_ID}
 GHA_CACHE_S3_SECRET=${GHA_CACHE_S3_SECRET}
@@ -123,6 +131,13 @@ services:
     image: ghcr.io/falcondev-oss/github-actions-cache-server:${GHA_CACHE_VERSION}
     container_name: gha-cache
     restart: unless-stopped
+    # Pin Garage's FQDN to the Docker bridge gateway (= the host's interface
+    # on this bridge). The shared services nginx runs on host networking and
+    # answers on every host interface, so TLS + SNI still work — we just skip
+    # an external DNS round-trip on every cache request. Fixes intermittent
+    # EAI_AGAIN failures that were breaking downloads (and merges).
+    extra_hosts:
+      - "${GHA_CACHE_S3_HOST}:host-gateway"
     ports:
       - "127.0.0.1:${GHA_CACHE_PORT}:3000"
     environment:
