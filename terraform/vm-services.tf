@@ -1,9 +1,9 @@
-resource "proxmox_virtual_environment_vm" "infisical" {
-  name        = local.infisical_vm.name
+resource "proxmox_virtual_environment_vm" "services" {
+  name        = local.services_vm.name
   node_name   = var.pm_node
-  vm_id       = local.infisical_vm.vmid
+  vm_id       = local.services_vm.vmid
   description = "Infisical secret management server"
-  tags        = split(",", local.infisical_vm.tags)
+  tags        = split(",", local.services_vm.tags)
 
   clone {
     vm_id     = var.template_vmid
@@ -12,12 +12,12 @@ resource "proxmox_virtual_environment_vm" "infisical" {
   }
 
   cpu {
-    cores = local.infisical_vm.cores
+    cores = local.services_vm.cores
     type  = "host"
   }
 
   memory {
-    dedicated = local.infisical_vm.memory_mb
+    dedicated = local.services_vm.memory_mb
   }
 
   bios    = "ovmf"
@@ -32,7 +32,7 @@ resource "proxmox_virtual_environment_vm" "infisical" {
     datastore_id = "local-lvm"
     file_format  = "raw"
     interface    = "scsi0"
-    size         = local.infisical_vm.disk_size
+    size         = local.services_vm.disk_size
     discard      = "on"
     ssd          = true
     iothread     = true
@@ -44,7 +44,7 @@ resource "proxmox_virtual_environment_vm" "infisical" {
     datastore_id = var.tank_storage
     file_format  = "raw"
     interface    = "scsi1"
-    size         = local.infisical_vm.garage_data_size
+    size         = local.services_vm.garage_data_size
     discard      = "on"
     cache        = "none"
   }
@@ -57,7 +57,7 @@ resource "proxmox_virtual_environment_vm" "infisical" {
   initialization {
     ip_config {
       ipv4 {
-        address = local.infisical_vm.ip_cidr
+        address = local.services_vm.ip_cidr
         gateway = var.gateway
       }
     }
@@ -71,7 +71,7 @@ resource "proxmox_virtual_environment_vm" "infisical" {
       servers = [var.nameserver]
     }
 
-    user_data_file_id = proxmox_virtual_environment_file.infisical_cloud_init.id
+    user_data_file_id = proxmox_virtual_environment_file.services_cloud_init.id
   }
 
   operating_system {
@@ -92,13 +92,13 @@ resource "proxmox_virtual_environment_vm" "infisical" {
   }
 }
 
-resource "proxmox_virtual_environment_file" "infisical_cloud_init" {
+resource "proxmox_virtual_environment_file" "services_cloud_init" {
   content_type = "snippets"
   datastore_id = var.snippets_storage
   node_name    = var.pm_node
 
   source_raw {
-    data      = file("${path.module}/cloud-init/infisical.yaml")
-    file_name = "infisical-cloud-init.yaml"
+    data      = file("${path.module}/cloud-init/services.yaml")
+    file_name = "services-cloud-init.yaml"
   }
 }

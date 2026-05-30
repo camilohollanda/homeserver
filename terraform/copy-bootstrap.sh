@@ -15,7 +15,7 @@ TARGET="${1:-all}"
 echo "Getting VM IPs from Terraform output..."
 K3S_IP=$(terraform -chdir="${SCRIPT_DIR}" output -raw k3s_vm_ip 2>/dev/null || echo "")
 DB_IP=$(terraform -chdir="${SCRIPT_DIR}" output -raw db_vm_ip 2>/dev/null || echo "")
-INFISICAL_IP=$(terraform -chdir="${SCRIPT_DIR}" output -raw infisical_vm_ip 2>/dev/null || echo "")
+INFISICAL_IP=$(terraform -chdir="${SCRIPT_DIR}" output -raw services_vm_ip 2>/dev/null || echo "")
 AI_IP=$(terraform -chdir="${SCRIPT_DIR}" output -raw ai_vm_ip 2>/dev/null || echo "")
 MEDIA_IP=$(terraform -chdir="${SCRIPT_DIR}" output -raw media_server_ip 2>/dev/null || echo "")
 
@@ -159,7 +159,7 @@ case "$TARGET" in
       echo ""
     fi
     if [ -n "$MEDIA_IP" ]; then
-      echo "6. Media services:" 
+      echo "6. Media services:"
       echo "   http://${MEDIA_IP}:8096 - Jellyfin"
       echo "   http://${MEDIA_IP}:8080 - qBittorrent"
       echo "   http://${MEDIA_IP}:7878 - Radarr"

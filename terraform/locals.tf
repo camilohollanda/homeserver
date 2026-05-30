@@ -23,8 +23,8 @@ locals {
     tags      = "db,postgres"
   }
 
-  infisical_vm = {
-    name      = "infisical"
+  services_vm = {
+    name      = "services"
     vmid      = 114
     ip_cidr   = "192.168.20.22/24"
     cores     = 2
@@ -33,7 +33,7 @@ locals {
     # Garage object data lives on this disk (mounted at /var/lib/garage/data).
     # Backed by the 4TB ZFS pool 'tank' (see var.tank_storage).
     garage_data_size = 500
-    tags             = "secrets,infisical,garage"
+    tags             = "infisical,garage,mailpit"
   }
 
   ai_vm = {

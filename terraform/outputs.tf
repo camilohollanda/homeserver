@@ -8,14 +8,14 @@ output "db_vm_ip" {
   value       = split("/", local.db_vm.ip_cidr)[0]
 }
 
-output "infisical_vm_ip" {
+output "services_vm_ip" {
   description = "IP address for the Infisical node"
-  value       = split("/", local.infisical_vm.ip_cidr)[0]
+  value       = split("/", local.services_vm.ip_cidr)[0]
 }
 
 output "infisical_url" {
   description = "URL to access Infisical UI"
-  value       = "https://${split("/", local.infisical_vm.ip_cidr)[0]}:8443"
+  value       = "https://${split("/", local.services_vm.ip_cidr)[0]}:8443"
 }
 
 output "ai_vm_ip" {
