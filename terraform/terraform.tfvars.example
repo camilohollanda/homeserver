@@ -1,0 +1,112 @@
+# Copy this to terraform.tfvars and fill in the values for your environment.
+# terraform.tfvars is gitignored — never commit secrets here.
+#
+# SECRETS DO NOT GO IN THIS FILE.
+# Sensitive variables (marked `sensitive = true` in variables.tf) must come from
+# the environment as `TF_VAR_<name>` exports, e.g.:
+#
+#   export TF_VAR_pm_api_token_id='terraform@pve!homeserver'
+#   export TF_VAR_pm_api_token_secret='…'
+#   export TF_VAR_cloudflare_api_token='…'
+#   export TF_VAR_infisical_postgres_password='…'
+#   export TF_VAR_infisical_encryption_key='…'   # openssl rand -hex 16
+#   export TF_VAR_infisical_auth_secret='…'      # openssl rand -base64 32
+#   export TF_VAR_ai_ghcr_token='…'
+#
+# These all live in your password manager (Tier 1) — see memory/MEMORY.md.
+
+# ---------------------------------------------------------------------------
+# Proxmox host
+# ---------------------------------------------------------------------------
+pm_api_url      = "https://<proxmox-ip-or-hostname>:8006/api2/json"
+pm_tls_insecure = true                  # self-signed Proxmox cert
+pm_node         = "<proxmox-node-name>" # e.g. "server", "pve"
+
+# Storage pools as they appear in the Proxmox UI
+storage      = "local-lvm"  # primary VM disk pool (LVM-thin)
+tank_storage = "tank-vm"    # bulk-data pool (ZFS) used for the Garage data disk
+
+# Cloud-init Debian 13 template (built by ./create-templates.sh)
+template_name = "debian-13-cloudinit"
+template_vmid = "9001"
+
+# Optional: GPU / Debian 12 templates if you need them on the AI VM
+# template_vmid_debian12        = 9002
+# template_vmid_debian12_nvidia = 9003
+
+# snippets_storage = "local"  # uncomment if your snippets storage isn't named "local"
+# pm_ssh_user      = "root"   # uncomment if you upload snippets as a non-root user
+
+# ---------------------------------------------------------------------------
+# Networking (used by cloud-init for every VM)
+# ---------------------------------------------------------------------------
+bridge       = "vmbr0"
+gateway      = "192.168.20.1"
+nameserver   = "1.1.1.1"
+searchdomain = "home.lab"
+
+# ---------------------------------------------------------------------------
+# Cloud-init defaults baked into every VM
+# ---------------------------------------------------------------------------
+cloud_init_user = "deployer"
+ssh_public_keys = [
+  "ssh-ed25519 AAAA… <your-key>",
+]
+
+# ---------------------------------------------------------------------------
+# Cloudflare (IDs are config, not secrets — cloudflare_api_token is a secret
+# and lives in TF_VAR_cloudflare_api_token, NOT here)
+# ---------------------------------------------------------------------------
+cloudflare_account_id = "<32-hex-account-id>"                  # any zone overview page
+cloudflare_tunnel_id  = "<uuid-of-existing-homeserver-tunnel>" # cat /etc/cloudflared/config.yml on k3s VM
+
+# Map of internal key -> zone ID. The keys are referenced from cloudflare-dns.tf —
+# don't rename them without updating that file.
+cloudflare_zone_ids = {
+  werify_app     = "<32-hex-zone-id-for-werify.app>",
+  iddh_com_br    = "<32-hex-zone-id-for-iddh.com.br>",
+  prakash_com_br = "<32-hex-zone-id-for-prakash.com.br>",
+}
+
+# ---------------------------------------------------------------------------
+# Let's Encrypt
+# ---------------------------------------------------------------------------
+letsencrypt_email = "you@example.com"
+
+# ---------------------------------------------------------------------------
+# AI VM (Whisper + Ollama)
+# ---------------------------------------------------------------------------
+# ai_domain       = "ai.internal.example.com"  # uncomment to override default
+# ai_ollama_model = "qwen2.5:3b"                # uncomment to switch model
+ai_github_owner   = "<github-org-or-username>"  # owns the whisper-api repo + GHCR image
+
+# ---------------------------------------------------------------------------
+# PostgreSQL VM (defaults usually fine; override if you change topology)
+# ---------------------------------------------------------------------------
+# postgres_version         = "17"
+# postgres_allowed_network = "192.168.20.0/24"
+# postgres_domain          = "pg.internal.example.com"
+
+# ---------------------------------------------------------------------------
+# Media stack (Jellyfin, *arr) — paths on the media VM, domains served by it
+# ---------------------------------------------------------------------------
+media_library_path  = "/srv/media"
+media_download_path = "/srv/downloads"
+media_timezone      = "UTC"
+media_uid           = "1000"
+media_gid           = "1000"
+
+media_jellyfin_domain    = "jellyfin.internal.example.com"
+media_qbittorrent_domain = "torrent.internal.example.com"
+media_radarr_domain      = "radarr.internal.example.com"
+# media_sonarr_domain    = "sonarr.internal.example.com"    # has default in variables.tf
+# media_prowlarr_domain  = "prowlarr.internal.example.com"  # has default
+# media_bazarr_domain    = "bazarr.internal.example.com"    # has default
+
+# ---------------------------------------------------------------------------
+# Infisical (domain is config; encryption key, auth secret, and DB password
+# are SECRETS — set them via TF_VAR_infisical_* in your shell.)
+# ---------------------------------------------------------------------------
+# infisical_domain        = "infisical.internal.example.com"  # has default
+# infisical_postgres_db   = "infisical"
+# infisical_postgres_user = "infisical"
