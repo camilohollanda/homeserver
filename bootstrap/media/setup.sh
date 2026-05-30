@@ -6,12 +6,10 @@
 #   ./bootstrap/media/setup.sh
 #
 # Required env vars:
-#   DOMAIN_JELLYFIN       - e.g. jellyfin.internal.prakash.com.br
-#   DOMAIN_QBITTORRENT    - e.g. qbittorrent.internal.prakash.com.br
-#   DOMAIN_RADARR         - e.g. radarr.internal.prakash.com.br
-#   DOMAIN_SONARR         - e.g. sonarr.internal.prakash.com.br
-#   DOMAIN_PROWLARR       - e.g. prowlarr.internal.prakash.com.br
-#   DOMAIN_BAZARR         - e.g. bazarr.internal.prakash.com.br
+#   CF_API_TOKEN          - Cloudflare API token (Zone.DNS Edit) used on the VM
+#                           by certbot for the DNS-01 challenge. A records for
+#                           these domains are managed in terraform/cloudflare-dns.tf.
+#   LETSENCRYPT_EMAIL     - Email for Let's Encrypt notifications
 #
 # Optional env vars:
 #   MEDIA_SSH             - SSH target (default: deployer@192.168.20.40)
@@ -20,6 +18,12 @@
 #   MEDIA_GID             - GID for media processes (default: 1000)
 #   MEDIA_LIBRARY_PATH    - Path to media library (default: /mnt/media)
 #   MEDIA_DOWNLOAD_PATH   - Path for downloads (default: /mnt/downloads)
+#   DOMAIN_JELLYFIN       - default: jellyfin.internal.prakash.com.br
+#   DOMAIN_QBITTORRENT    - default: torrent.internal.prakash.com.br
+#   DOMAIN_RADARR         - default: radarr.internal.prakash.com.br
+#   DOMAIN_SONARR         - default: sonarr.internal.prakash.com.br
+#   DOMAIN_PROWLARR       - default: prowlarr.internal.prakash.com.br
+#   DOMAIN_BAZARR         - default: bazarr.internal.prakash.com.br
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -43,8 +47,15 @@ wait_ssh() {
 
 MEDIA_SSH="${MEDIA_SSH:-deployer@192.168.20.40}"
 
-check_env DOMAIN_JELLYFIN DOMAIN_QBITTORRENT DOMAIN_RADARR \
-          DOMAIN_SONARR DOMAIN_PROWLARR DOMAIN_BAZARR
+# Domains default to the internal A records in terraform/cloudflare-dns.tf.
+export DOMAIN_JELLYFIN="${DOMAIN_JELLYFIN:-jellyfin.internal.prakash.com.br}"
+export DOMAIN_QBITTORRENT="${DOMAIN_QBITTORRENT:-torrent.internal.prakash.com.br}"
+export DOMAIN_RADARR="${DOMAIN_RADARR:-radarr.internal.prakash.com.br}"
+export DOMAIN_SONARR="${DOMAIN_SONARR:-sonarr.internal.prakash.com.br}"
+export DOMAIN_PROWLARR="${DOMAIN_PROWLARR:-prowlarr.internal.prakash.com.br}"
+export DOMAIN_BAZARR="${DOMAIN_BAZARR:-bazarr.internal.prakash.com.br}"
+
+check_env CF_API_TOKEN LETSENCRYPT_EMAIL
 
 echo "=============================================="
 echo "  Media Server Setup"

@@ -8,8 +8,10 @@
 #   MEDIA_GID              - GID for media processes (e.g. 1000)
 #   MEDIA_LIBRARY_PATH     - Path to media library (e.g. /mnt/media)
 #   MEDIA_DOWNLOAD_PATH    - Path for downloads (e.g. /mnt/downloads)
+#   CF_API_TOKEN           - Cloudflare API token (Zone.DNS Edit) for DNS-01
+#   LETSENCRYPT_EMAIL      - Email for Let's Encrypt notifications
 #   DOMAIN_JELLYFIN        - e.g. jellyfin.internal.prakash.com.br
-#   DOMAIN_QBITTORRENT     - e.g. qbittorrent.internal.prakash.com.br
+#   DOMAIN_QBITTORRENT     - e.g. torrent.internal.prakash.com.br
 #   DOMAIN_RADARR          - e.g. radarr.internal.prakash.com.br
 #   DOMAIN_SONARR          - e.g. sonarr.internal.prakash.com.br
 #   DOMAIN_PROWLARR        - e.g. prowlarr.internal.prakash.com.br
@@ -21,6 +23,9 @@ if [[ -n "${REMOTE_HOST:-}" ]]; then
       MEDIA_GID           "${MEDIA_GID:-1000}" \
       MEDIA_LIBRARY_PATH  "${MEDIA_LIBRARY_PATH:-/mnt/media}" \
       MEDIA_DOWNLOAD_PATH "${MEDIA_DOWNLOAD_PATH:-/mnt/downloads}" \
+      CF_API_TOKEN        "${CF_API_TOKEN:-}" \
+      LETSENCRYPT_EMAIL   "${LETSENCRYPT_EMAIL:-}" \
+      CERTBOT_DNS_WAIT    "${CERTBOT_DNS_WAIT:-}" \
       DOMAIN_JELLYFIN     "${DOMAIN_JELLYFIN:-}" \
       DOMAIN_QBITTORRENT  "${DOMAIN_QBITTORRENT:-}" \
       DOMAIN_RADARR       "${DOMAIN_RADARR:-}" \
@@ -44,9 +49,20 @@ MEDIA_GID="${MEDIA_GID:-1000}"
 MEDIA_LIBRARY_PATH="${MEDIA_LIBRARY_PATH:-/mnt/media}"
 MEDIA_DOWNLOAD_PATH="${MEDIA_DOWNLOAD_PATH:-/mnt/downloads}"
 
+# TLS is mandatory: certs are issued via Let's Encrypt DNS-01 (Cloudflare) and
+# every vhost is served over HTTPS, so all domains + CF creds must be present.
+: "${CF_API_TOKEN:?must be set}"
+: "${LETSENCRYPT_EMAIL:?must be set}"
+: "${DOMAIN_JELLYFIN:?must be set}"
+: "${DOMAIN_QBITTORRENT:?must be set}"
+: "${DOMAIN_RADARR:?must be set}"
+: "${DOMAIN_SONARR:?must be set}"
+: "${DOMAIN_PROWLARR:?must be set}"
+: "${DOMAIN_BAZARR:?must be set}"
+
 echo "==> Installing base dependencies..."
 apt-get update -qq
-apt-get install -y -qq ca-certificates curl gnupg
+apt-get install -y -qq ca-certificates curl gnupg certbot python3-certbot-dns-cloudflare
 
 # ---------------------------------------------------------------------------
 # Docker CE
@@ -79,6 +95,53 @@ mkdir -p "${MEDIA_LIBRARY_PATH}/movies" "${MEDIA_LIBRARY_PATH}/tv"
 mkdir -p "${MEDIA_DOWNLOAD_PATH}/incomplete" "${MEDIA_DOWNLOAD_PATH}/complete"
 chown -R "${MEDIA_UID}:${MEDIA_GID}" "${MEDIA_LIBRARY_PATH}" "${MEDIA_DOWNLOAD_PATH}"
 chmod -R 775 "${MEDIA_LIBRARY_PATH}" "${MEDIA_DOWNLOAD_PATH}"
+
+# ---------------------------------------------------------------------------
+# TLS: one Let's Encrypt SAN cert for every media domain (DNS-01 via Cloudflare)
+# ---------------------------------------------------------------------------
+# These domains resolve to this VM (terraform/cloudflare-dns.tf), but DNS-01
+# only needs the CF token to write the _acme-challenge TXT records, so no
+# public HTTP exposure is required. A single cert (lineage "media-stack")
+# covers all vhosts; nginx mounts /etc/letsencrypt read-only.
+echo ""
+echo "==> Obtaining Let's Encrypt certificate for media domains..."
+
+mkdir -p /etc/letsencrypt/renewal-hooks/deploy
+cat > /etc/letsencrypt/cloudflare.ini <<INI
+dns_cloudflare_api_token = ${CF_API_TOKEN}
+INI
+chmod 600 /etc/letsencrypt/cloudflare.ini
+
+# --keep-until-expiring is a no-op when the cert is still valid; --expand picks
+# up any domain added to the list on a later run, so this stays idempotent.
+# Cloudflare can take longer than the plugin's 10s default to publish the TXT
+# records across its authoritative servers; with several SAN names created at
+# once the slower ones return NXDOMAIN to Let's Encrypt and validation fails.
+# Wait long enough for all of them to propagate (override with CERTBOT_DNS_WAIT).
+CERTBOT_DNS_WAIT="${CERTBOT_DNS_WAIT:-60}"
+certbot certonly \
+  --dns-cloudflare \
+  --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini \
+  --dns-cloudflare-propagation-seconds "${CERTBOT_DNS_WAIT}" \
+  --cert-name media-stack \
+  -d "${DOMAIN_JELLYFIN}" \
+  -d "${DOMAIN_QBITTORRENT}" \
+  -d "${DOMAIN_RADARR}" \
+  -d "${DOMAIN_SONARR}" \
+  -d "${DOMAIN_PROWLARR}" \
+  -d "${DOMAIN_BAZARR}" \
+  --keep-until-expiring --expand \
+  --non-interactive --agree-tos \
+  -m "${LETSENCRYPT_EMAIL}"
+
+# Reload the media nginx whenever the cert renews (certbot.timer runs renew).
+cat > /etc/letsencrypt/renewal-hooks/deploy/reload-media-nginx.sh <<'HOOK'
+#!/bin/bash
+docker exec media-nginx nginx -s reload 2>/dev/null || true
+HOOK
+chmod 755 /etc/letsencrypt/renewal-hooks/deploy/reload-media-nginx.sh
+
+systemctl enable --now certbot.timer 2>/dev/null || true
 
 # ---------------------------------------------------------------------------
 # Stack configuration
@@ -189,8 +252,10 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
+      - "443:443"
     volumes:
       - /opt/media-stack/nginx.conf:/etc/nginx/nginx.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:
       - jellyfin
       - qbittorrent
@@ -212,6 +277,22 @@ cat > /opt/media-stack/nginx.conf <<NGINX
 events { worker_connections 1024; }
 
 http {
+  server_tokens off;
+  client_max_body_size 0;
+
+  # Jellyfin (and the *arr apps) stream over WebSockets; map the Connection
+  # header so upgrades pass through the proxy.
+  map \$http_upgrade \$connection_upgrade {
+    default upgrade;
+    ''      close;
+  }
+
+  # Every media domain shares one Let's Encrypt SAN cert (lineage media-stack).
+  ssl_certificate     /etc/letsencrypt/live/media-stack/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/media-stack/privkey.pem;
+  ssl_protocols TLSv1.2 TLSv1.3;
+  ssl_ciphers   HIGH:!aNULL:!MD5;
+
 $(for svc_domain_port in \
     "${DOMAIN_JELLYFIN}:jellyfin:8096" \
     "${DOMAIN_QBITTORRENT}:qbittorrent:8080" \
@@ -224,12 +305,21 @@ $(for svc_domain_port in \
   server {
     listen 80;
     server_name ${dom};
+    location / { return 301 https://\$host\$request_uri; }
+  }
+
+  server {
+    listen 443 ssl;
+    server_name ${dom};
     location / {
       proxy_pass http://${svc}:${port};
       proxy_set_header Host              \$host;
       proxy_set_header X-Real-IP         \$remote_addr;
       proxy_set_header X-Forwarded-For   \$proxy_add_x_forwarded_for;
       proxy_set_header X-Forwarded-Proto \$scheme;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade    \$http_upgrade;
+      proxy_set_header Connection \$connection_upgrade;
     }
   }
 SRV
@@ -276,8 +366,10 @@ systemctl enable media-stack
 systemctl start media-stack 2>/dev/null || true
 
 echo ""
-echo "✓ Media stack running."
-echo "  Jellyfin    : http://$(hostname -I | awk '{print $1}'):8096"
-echo "  qBittorrent : http://$(hostname -I | awk '{print $1}'):8080"
-echo "  Radarr      : http://$(hostname -I | awk '{print $1}'):7878"
-echo "  Sonarr      : http://$(hostname -I | awk '{print $1}'):8989"
+echo "✓ Media stack running (HTTPS via Let's Encrypt, HTTP redirects to HTTPS)."
+echo "  Jellyfin    : https://${DOMAIN_JELLYFIN}"
+echo "  qBittorrent : https://${DOMAIN_QBITTORRENT}"
+echo "  Radarr      : https://${DOMAIN_RADARR}"
+echo "  Sonarr      : https://${DOMAIN_SONARR}"
+echo "  Prowlarr    : https://${DOMAIN_PROWLARR}"
+echo "  Bazarr      : https://${DOMAIN_BAZARR}"

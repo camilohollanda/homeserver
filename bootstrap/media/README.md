@@ -4,12 +4,21 @@ Provisioned by Terraform from `terraform/vm-media.tf`.
 
 ## What runs
 
-- `jellyfin` behind `nginx` on `http://jellyfin.internal.prakash.com.br`
-- `qbittorrent` behind `nginx` on `http://torrent.internal.prakash.com.br`
-- `radarr` behind `nginx` on `http://radarr.internal.prakash.com.br`
-- `sonarr` behind `nginx` on `http://sonarr.internal.prakash.com.br`
-- `prowlarr` behind `nginx` on `http://prowlarr.internal.prakash.com.br`
-- `bazarr` behind `nginx` on `http://bazarr.internal.prakash.com.br`
+All vhosts are served over **HTTPS** by the local `nginx`; plain HTTP redirects
+to HTTPS. TLS uses a single Let's Encrypt SAN cert (lineage `media-stack`)
+issued via Cloudflare DNS-01 — no public HTTP exposure needed. Renewal is
+handled by `certbot.timer`, which reloads `media-nginx` via a deploy hook.
+
+- `jellyfin` behind `nginx` on `https://jellyfin.internal.prakash.com.br`
+- `qbittorrent` behind `nginx` on `https://torrent.internal.prakash.com.br`
+- `radarr` behind `nginx` on `https://radarr.internal.prakash.com.br`
+- `sonarr` behind `nginx` on `https://sonarr.internal.prakash.com.br`
+- `prowlarr` behind `nginx` on `https://prowlarr.internal.prakash.com.br`
+- `bazarr` behind `nginx` on `https://bazarr.internal.prakash.com.br`
+
+DNS-01 needs `CF_API_TOKEN` (Zone.DNS Edit + Zone.Read) and `LETSENCRYPT_EMAIL`
+passed to `setup.sh`. The A records pointing these domains at this VM live in
+`terraform/cloudflare-dns.tf`.
 
 ## Storage layout
 
