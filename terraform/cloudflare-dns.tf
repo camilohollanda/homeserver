@@ -34,6 +34,7 @@ locals {
   internal_a_records = {
     # services VM (vmid 114) — multi-tenant docker host behind shared nginx
     garage    = { name = "garage.internal.prakash.com.br", ip = local.services_vm_ip }
+    garage_ui = { name = "garage-ui.internal.prakash.com.br", ip = local.services_vm_ip }
     mailpit   = { name = "mailpit.internal.prakash.com.br", ip = local.services_vm_ip }
     infisical = { name = "infisical.internal.prakash.com.br", ip = local.services_vm_ip }
     gha_cache = { name = "gha-cache.internal.prakash.com.br", ip = local.services_vm_ip }
