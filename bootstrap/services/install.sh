@@ -149,7 +149,45 @@ else
   systemctl start services
 fi
 
+# ---------------------------------------------------------------------------
+# Daily docker prune
+#
+# Unlike the gh-runners VM (which churns per-job images and uses --volumes
+# + until=24h), this VM hosts long-lived services with one real volume
+# (Infisical's Redis). Two deliberate differences:
+#   - NO --volumes: docker quirk — `--volumes` ignores --filter, so a
+#     transient stop/start during the prune could remove a real volume.
+#   - until=168h: image refresh cadence here is days/weeks, not minutes.
+# ---------------------------------------------------------------------------
+cat > /etc/systemd/system/docker-prune.service <<'PRUNESVC'
+[Unit]
+Description=Prune dangling Docker containers/images on services VM
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker system prune -af --filter until=168h
+PRUNESVC
+
+cat > /etc/systemd/system/docker-prune.timer <<'PRUNETIMER'
+[Unit]
+Description=Daily Docker cleanup on services VM
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+PRUNETIMER
+
+systemctl daemon-reload
+systemctl enable --now docker-prune.timer
+
 echo ""
 echo "✓ Shared services proxy is running on host ports 80 / 443."
 echo "  Vhosts directory: /opt/services/conf.d/"
 echo "  Reload after editing:  docker exec services nginx -s reload"
+echo "  Daily docker prune:    systemctl list-timers docker-prune.timer"
