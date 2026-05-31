@@ -16,8 +16,8 @@
 #   MEDIA_TIMEZONE        - Timezone (default: America/Sao_Paulo)
 #   MEDIA_UID             - UID for media processes (default: 1000)
 #   MEDIA_GID             - GID for media processes (default: 1000)
-#   MEDIA_LIBRARY_PATH    - Path to media library (default: /mnt/media)
-#   MEDIA_DOWNLOAD_PATH   - Path for downloads (default: /mnt/downloads)
+#   MEDIA_LIBRARY_PATH    - Path to media library (default: /srv/media)
+#   MEDIA_DOWNLOAD_PATH   - Path for downloads (default: /srv/downloads)
 #   DOMAIN_JELLYFIN       - default: jellyfin.internal.prakash.com.br
 #   DOMAIN_QBITTORRENT    - default: torrent.internal.prakash.com.br
 #   DOMAIN_RADARR         - default: radarr.internal.prakash.com.br

@@ -6,8 +6,8 @@
 #   MEDIA_TIMEZONE         - e.g. America/Sao_Paulo
 #   MEDIA_UID              - UID for media processes (e.g. 1000)
 #   MEDIA_GID              - GID for media processes (e.g. 1000)
-#   MEDIA_LIBRARY_PATH     - Path to media library (e.g. /mnt/media)
-#   MEDIA_DOWNLOAD_PATH    - Path for downloads (e.g. /mnt/downloads)
+#   MEDIA_LIBRARY_PATH     - Path to media library (e.g. /srv/media)
+#   MEDIA_DOWNLOAD_PATH    - Path for downloads (e.g. /srv/downloads)
 #   CF_API_TOKEN           - Cloudflare API token (Zone.DNS Edit) for DNS-01
 #   LETSENCRYPT_EMAIL      - Email for Let's Encrypt notifications
 #   DOMAIN_JELLYFIN        - e.g. jellyfin.internal.prakash.com.br
@@ -21,8 +21,8 @@ if [[ -n "${REMOTE_HOST:-}" ]]; then
       MEDIA_TIMEZONE      "${MEDIA_TIMEZONE:-America/Sao_Paulo}" \
       MEDIA_UID           "${MEDIA_UID:-1000}" \
       MEDIA_GID           "${MEDIA_GID:-1000}" \
-      MEDIA_LIBRARY_PATH  "${MEDIA_LIBRARY_PATH:-/mnt/media}" \
-      MEDIA_DOWNLOAD_PATH "${MEDIA_DOWNLOAD_PATH:-/mnt/downloads}" \
+      MEDIA_LIBRARY_PATH  "${MEDIA_LIBRARY_PATH:-/srv/media}" \
+      MEDIA_DOWNLOAD_PATH "${MEDIA_DOWNLOAD_PATH:-/srv/downloads}" \
       CF_API_TOKEN        "${CF_API_TOKEN:-}" \
       LETSENCRYPT_EMAIL   "${LETSENCRYPT_EMAIL:-}" \
       CERTBOT_DNS_WAIT    "${CERTBOT_DNS_WAIT:-}" \
@@ -46,8 +46,8 @@ fi
 MEDIA_TIMEZONE="${MEDIA_TIMEZONE:-UTC}"
 MEDIA_UID="${MEDIA_UID:-1000}"
 MEDIA_GID="${MEDIA_GID:-1000}"
-MEDIA_LIBRARY_PATH="${MEDIA_LIBRARY_PATH:-/mnt/media}"
-MEDIA_DOWNLOAD_PATH="${MEDIA_DOWNLOAD_PATH:-/mnt/downloads}"
+MEDIA_LIBRARY_PATH="${MEDIA_LIBRARY_PATH:-/srv/media}"
+MEDIA_DOWNLOAD_PATH="${MEDIA_DOWNLOAD_PATH:-/srv/downloads}"
 
 # TLS is mandatory: certs are issued via Let's Encrypt DNS-01 (Cloudflare) and
 # every vhost is served over HTTPS, so all domains + CF creds must be present.
