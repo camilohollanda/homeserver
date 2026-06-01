@@ -1,0 +1,17 @@
+#!/bin/sh
+# Fix for Intel I217-LM (e1000e driver) packet corruption / dropped TCP
+# connections. With offloads enabled, large transfers sporadically corrupt
+# packets at the NIC, the peer drops the connection, and from userspace it
+# looks like random "Connection reset by peer" errors during long uploads,
+# image pulls, vzdump streams, etc.
+#
+# The kernel has carried this bug across multiple e1000e revisions; the only
+# reliable fix is to disable hardware offloading on this interface.
+#
+# Background: bugzilla.kernel.org / Proxmox forum threads on I217-LM/I218.
+# Symptom on this host: SSH stalls, k3s image pulls failing, restic streams
+# aborting mid-transfer.
+IF="$IFACE"
+[ "$IF" = "nic0" ] || exit 0
+
+/usr/sbin/ethtool -K nic0 gso off gro off tso off lro off rx off tx off sg off rxvlan off txvlan off rxhash off

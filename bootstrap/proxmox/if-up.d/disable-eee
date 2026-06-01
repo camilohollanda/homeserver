@@ -1,0 +1,9 @@
+#!/bin/sh
+# Disable Energy Efficient Ethernet on nic0. The I217-LM negotiates EEE with
+# the upstream switch, then experiences brief link flaps when it tries to
+# enter/exit low-power states. Turning EEE off keeps the link stable.
+#
+# `|| true` because some kernels surface "Operation not supported" here even
+# when the change took effect — we don't want a transient ethtool exit code
+# to keep the interface from coming up.
+/usr/sbin/ethtool --set-eee nic0 eee off || true

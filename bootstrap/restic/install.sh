@@ -22,6 +22,10 @@
 #   RESTIC_KEEP_WEEKLY    - default: 4
 #   RESTIC_KEEP_MONTHLY   - default: 6
 if [[ -n "${REMOTE_HOST:-}" ]]; then
+  # Skip `sudo` when SSHing in as root (e.g. the Proxmox host, which doesn't
+  # ship sudo by default).
+  remote_sh="sudo bash -s"
+  [[ "${REMOTE_HOST%%@*}" == "root" ]] && remote_sh="bash -s"
   { printf 'export %s=%q\n' \
       S3_ACCESS_KEY_ID     "${S3_ACCESS_KEY_ID:-}" \
       S3_SECRET_ACCESS_KEY "${S3_SECRET_ACCESS_KEY:-}" \
@@ -34,7 +38,7 @@ if [[ -n "${REMOTE_HOST:-}" ]]; then
       RESTIC_KEEP_MONTHLY  "${RESTIC_KEEP_MONTHLY:-6}" \
       JOBS                 "${JOBS:-}"
     cat "$0"
-  } | ssh "$REMOTE_HOST" "sudo bash -s"
+  } | ssh "$REMOTE_HOST" "$remote_sh"
   exit $?
 fi
 set -euo pipefail
