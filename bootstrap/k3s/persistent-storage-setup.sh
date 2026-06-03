@@ -271,11 +271,11 @@ log_success "Directory structure created"
 
 # Step 6: Create PV directories
 log_info "Creating PV directories..."
-ssh_cmd "sudo mkdir -p ${PV_BASE_PATH}/werify-staging-uploads"
-ssh_cmd "sudo mkdir -p ${PV_BASE_PATH}/werify-production-uploads"
+ssh_cmd "sudo mkdir -p ${PV_BASE_PATH}/werify-staging-data"
+ssh_cmd "sudo mkdir -p ${PV_BASE_PATH}/werify-production-data"
 ssh_cmd "sudo mkdir -p ${PV_BASE_PATH}/bugsink-data"
-ssh_cmd "sudo chmod 777 ${PV_BASE_PATH}/werify-staging-uploads"
-ssh_cmd "sudo chmod 777 ${PV_BASE_PATH}/werify-production-uploads"
+ssh_cmd "sudo chmod 777 ${PV_BASE_PATH}/werify-staging-data"
+ssh_cmd "sudo chmod 777 ${PV_BASE_PATH}/werify-production-data"
 ssh_cmd "sudo chmod 777 ${PV_BASE_PATH}/bugsink-data"
 log_success "PV directories created"
 
@@ -305,8 +305,8 @@ if [ -n "$NODE_NAME" ]; then
 fi
 echo ""
 log_info "PV directories created:"
-echo "  - ${PV_BASE_PATH}/werify-staging-uploads"
-echo "  - ${PV_BASE_PATH}/werify-production-uploads"
+echo "  - ${PV_BASE_PATH}/werify-staging-data"
+echo "  - ${PV_BASE_PATH}/werify-production-data"
 echo "  - ${PV_BASE_PATH}/bugsink-data"
 echo ""
 log_info "Next steps:"

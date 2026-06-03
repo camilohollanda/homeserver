@@ -103,8 +103,8 @@ The script will:
 4. Mount it at `/mnt/k8s-persistent`
 5. Add to `/etc/fstab` for persistence
 6. Create static PersistentVolumes:
-   - `werify-staging-uploads` (100Gi)
-   - `werify-production-uploads` (100Gi)
+   - `werify-staging-data` (100Gi)
+   - `werify-production-data` (100Gi)
    - `bugsink-data` (10Gi)
 7. Create `local-path-static` StorageClass
 
@@ -116,13 +116,13 @@ Update your PVC manifests to bind to the static PVs:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: werify-uploads
+  name: werify-data
   namespace: werify-staging
 spec:
   accessModes:
     - ReadWriteOnce
   storageClassName: local-path-static
-  volumeName: werify-staging-uploads  # Bind to specific PV
+  volumeName: werify-staging-data  # Bind to specific PV
   resources:
     requests:
       storage: 100Gi

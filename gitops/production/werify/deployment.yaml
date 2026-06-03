@@ -54,8 +54,8 @@ spec:
         - secretRef:
             name: secrets
         volumeMounts:
-        - name: uploads
-          mountPath: /app/priv/uploads
+        - name: data
+          mountPath: /app/priv
         resources:
           requests:
             memory: "256Mi"
@@ -64,9 +64,9 @@ spec:
             memory: "1Gi"
             cpu: "500m"
       volumes:
-      - name: uploads
+      - name: data
         persistentVolumeClaim:
-          claimName: werify-uploads
+          claimName: werify-data
 ---
 apiVersion: v1
 kind: Service

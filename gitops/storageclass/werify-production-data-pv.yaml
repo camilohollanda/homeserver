@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: werify-production-uploads
+  name: werify-production-data
 spec:
   capacity:
     storage: 100Gi
@@ -10,7 +10,7 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: local-path-static
   local:
-    path: /mnt/k8s-persistent/pvs/werify-production-uploads
+    path: /mnt/k8s-persistent/pvs/werify-production-data
   nodeAffinity:
     required:
       nodeSelectorTerms:

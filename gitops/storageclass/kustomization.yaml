@@ -4,6 +4,6 @@ kind: Kustomization
 resources:
   - local-path-static.yaml
   - werify-staging-data-pv.yaml
-  - werify-production-uploads-pv.yaml
+  - werify-production-data-pv.yaml
   - bugsink-data-pv.yaml
   - loki-storage-pv.yaml
