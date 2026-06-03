@@ -21,6 +21,8 @@ configMapGenerator:
       - dashboards/whisper-api.json
       - dashboards/iddh-members-production.json
       - dashboards/iddh-members-staging.json
+      - dashboards/pdf-production.json
+      - dashboards/pdf-staging.json
       - dashboards/garage.json
       - dashboards/infisical.json
       - dashboards/mailpit.json
