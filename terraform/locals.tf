@@ -8,7 +8,7 @@ locals {
     vmid      = 112
     ip_cidr   = "192.168.20.11/24"
     cores     = 8
-    memory_mb = 16384
+    memory_mb = 32768
     disk_size = 80
     tags      = "k3s,apps"
   }
