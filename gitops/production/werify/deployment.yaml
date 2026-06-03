@@ -62,7 +62,9 @@ spec:
             cpu: "100m"
           limits:
             memory: "2Gi"
-            cpu: "500m"
+            # Typst PDF/A rendering pegged the previous 500m limit. 2 cores
+            # lets layout + image processing run unthrottled.
+            cpu: "2"
       volumes:
       - name: data
         persistentVolumeClaim:
