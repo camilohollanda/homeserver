@@ -68,11 +68,10 @@ spec:
           periodSeconds: 15
           timeoutSeconds: 3
         volumeMounts:
-        # Chrome uses /dev/shm for renderer IPC; k8s defaults to 64Mi which
-        # crashes Chrome on large pages.
-        - name: dshm
-          mountPath: /dev/shm
-        # USER nobody's $HOME is /nonexistent; give Chrome/ChromicPDF a writable tmp.
+        # USER nobody's $HOME is /nonexistent; HOME is set to /tmp above so
+        # Chrome/ChromicPDF (and the crashpad helper) have a writable location
+        # for cache, crash dumps, and shared memory (the app launches Chrome
+        # with --disable-dev-shm-usage, so shm goes to /tmp too).
         - name: tmp
           mountPath: /tmp
         resources:
@@ -83,10 +82,6 @@ spec:
             memory: "3Gi"
             cpu: "2"
       volumes:
-      - name: dshm
-        emptyDir:
-          medium: Memory
-          sizeLimit: 256Mi
       - name: tmp
         emptyDir: {}
 ---
