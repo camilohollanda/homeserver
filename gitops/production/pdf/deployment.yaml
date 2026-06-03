@@ -34,8 +34,16 @@ spec:
         ports:
         - containerPort: 4000
           name: http
+        env:
+        # Image USER is `nobody` whose default HOME is /nonexistent. Chrome's
+        # crashpad helper derives its --database path from $HOME and dies with
+        # "--database is required" if it isn't writable, taking the whole BEAM
+        # with it (surfaces as ChromicPDF.Connection.ConnectionLostError).
+        # /tmp is mounted writable below.
+        - name: HOME
+          value: /tmp
         envFrom:
-        # All env (PHX_SERVER, PORT, PHX_HOST, RENDER_MAX_CONCURRENCY,
+        # All app env (PHX_SERVER, PORT, PHX_HOST, RENDER_MAX_CONCURRENCY,
         # RENDER_TIMEOUT_SECONDS, SECRET_KEY_BASE, RENDER_TOKEN) comes from
         # Infisical via the ExternalSecret.
         - secretRef:
