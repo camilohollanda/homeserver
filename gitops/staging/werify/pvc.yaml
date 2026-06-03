@@ -1,13 +1,13 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: werify-uploads
+  name: werify-data
   namespace: werify-staging
 spec:
   accessModes:
     - ReadWriteOnce
   storageClassName: local-path-static
-  volumeName: werify-staging-uploads
+  volumeName: werify-staging-data
   resources:
     requests:
       storage: 100Gi

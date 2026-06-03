@@ -68,7 +68,7 @@ profile_k3s() {
   #                      every workload's TLS identity.
   JOBS="\
 werify-prod-uploads:/mnt/k8s-persistent/pvs/werify-production-uploads \
-werify-stg-uploads:/mnt/k8s-persistent/pvs/werify-staging-uploads \
+werify-stg-uploads:/mnt/k8s-persistent/pvs/werify-staging-data \
 grafana:/var/lib/rancher/k3s/storage/pvc-6c6c5fbf-8baa-4563-90ca-36934a0022a3_grafana_grafana-storage \
 loki:/mnt/k8s-persistent/pvs/loki-storage \
 k3s-db:/var/lib/rancher/k3s/server/db \
