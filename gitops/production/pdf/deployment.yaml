@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: pdf-production
+  name: pdf
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  # Stateless → horizontally scalable. Keep per-pod Chrome concurrency low
+  # (RENDER_MAX_CONCURRENCY) and add replicas for throughput.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pdf
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: pdf
+    spec:
+      imagePullSecrets:
+      - name: ghcr-credentials
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+      containers:
+      - name: pdf
+        image: ghcr.io/prem-prakash/werify_pdf_renderer:main
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 4000
+          name: http
+        envFrom:
+        # All env (PHX_SERVER, PORT, PHX_HOST, RENDER_MAX_CONCURRENCY,
+        # RENDER_TIMEOUT_SECONDS, SECRET_KEY_BASE, RENDER_TOKEN) comes from
+        # Infisical via the ExternalSecret.
+        - secretRef:
+            name: secrets
+        startupProbe:
+          # Warm Chrome pool needs time on first boot.
+          httpGet:
+            path: /health
+            port: 4000
+          periodSeconds: 5
+          failureThreshold: 24
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 4000
+          periodSeconds: 10
+          timeoutSeconds: 3
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 4000
+          periodSeconds: 15
+          timeoutSeconds: 3
+        volumeMounts:
+        # Chrome uses /dev/shm for renderer IPC; k8s defaults to 64Mi which
+        # crashes Chrome on large pages.
+        - name: dshm
+          mountPath: /dev/shm
+        # USER nobody's $HOME is /nonexistent; give Chrome/ChromicPDF a writable tmp.
+        - name: tmp
+          mountPath: /tmp
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "250m"
+          limits:
+            # Chromium is bursty/memory-hungry; tune against real conversation HTML.
+            memory: "3Gi"
+            cpu: "2"
+      volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 256Mi
+      - name: tmp
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pdf
+  namespace: pdf-production
+spec:
+  type: ClusterIP
+  ports:
+  - port: 4000
+    targetPort: 4000
+    protocol: TCP
+    name: http
+  selector:
+    app: pdf
