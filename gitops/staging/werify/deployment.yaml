@@ -61,7 +61,10 @@ spec:
               memory: "256Mi"
               cpu: "100m"
             limits:
-              memory: "2Gi"
+              # Typst PDF/A rendering peaks at ~1.5 GiB working-set on large
+              # conversation docs; cgroup OOM killer hit at 2 GiB. 4 GiB gives
+              # 2× headroom for transient spikes and concurrent renders.
+              memory: "4Gi"
               # Typst PDF/A rendering pegged the previous 500m limit. 2 cores
               # lets layout + image processing run unthrottled.
               cpu: "2"
