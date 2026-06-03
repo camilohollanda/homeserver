@@ -21,3 +21,4 @@ resources:
   - applications/gotenberg.yaml
   - applications/pdf-production.yaml
   - applications/pdf-staging.yaml
+  - applications/victoria-metrics.yaml

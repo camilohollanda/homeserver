@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: victoria-metrics
+  namespace: victoria-metrics
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  # Single-node TSDB on a local PV — must not run >1 replica.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: victoria-metrics
+  template:
+    metadata:
+      labels:
+        app: victoria-metrics
+    spec:
+      serviceAccountName: victoria-metrics
+      containers:
+      - name: victoria-metrics
+        image: victoriametrics/victoria-metrics:v1.106.1
+        args:
+          - -storageDataPath=/storage
+          - -promscrape.config=/etc/vmsingle/prometheus.yml
+          # Retain ~30d; bump if /storage has room. Disk usage scales with
+          # active series, not just retention — homelab scale stays small.
+          - -retentionPeriod=30d
+          - -httpListenAddr=:8428
+        ports:
+          - name: http
+            containerPort: 8428
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8428
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8428
+          periodSeconds: 30
+          failureThreshold: 5
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "128Mi"
+          limits:
+            cpu: "1"
+            memory: "1Gi"
+        volumeMounts:
+          - name: storage
+            mountPath: /storage
+          - name: scrape-config
+            mountPath: /etc/vmsingle
+      volumes:
+        - name: storage
+          persistentVolumeClaim:
+            claimName: victoria-metrics-storage
+        - name: scrape-config
+          configMap:
+            name: victoria-metrics-scrape
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: victoria-metrics
+  namespace: victoria-metrics
+spec:
+  type: ClusterIP
+  selector:
+    app: victoria-metrics
+  ports:
+    - name: http
+      port: 8428
+      targetPort: 8428

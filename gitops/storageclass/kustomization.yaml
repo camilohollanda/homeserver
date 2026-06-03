@@ -7,3 +7,4 @@ resources:
   - werify-production-data-pv.yaml
   - bugsink-data-pv.yaml
   - loki-storage-pv.yaml
+  - victoria-metrics-pv.yaml

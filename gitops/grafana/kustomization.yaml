@@ -23,6 +23,7 @@ configMapGenerator:
       - dashboards/iddh-members-staging.json
       - dashboards/pdf-production.json
       - dashboards/pdf-staging.json
+      - dashboards/pod-resources.json
       - dashboards/garage.json
       - dashboards/infisical.json
       - dashboards/mailpit.json

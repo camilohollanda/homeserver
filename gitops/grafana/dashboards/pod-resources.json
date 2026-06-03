@@ -1,0 +1,222 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {"type": "grafana", "uid": "-- Grafana --"},
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": 0,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "victoria-metrics"},
+      "description": "Working-set memory per pod. Dashed lines show the container's memory limit — if the solid line crosses the dashed one, the pod is about to be OOMKilled.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisLabel": "",
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {"type": "linear"},
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {"group": "A", "mode": "none"},
+            "thresholdsStyle": {"mode": "off"}
+          },
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green"}]},
+          "unit": "bytes"
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byRegexp", "options": "/limit/i"},
+            "properties": [
+              {"id": "custom.lineStyle", "value": {"dash": [10, 10], "fill": "dash"}},
+              {"id": "custom.fillOpacity", "value": 0},
+              {"id": "custom.lineWidth", "value": 1}
+            ]
+          }
+        ]
+      },
+      "gridPos": {"h": 11, "w": 24, "x": 0, "y": 0},
+      "id": 1,
+      "options": {
+        "legend": {"calcs": ["last", "max"], "displayMode": "table", "placement": "right", "showLegend": true},
+        "tooltip": {"mode": "multi", "sort": "desc"}
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "victoria-metrics"},
+          "editorMode": "code",
+          "expr": "sum by (namespace, pod) (container_memory_working_set_bytes{namespace=~\"$namespace\", pod=~\"$pod\", container!=\"\", container!=\"POD\"})",
+          "legendFormat": "{{namespace}}/{{pod}}",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "victoria-metrics"},
+          "editorMode": "code",
+          "expr": "sum by (namespace, pod) (container_spec_memory_limit_bytes{namespace=~\"$namespace\", pod=~\"$pod\", container!=\"\", container!=\"POD\"} > 0)",
+          "legendFormat": "{{namespace}}/{{pod}} (limit)",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Memory (working set) — pods + limits",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "victoria-metrics"},
+      "description": "CPU usage per pod (cores). Dashed lines show the container's CPU limit.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "mappings": [],
+          "unit": "none"
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byRegexp", "options": "/limit/i"},
+            "properties": [
+              {"id": "custom.lineStyle", "value": {"dash": [10, 10], "fill": "dash"}},
+              {"id": "custom.fillOpacity", "value": 0},
+              {"id": "custom.lineWidth", "value": 1}
+            ]
+          }
+        ]
+      },
+      "gridPos": {"h": 11, "w": 24, "x": 0, "y": 11},
+      "id": 2,
+      "options": {
+        "legend": {"calcs": ["last", "max"], "displayMode": "table", "placement": "right", "showLegend": true},
+        "tooltip": {"mode": "multi", "sort": "desc"}
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "victoria-metrics"},
+          "editorMode": "code",
+          "expr": "sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace=~\"$namespace\", pod=~\"$pod\", container!=\"\", container!=\"POD\"}[2m]))",
+          "legendFormat": "{{namespace}}/{{pod}}",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "victoria-metrics"},
+          "editorMode": "code",
+          "expr": "sum by (namespace, pod) (container_spec_cpu_quota{namespace=~\"$namespace\", pod=~\"$pod\", container!=\"\", container!=\"POD\"} / container_spec_cpu_period{namespace=~\"$namespace\", pod=~\"$pod\", container!=\"\", container!=\"POD\"} > 0)",
+          "legendFormat": "{{namespace}}/{{pod}} (limit)",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "CPU usage (cores) — pods + limits",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "victoria-metrics"},
+      "description": "Cumulative container restarts. A step up = OOMKill, CrashLoopBackOff, or rollout.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stepBefore": true
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 22},
+      "id": 3,
+      "options": {
+        "legend": {"calcs": ["last", "max"], "displayMode": "table", "placement": "right", "showLegend": true},
+        "tooltip": {"mode": "multi"}
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "victoria-metrics"},
+          "editorMode": "code",
+          "expr": "sum by (namespace, pod) (kube_pod_container_status_restarts_total{namespace=~\"$namespace\", pod=~\"$pod\"}) or sum by (namespace, pod) (changes(container_start_time_seconds{namespace=~\"$namespace\", pod=~\"$pod\", container!=\"\", container!=\"POD\"}[$__range]))",
+          "legendFormat": "{{namespace}}/{{pod}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Container restarts",
+      "type": "timeseries"
+    }
+  ],
+  "preload": false,
+  "schemaVersion": 42,
+  "tags": ["pod", "resources"],
+  "templating": {
+    "list": [
+      {
+        "current": {"selected": true, "text": ["All"], "value": ["$__all"]},
+        "datasource": {"type": "prometheus", "uid": "victoria-metrics"},
+        "definition": "label_values(container_memory_working_set_bytes{container!=\"\", container!=\"POD\"}, namespace)",
+        "includeAll": true,
+        "label": "namespace",
+        "multi": true,
+        "name": "namespace",
+        "options": [],
+        "query": {"query": "label_values(container_memory_working_set_bytes{container!=\"\", container!=\"POD\"}, namespace)", "refId": "PrometheusVariableQueryEditor-VariableQuery"},
+        "refresh": 2,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {"selected": true, "text": ["All"], "value": ["$__all"]},
+        "datasource": {"type": "prometheus", "uid": "victoria-metrics"},
+        "definition": "label_values(container_memory_working_set_bytes{namespace=~\"$namespace\", container!=\"\", container!=\"POD\"}, pod)",
+        "includeAll": true,
+        "label": "pod",
+        "multi": true,
+        "name": "pod",
+        "options": [],
+        "query": {"query": "label_values(container_memory_working_set_bytes{namespace=~\"$namespace\", container!=\"\", container!=\"POD\"}, pod)", "refId": "PrometheusVariableQueryEditor-VariableQuery"},
+        "refresh": 2,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {"from": "now-3h", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Pod resources",
+  "uid": "pod-resources",
+  "version": 1
+}
