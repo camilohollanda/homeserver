@@ -22,7 +22,10 @@ spec:
     spec:
       containers:
       - name: bugsink
-        image: bugsink/bugsink:latest
+        # Personal fork built from camilohollanda/bugsink:homeserver-build, which
+        # carries the /envelope/ + /store/ JsonResponse fix (PR bugsink/bugsink#396).
+        # Revert to bugsink/bugsink:latest once #396 merges and is released.
+        image: ghcr.io/camilohollanda/bugsink:homeserver-build-c527a07
         ports:
         - containerPort: 8000
           name: http
