@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gotenberg
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/prem-prakash/homeserver.git
+    targetRevision: main
+    path: gitops/gotenberg
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: gotenberg
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true

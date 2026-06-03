@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gotenberg
+  namespace: gotenberg
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-dns
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - gotenberg.internal.prakash.com.br
+      secretName: gotenberg-tls
+  rules:
+    - host: gotenberg.internal.prakash.com.br
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: gotenberg
+                port:
+                  number: 3000
