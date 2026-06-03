@@ -9,6 +9,14 @@ spec:
   # Stateless → horizontally scalable. Keep per-pod Chrome concurrency low
   # (RENDER_MAX_CONCURRENCY) and add replicas for throughput.
   replicas: 1
+  # A new pod's readiness probe passes the instant /health returns 200, but the
+  # EndpointSlice/kube-proxy update (and teardown of the old pod) lag that by a
+  # few seconds. Without minReadySeconds the pod counts as "available" at probe
+  # success, so Argo CD flips to Healthy — and fires the on-deployed Pushover —
+  # before traffic actually routes to the new pod. Requiring 10s of continuous
+  # readiness holds Argo CD in Progressing until the rollout has settled, so the
+  # "Deployed" ping lands when the pod is genuinely serving.
+  minReadySeconds: 10
   selector:
     matchLabels:
       app: pdf
@@ -79,7 +87,10 @@ spec:
             memory: "1Gi"
             cpu: "250m"
           limits:
-            memory: "3Gi"
+            # Chromium is bursty/memory-hungry. 3Gi was OOMKilled rendering
+            # large (40MB+) conversation HTML; 6Gi matches gotenberg's proven
+            # sizing for similar PDF/A workloads (per upstream README's hint).
+            memory: "6Gi"
             cpu: "2"
       volumes:
       - name: tmp
