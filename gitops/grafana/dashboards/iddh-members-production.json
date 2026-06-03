@@ -109,7 +109,7 @@
         "prettifyLogMessage": false,
         "showControls": true,
         "showLabels": false,
-        "showTime": false,
+        "showTime": true,
         "sortOrder": "Descending",
         "syntaxHighlighting": true,
         "wrapLogMessage": true
@@ -123,7 +123,7 @@
           },
           "direction": "backward",
           "editorMode": "code",
-          "expr": "{namespace=\"iddh-members-production\", app=\"iddh-members\"} | json | line_format `{{ if .message }}{{ .time | default \"-\" }} {{ .severity | default \"-\" }} {{ .message }}{{ else }}{{ __line__ }}{{ end }}`\n",
+          "expr": "{namespace=\"iddh-members-production\", app=\"iddh-members\"} | json | line_format `{{ if .message }}{{ .severity | default \"-\" }} {{ .message }}{{ else }}{{ __line__ }}{{ end }}`\n",
           "queryType": "range",
           "refId": "A"
         }
