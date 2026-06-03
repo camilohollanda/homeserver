@@ -9,16 +9,17 @@
 # Required env vars:
 #   GH_APP_CLIENT_ID           - GitHub App Client ID (preferred) or numeric App ID
 #   GH_APP_PRIVATE_KEY_FILE    - Path to the App's PEM private key on your laptop
-#   GH_REPOS                   - Comma-separated owner/repo list
-#                                e.g. "iddh-com-br/members,prem-prakash/werify"
+#   GH_ORGS                    - Comma-separated org list
+#                                e.g. "iddh-com-br,prem-prakash"
 #
-# The App must be installed on every account/org that owns a repo in GH_REPOS,
-# but the per-repo installation IDs are auto-discovered at runtime — no
-# GH_APP_INSTALLATION_ID needed even if repos span multiple owners.
+# The App must be installed on every org in GH_ORGS with the org-level
+# "Self-hosted runners: Read & write" permission. Per-org installation IDs
+# are auto-discovered at runtime — no GH_APP_INSTALLATION_ID needed even if
+# you list multiple orgs.
 #
 # Optional env vars:
 #   GH_RUNNERS_SSH             - default: deployer@192.168.20.50
-#   RUNNERS_PER_REPO           - default: 4
+#   RUNNERS_PER_ORG            - default: 4
 #   RUNNER_VERSION             - default: 2.328.0
 #   RUNNER_LABELS              - default: "self-hosted,linux,homeserver"
 #   ACTIONS_RESULTS_URL        - Self-hosted gha-cache URL (e.g.
@@ -49,12 +50,12 @@ wait_ssh() {
 }
 
 GH_RUNNERS_SSH="${GH_RUNNERS_SSH:-deployer@192.168.20.50}"
-export RUNNERS_PER_REPO="${RUNNERS_PER_REPO:-4}"
+export RUNNERS_PER_ORG="${RUNNERS_PER_ORG:-4}"
 export RUNNER_VERSION="${RUNNER_VERSION:-2.334.0}"
 export RUNNER_LABELS="${RUNNER_LABELS:-self-hosted,linux,homeserver}"
 export ACTIONS_RESULTS_URL="${ACTIONS_RESULTS_URL:-}"
 
-check_env GH_APP_CLIENT_ID GH_APP_PRIVATE_KEY_FILE GH_REPOS
+check_env GH_APP_CLIENT_ID GH_APP_PRIVATE_KEY_FILE GH_ORGS
 
 if [[ ! -r "$GH_APP_PRIVATE_KEY_FILE" ]]; then
   echo "Error: cannot read GH_APP_PRIVATE_KEY_FILE: $GH_APP_PRIVATE_KEY_FILE"
@@ -67,8 +68,8 @@ export GH_APP_PRIVATE_KEY="$(cat "$GH_APP_PRIVATE_KEY_FILE")"
 echo "=============================================="
 echo "  GitHub Actions Runners Setup"
 echo "  Target:           ${GH_RUNNERS_SSH}"
-echo "  Repos:            ${GH_REPOS}"
-echo "  Runners per repo: ${RUNNERS_PER_REPO}"
+echo "  Orgs:             ${GH_ORGS}"
+echo "  Runners per org:  ${RUNNERS_PER_ORG}"
 echo "  Runner version:   ${RUNNER_VERSION}"
 echo "  Labels:           ${RUNNER_LABELS}"
 if [[ -n "$ACTIONS_RESULTS_URL" ]]; then
@@ -90,8 +91,8 @@ echo "=============================================="
 echo "  GitHub Actions runners setup complete!"
 echo "=============================================="
 echo ""
-echo "  Each runner appears in its repo at:"
-echo "    https://github.com/<owner>/<repo>/settings/actions/runners"
+echo "  Each runner appears in its org at:"
+echo "    https://github.com/organizations/<org>/settings/actions/runners"
 echo ""
 echo "  Workflows must opt in with:"
 echo "    runs-on: [self-hosted, linux, homeserver]"
@@ -99,12 +100,16 @@ echo ""
 echo "  Store credentials in Infisical (project homeserver, path /github-runners/):"
 echo "    GH_APP_CLIENT_ID         = ${GH_APP_CLIENT_ID}"
 echo "    GH_APP_PRIVATE_KEY       = <contents of ${GH_APP_PRIVATE_KEY_FILE}>"
-echo "    GH_REPOS                 = ${GH_REPOS}"
+echo "    GH_ORGS                  = ${GH_ORGS}"
 echo ""
-echo "  GitHub App needs these repository permissions:"
-echo "    - Administration:  Read & write   (runner registration)"
-echo "    - Actions:         Read & write   (job dispatch)"
-echo "    - Metadata:        Read           (default)"
-echo "  And must be installed on every account/org that owns a repo in GH_REPOS."
-echo "  Per-repo installation IDs are auto-discovered at runtime."
+echo "  GitHub App needs this organization permission:"
+echo "    - Self-hosted runners:  Read & write   (org-scoped JIT registration)"
+echo "    - Metadata:             Read           (default)"
+echo "  And must be installed on every org in GH_ORGS."
+echo "  Per-org installation IDs are auto-discovered at runtime."
+echo ""
+echo "  On the free plan there is only one runner group (Default). To stop"
+echo "  arbitrary repos in each org from scheduling jobs on these runners,"
+echo "  set Default → Repository access → Selected repositories in the org's"
+echo "  Settings → Actions → Runner groups page."
 echo ""

@@ -3,20 +3,20 @@
 # Remote: REMOTE_HOST=deployer@192.168.20.50 ./install.sh
 #
 # Provisions ephemeral, JIT-registered GitHub Actions runners. Each instance
-# picks up exactly one job from its assigned repo, then systemd restarts it
-# with a fresh JIT config (no state between jobs).
+# picks up exactly one job from its assigned org's runner pool, then systemd
+# restarts it with a fresh JIT config (no state between jobs).
 #
 # Required env vars:
 #   GH_APP_CLIENT_ID         - GitHub App Client ID (preferred) or numeric App ID — used as the JWT `iss` claim
 #   GH_APP_PRIVATE_KEY       - PEM contents of the App's private key (with newlines)
-#   GH_REPOS                 - Comma-separated owner/repo list (e.g. "iddh-com-br/members,prem-prakash/werify")
+#   GH_ORGS                  - Comma-separated org list (e.g. "iddh-com-br,prem-prakash")
 #
-# The App's per-repo installation is auto-discovered at runtime via
-# GET /repos/{owner}/{repo}/installation, so repos can live under any
-# account/org the App is installed on.
+# The App's per-org installation is auto-discovered at runtime via
+# GET /orgs/{org}/installation. The App must be installed on every org in
+# GH_ORGS with the "Self-hosted runners: Read & write" org permission.
 #
 # Optional env vars:
-#   RUNNERS_PER_REPO         - Ephemeral runner slots per repo (default: 4)
+#   RUNNERS_PER_ORG          - Ephemeral runner slots per org (default: 4)
 #   RUNNER_VERSION           - actions/runner release version (default: 2.328.0)
 #   RUNNER_LABELS            - Comma-separated labels (default: "self-hosted,linux,homeserver")
 #   ACTIONS_RESULTS_URL      - Self-hosted cache server URL (must end with /).
@@ -27,8 +27,8 @@ if [[ -n "${REMOTE_HOST:-}" ]]; then
   { printf 'export %s=%q\n' \
       GH_APP_CLIENT_ID         "${GH_APP_CLIENT_ID:-}" \
       GH_APP_PRIVATE_KEY       "${GH_APP_PRIVATE_KEY:-}" \
-      GH_REPOS                 "${GH_REPOS:-}" \
-      RUNNERS_PER_REPO         "${RUNNERS_PER_REPO:-}" \
+      GH_ORGS                  "${GH_ORGS:-}" \
+      RUNNERS_PER_ORG          "${RUNNERS_PER_ORG:-}" \
       RUNNER_VERSION           "${RUNNER_VERSION:-}" \
       RUNNER_LABELS            "${RUNNER_LABELS:-}" \
       ACTIONS_RESULTS_URL      "${ACTIONS_RESULTS_URL:-}"
@@ -45,9 +45,9 @@ fi
 
 : "${GH_APP_CLIENT_ID:?must be set}"
 : "${GH_APP_PRIVATE_KEY:?must be set}"
-: "${GH_REPOS:?must be set}"
+: "${GH_ORGS:?must be set}"
 
-RUNNERS_PER_REPO="${RUNNERS_PER_REPO:-4}"
+RUNNERS_PER_ORG="${RUNNERS_PER_ORG:-4}"
 RUNNER_VERSION="${RUNNER_VERSION:-2.334.0}"
 RUNNER_LABELS="${RUNNER_LABELS:-self-hosted,linux,homeserver}"
 ACTIONS_RESULTS_URL="${ACTIONS_RESULTS_URL:-}"
@@ -252,17 +252,16 @@ fi
 # ---------------------------------------------------------------------------
 cat > /usr/local/sbin/gh-runner-mint-jit <<'MINT'
 #!/usr/bin/env bash
-# Mints an ephemeral JIT runner config for OWNER/REPO and prints it on stdout.
-# Usage: gh-runner-mint-jit OWNER REPO INSTANCE_NAME
+# Mints an ephemeral JIT runner config for ORG and prints it on stdout.
+# Usage: gh-runner-mint-jit ORG INSTANCE_NAME
 #
-# Auto-discovers the App's installation for the target repo so the same
-# script works whether the App is installed on an org, a personal account,
-# or both — no per-repo installation ID needed.
+# Auto-discovers the App's installation on the target org. Runner registers
+# into the org's Default runner group (id 1) — the only group available on
+# the free plan.
 set -euo pipefail
 
-OWNER="$1"
-REPO="$2"
-INSTANCE_NAME="$3"
+ORG="$1"
+INSTANCE_NAME="$2"
 
 CLIENT_ID="${GH_APP_CLIENT_ID:?missing GH_APP_CLIENT_ID}"
 PRIVATE_KEY_PATH="${GH_APP_PRIVATE_KEY_PATH:-/etc/gh-runners/private-key.pem}"
@@ -299,10 +298,10 @@ gh_api() {
   fi
 }
 
-# 2. Find the installation for this repo (404 = App not installed there).
-inst_lookup=$(gh_api GET "https://api.github.com/repos/${OWNER}/${REPO}/installation" 2>&1) || {
-  echo "Installation lookup failed for ${OWNER}/${REPO}." >&2
-  echo "Is the GitHub App installed on this repo's account/org?" >&2
+# 2. Find the App's installation on this org (404 = App not installed there).
+inst_lookup=$(gh_api GET "https://api.github.com/orgs/${ORG}/installation" 2>&1) || {
+  echo "Installation lookup failed for org ${ORG}." >&2
+  echo "Is the GitHub App installed on this org with 'Self-hosted runners: r/w'?" >&2
   echo "Response: $inst_lookup" >&2
   exit 1
 }
@@ -324,7 +323,7 @@ jit_resp=$(curl -fsS -X POST \
   -H "Authorization: Bearer ${inst_token}" \
   -H "Accept: application/vnd.github+json" \
   -H "X-GitHub-Api-Version: 2022-11-28" \
-  "https://api.github.com/repos/${OWNER}/${REPO}/actions/runners/generate-jitconfig" \
+  "https://api.github.com/orgs/${ORG}/actions/runners/generate-jitconfig" \
   -d "$(jq -nc \
         --arg name "$runner_name" \
         --argjson labels "$labels_json" \
@@ -345,9 +344,8 @@ set -euo pipefail
 INSTANCE_NAME="${1:?instance name required}"
 INSTANCE_DIR="/opt/runners/${INSTANCE_NAME}"
 [[ -d "$INSTANCE_DIR" ]] || { echo "missing instance dir: $INSTANCE_DIR" >&2; exit 1; }
-: "${GH_OWNER:?missing GH_OWNER (loaded from /etc/gh-runners/instances/${INSTANCE_NAME}.env)}"
-: "${GH_REPO:?missing GH_REPO}"
-JIT=$(/usr/local/sbin/gh-runner-mint-jit "$GH_OWNER" "$GH_REPO" "$INSTANCE_NAME")
+: "${GH_ORG:?missing GH_ORG (loaded from /etc/gh-runners/instances/${INSTANCE_NAME}.env)}"
+JIT=$(/usr/local/sbin/gh-runner-mint-jit "$GH_ORG" "$INSTANCE_NAME")
 cd "$INSTANCE_DIR"
 exec ./run.sh --jitconfig "$JIT"
 RUN
@@ -453,29 +451,27 @@ systemctl daemon-reload
 systemctl enable --now docker-prune.timer
 
 # ---------------------------------------------------------------------------
-# Per-repo instances
+# Per-org instances
 # `install -d -m 0755` (unlike mkdir -p) sets the mode on existing dirs too,
 # so this self-heals any prior run that created /opt/runners under a
 # restrictive umask.
 # ---------------------------------------------------------------------------
 install -d -m 0755 "$INSTANCE_ROOT"
 
-IFS=',' read -ra REPOS <<< "$GH_REPOS"
+IFS=',' read -ra ORGS <<< "$GH_ORGS"
 declare -a WANTED_INSTANCES=()
 
-for repo_spec in "${REPOS[@]}"; do
-  repo_spec="$(echo "$repo_spec" | xargs)"  # trim
-  [[ -z "$repo_spec" ]] && continue
-  if [[ "$repo_spec" != */* ]]; then
-    echo "  Skipping invalid repo spec (expected owner/repo): $repo_spec" >&2
+for org_spec in "${ORGS[@]}"; do
+  ORG="$(echo "$org_spec" | xargs)"  # trim
+  [[ -z "$ORG" ]] && continue
+  if [[ "$ORG" == */* ]]; then
+    echo "  Skipping invalid org spec (must be a bare org name, not owner/repo): $ORG" >&2
     continue
   fi
-  OWNER="${repo_spec%/*}"
-  REPO="${repo_spec#*/}"
-  # Filesystem-safe slug — replace any '/' just in case
-  SLUG="${OWNER//\//-}-${REPO//\//-}"
+  # Filesystem-safe slug — strip anything outside [A-Za-z0-9._-] just in case
+  SLUG="${ORG//[^A-Za-z0-9._-]/-}"
 
-  for n in $(seq 1 "$RUNNERS_PER_REPO"); do
+  for n in $(seq 1 "$RUNNERS_PER_ORG"); do
     INSTANCE="${SLUG}-${n}"
     WANTED_INSTANCES+=("$INSTANCE")
     INSTANCE_DIR="${INSTANCE_ROOT}/${INSTANCE}"
@@ -492,8 +488,7 @@ for repo_spec in "${REPOS[@]}"; do
       patch_runner_worker_dll "${INSTANCE_DIR}/bin/Runner.Worker.dll"
     fi
     cat > "${ETC_DIR}/instances/${INSTANCE}.env" <<ENV
-GH_OWNER=${OWNER}
-GH_REPO=${REPO}
+GH_ORG=${ORG}
 ENV
     chown root:runner "${ETC_DIR}/instances/${INSTANCE}.env"
     chmod 0640 "${ETC_DIR}/instances/${INSTANCE}.env"
@@ -501,7 +496,7 @@ ENV
 done
 
 if [[ ${#WANTED_INSTANCES[@]} -eq 0 ]]; then
-  echo "Error: no valid repos in GH_REPOS=${GH_REPOS}" >&2
+  echo "Error: no valid orgs in GH_ORGS=${GH_ORGS}" >&2
   exit 1
 fi
 
@@ -530,8 +525,8 @@ shopt -u nullglob
 
 echo ""
 echo "✓ GitHub Actions runners installed."
-echo "  Repos:            ${GH_REPOS}"
-echo "  Runners per repo: ${RUNNERS_PER_REPO}"
+echo "  Orgs:             ${GH_ORGS}"
+echo "  Runners per org:  ${RUNNERS_PER_ORG}"
 echo "  Labels:           ${RUNNER_LABELS}"
 echo "  Runner version:   ${RUNNER_VERSION}"
 echo ""
@@ -541,4 +536,4 @@ fi
 echo ""
 echo "  Status:  systemctl status 'gh-runner@*'"
 echo "  Logs:    journalctl -u 'gh-runner@*' -f"
-echo "  Runners visible in each repo's Settings → Actions → Runners"
+echo "  Runners visible in each org's Settings → Actions → Runners"
