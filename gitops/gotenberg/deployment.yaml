@@ -20,6 +20,7 @@ spec:
           - gotenberg
           - --chromium-disable-javascript=true
           - --chromium-allow-list=file:///tmp/.*
+          - --chromium-max-queue-size=1
           - --api-timeout=300s
         ports:
         - containerPort: 3000
@@ -42,7 +43,7 @@ spec:
             memory: "256Mi"
             cpu: "100m"
           limits:
-            memory: "1Gi"
+            memory: "3Gi"
             cpu: "1000m"
 ---
 apiVersion: v1
