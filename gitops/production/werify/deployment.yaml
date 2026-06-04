@@ -65,9 +65,11 @@ spec:
             # conversation docs; cgroup OOM killer hit at 2 GiB. 4 GiB gives
             # 2× headroom for transient spikes and concurrent renders.
             memory: "4Gi"
-            # Typst PDF/A rendering pegged the previous 500m limit. 2 cores
-            # lets layout + image processing run unthrottled.
-            cpu: "2"
+            # Typst PDF/A rendering is CPU-bound and pegged the 2-core limit
+            # (a single large laudo.pdf took ~320s wall-clock). 4 cores gives
+            # the layout + image/PDF encoding more parallelism to cut latency;
+            # node has 8 cores allocatable.
+            cpu: "4"
       volumes:
       - name: data
         persistentVolumeClaim:
