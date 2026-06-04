@@ -27,11 +27,3 @@ spec:
       images:
         - alias: iddh-members
           imageName: ghcr.io/iddh-com-br/members:staging
-    - namePattern: "pdf-production"
-      images:
-        - alias: pdf
-          imageName: ghcr.io/prem-prakash/werify_pdf_renderer:main
-    - namePattern: "pdf-staging"
-      images:
-        - alias: pdf
-          imageName: ghcr.io/prem-prakash/werify_pdf_renderer:staging

@@ -18,7 +18,4 @@ resources:
   - applications/iddh-members-production.yaml
   - applications/iddh-members-staging.yaml
   - applications/apprise.yaml
-  - applications/gotenberg.yaml
-  - applications/pdf-production.yaml
-  - applications/pdf-staging.yaml
   - applications/victoria-metrics.yaml
