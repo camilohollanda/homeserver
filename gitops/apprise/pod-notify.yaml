@@ -1,0 +1,149 @@
+---
+# Polls pods in the configured namespaces every $INTERVAL seconds and fires an
+# Apprise notification when a container's restartCount increases. The
+# lastState.terminated.reason field distinguishes OOMKilled (priority bumped to
+# `failure`) from generic Error/Completed restarts (`warning`). Brand-new pods
+# (no prior snapshot entry) don't notify — only transitions do, so a restart
+# of a Deployment doesn't spam on rollout.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pod-notify
+  namespace: apprise
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: pod-notify
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: pod-notify
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: pod-notify
+subjects:
+  - kind: ServiceAccount
+    name: pod-notify
+    namespace: apprise
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pod-notify
+  namespace: apprise
+data:
+  watch.sh: |
+    #!/bin/bash
+    set -euo pipefail
+
+    : "${APPRISE_URL:?must be set}"
+    : "${NAMESPACES:?space-separated list, must be set}"
+    : "${INTERVAL:=30}"
+
+    PREV=/tmp/prev.tsv
+    CURR=/tmp/curr.tsv
+    : > "$PREV"
+
+    snapshot() {
+      for ns in $NAMESPACES; do
+        kubectl -n "$ns" get pods -o json 2>/dev/null | jq -r --arg ns "$ns" '
+          .items[]
+          | .metadata.name as $pod
+          | (.status.containerStatuses // [])[]
+          | [$ns, $pod, .name, (.restartCount|tostring), (.lastState.terminated.reason // "")]
+          | @tsv
+        '
+      done
+    }
+
+    notify() {
+      local ns="$1" pod="$2" container="$3" reason="$4"
+      local type=warning title="[$ns] pod restart"
+      if [ "$reason" = "OOMKilled" ]; then
+        type=failure
+        title="[$ns] pod OOMKilled"
+      fi
+      local body="$pod ($container) restarted — reason: ${reason:-unknown}"
+      local payload
+      payload=$(jq -nc --arg t "$title" --arg b "$body" --arg tag "$ns" --arg type "$type" \
+        '{title:$t, body:$b, tag:$tag, type:$type}')
+      curl -fsS -X POST -H 'Content-Type: application/json' -d "$payload" "$APPRISE_URL" \
+        || echo "notify failed: $payload"
+    }
+
+    echo "watching pods in: $NAMESPACES -> $APPRISE_URL (every ${INTERVAL}s)"
+
+    # Seed PREV with current state so we don't alert on existing restartCounts
+    # at startup (e.g. after a pod-notify rollout we'd otherwise replay every
+    # historical restart that ever happened).
+    snapshot > "$PREV"
+
+    while true; do
+      sleep "$INTERVAL"
+      snapshot > "$CURR"
+      awk -F'\t' '
+        NR==FNR { prev[$1 SUBSEP $2 SUBSEP $3] = $4; next }
+        {
+          key = $1 SUBSEP $2 SUBSEP $3
+          if (key in prev && ($4 + 0) > (prev[key] + 0)) {
+            printf "%s\t%s\t%s\t%s\n", $1, $2, $3, $5
+          }
+        }
+      ' "$PREV" "$CURR" | while IFS=$'\t' read -r ns pod container reason; do
+        notify "$ns" "$pod" "$container" "$reason"
+      done
+      mv "$CURR" "$PREV"
+    done
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pod-notify
+  namespace: apprise
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: pod-notify
+  template:
+    metadata:
+      labels:
+        app: pod-notify
+    spec:
+      serviceAccountName: pod-notify
+      containers:
+        - name: watcher
+          image: alpine/k8s:1.30.4
+          command: ["/bin/bash", "/scripts/watch.sh"]
+          env:
+            - name: APPRISE_URL
+              value: "http://apprise.apprise.svc.cluster.local/notify/homeserver"
+            - name: NAMESPACES
+              value: "werify-production werify-staging iddh-members-production iddh-members-staging"
+            - name: INTERVAL
+              value: "30"
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "10m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+      volumes:
+        - name: scripts
+          configMap:
+            name: pod-notify
+            defaultMode: 0755

@@ -6,3 +6,4 @@ resources:
   - external-secret.yaml
   - deployment.yaml
   - secret-notify.yaml
+  - pod-notify.yaml
