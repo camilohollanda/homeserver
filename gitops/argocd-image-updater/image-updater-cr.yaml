@@ -18,20 +18,21 @@ spec:
           # tags. Track those so the deploy notification carries the commit.
           imageName: ghcr.io/iddh-com-br/members
           commonUpdateSettings:
-            updateStrategy: latest
-            allowTags: "^main-[0-9a-f]{7,}$"
+            updateStrategy: newest-build
+            allowTags: "regexp:^main-[0-9a-f]{7,}$"
     - namePattern: "werify-production"
       images:
         - alias: werify
           # Track the immutable per-commit tag (werify CI pushes `main-<shortsha>`)
           # instead of the mutable `:main`, so the deployed ref — and thus the
-          # deploy notification — carries the source commit. `latest` = newest by
-          # build time among tags matching allowTags. Overrides the CR-wide
+          # deploy notification — carries the source commit. `newest-build` =
+          # newest by build time among tags matching allowTags (which uses the
+          # image-updater `regexp:` match-option syntax). Overrides the CR-wide
           # `updateStrategy: digest` default.
           imageName: ghcr.io/prem-prakash/werify
           commonUpdateSettings:
-            updateStrategy: latest
-            allowTags: "^main-[0-9a-f]{7,}$"
+            updateStrategy: newest-build
+            allowTags: "regexp:^main-[0-9a-f]{7,}$"
     - namePattern: "werify-staging"
       images:
         - alias: werify
@@ -39,13 +40,13 @@ spec:
           # tag so staging deploy notifications also show the source commit.
           imageName: ghcr.io/prem-prakash/werify
           commonUpdateSettings:
-            updateStrategy: latest
-            allowTags: "^staging-[0-9a-f]{7,}$"
+            updateStrategy: newest-build
+            allowTags: "regexp:^staging-[0-9a-f]{7,}$"
     - namePattern: "iddh-members-staging"
       images:
         - alias: iddh-members
           # Mirror: track immutable `staging-<shortsha>` tags.
           imageName: ghcr.io/iddh-com-br/members
           commonUpdateSettings:
-            updateStrategy: latest
-            allowTags: "^staging-[0-9a-f]{7,}$"
+            updateStrategy: newest-build
+            allowTags: "regexp:^staging-[0-9a-f]{7,}$"
