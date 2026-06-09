@@ -20,7 +20,7 @@ data:
         body: |
           {
             "title": "Deployed: {{.app.metadata.name}}",
-            "body": "{{.app.metadata.name}} synced to `{{trunc 7 .app.status.sync.revision}}` ({{.app.status.health.status}})\n\n[View in ArgoCD](https://argocd.internal.prakash.com.br/applications/{{.app.metadata.namespace}}/{{.app.metadata.name}})",
+            "body": "{{.app.metadata.name}} synced to `{{trunc 7 .app.status.sync.revision}}` ({{.app.status.health.status}}){{with .app.spec.source.kustomize}}{{with .images}}{{range .}}\n📦 `{{.}}`{{end}}{{end}}{{end}}\n\n[View in ArgoCD](https://argocd.internal.prakash.com.br/applications/{{.app.metadata.namespace}}/{{.app.metadata.name}})",
             "tag": "{{.app.metadata.name}}",
             "type": "info",
             "format": "markdown"
@@ -33,7 +33,7 @@ data:
         body: |
           {
             "title": "FAILED: {{.app.metadata.name}}",
-            "body": "{{.app.metadata.name}} — health=`{{.app.status.health.status}}` sync=`{{.app.status.sync.status}}` rev=`{{trunc 7 .app.status.sync.revision}}`\n{{range .app.status.conditions}}- **{{.type}}**: {{.message}}\n{{end}}\n[View in ArgoCD](https://argocd.internal.prakash.com.br/applications/{{.app.metadata.namespace}}/{{.app.metadata.name}})",
+            "body": "{{.app.metadata.name}} — health=`{{.app.status.health.status}}` sync=`{{.app.status.sync.status}}` rev=`{{trunc 7 .app.status.sync.revision}}`{{with .app.spec.source.kustomize}}{{with .images}}{{range .}}\n📦 `{{.}}`{{end}}{{end}}{{end}}\n{{range .app.status.conditions}}- **{{.type}}**: {{.message}}\n{{end}}\n[View in ArgoCD](https://argocd.internal.prakash.com.br/applications/{{.app.metadata.namespace}}/{{.app.metadata.name}})",
             "tag": "{{.app.metadata.name}}",
             "type": "failure",
             "format": "markdown"
