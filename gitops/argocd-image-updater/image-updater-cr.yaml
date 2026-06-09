@@ -17,8 +17,9 @@ spec:
           # iddh-members CI mirrors werify: pushes immutable `main-<shortsha>`
           # tags. Track those so the deploy notification carries the commit.
           imageName: ghcr.io/iddh-com-br/members
-          updateStrategy: latest
-          allowTags: "^main-[0-9a-f]{7,}$"
+          commonUpdateSettings:
+            updateStrategy: latest
+            allowTags: "^main-[0-9a-f]{7,}$"
     - namePattern: "werify-production"
       images:
         - alias: werify
@@ -28,20 +29,23 @@ spec:
           # build time among tags matching allowTags. Overrides the CR-wide
           # `updateStrategy: digest` default.
           imageName: ghcr.io/prem-prakash/werify
-          updateStrategy: latest
-          allowTags: "^main-[0-9a-f]{7,}$"
+          commonUpdateSettings:
+            updateStrategy: latest
+            allowTags: "^main-[0-9a-f]{7,}$"
     - namePattern: "werify-staging"
       images:
         - alias: werify
           # Mirror of werify-production: track the immutable `staging-<shortsha>`
           # tag so staging deploy notifications also show the source commit.
           imageName: ghcr.io/prem-prakash/werify
-          updateStrategy: latest
-          allowTags: "^staging-[0-9a-f]{7,}$"
+          commonUpdateSettings:
+            updateStrategy: latest
+            allowTags: "^staging-[0-9a-f]{7,}$"
     - namePattern: "iddh-members-staging"
       images:
         - alias: iddh-members
           # Mirror: track immutable `staging-<shortsha>` tags.
           imageName: ghcr.io/iddh-com-br/members
-          updateStrategy: latest
-          allowTags: "^staging-[0-9a-f]{7,}$"
+          commonUpdateSettings:
+            updateStrategy: latest
+            allowTags: "^staging-[0-9a-f]{7,}$"
