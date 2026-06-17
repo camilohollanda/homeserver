@@ -412,26 +412,78 @@ WantedBy=multi-user.target
 SVC
 
 # ---------------------------------------------------------------------------
-# Daily Docker cleanup
+# Docker cleanup
 # CI jobs use `docker compose up` with images (e.g. postgres) that declare
 # anonymous VOLUMEs. `docker compose down` (without -v) preserves those by
 # design, so on a long-lived runner host they accumulate forever — ~650
-# orphaned anonymous volumes filled the 60G root disk in 10 days. Volume
-# prune is the right hammer: it only touches volumes not attached to a
-# running container, so an in-flight job's postgres is safe.
-# `until` filter is honoured by container/image prune but ignored by volume
-# prune (docker quirk) — that's fine; any volume detached *right now* is
-# already orphaned from a previous job.
+# orphaned anonymous volumes filled the 60G root disk in 10 days.
+#
+# The previous one-liner (`docker system prune --volumes -f --filter until=24h`)
+# was WRONG and silently broke: this engine rejects `until` together with
+# `--volumes` ("ERROR: The \"until\" filter is not supported with --volumes")
+# and the whole command exits non-zero BEFORE pruning anything — so for weeks
+# nothing was reclaimed and 500 anon volumes (35G) refilled the disk.
+#
+# Fix: a dedicated script that prunes each resource class with the right flags.
+# Volume prune runs on its OWN with NO `until` filter (the engine forbids it
+# there). It only removes volumes not attached to a container, so an in-flight
+# job's postgres is safe. Ordering matters — reap leaked job containers first
+# so their anonymous volumes detach before the volume prune runs.
 # ---------------------------------------------------------------------------
+cat > /usr/local/sbin/gh-runner-docker-prune <<'PRUNE'
+#!/usr/bin/env bash
+# Reclaim Docker disk on the runners host. Resilient by design: no `set -e`,
+# every step guarded with `|| true`, so one failing class never aborts the
+# rest (the bug that let the disk fill in the first place).
+set -u
+log() { echo "[docker-prune] $*"; }
+
+# 1. Reap leaked CI containers. Ephemeral runner jobs finish in minutes, so a
+#    container older than REAP_AGE_H hours is an orphaned compose stack from a
+#    job that never ran `docker compose down`; its anonymous volume stays
+#    pinned (and invisible to volume-prune) until the container is gone.
+#    Skip buildx's persistent BuildKit builders — buildx reuses them across
+#    jobs and recreates on demand, so reaping them just throws away warm cache.
+REAP_AGE_H="${REAP_AGE_H:-12}"
+now="$(date +%s)"
+for cid in $(docker ps -aq); do
+  name="$(docker inspect -f '{{.Name}}' "$cid" 2>/dev/null | sed 's#^/##')"
+  case "$name" in buildx_buildkit_*) continue ;; esac
+  created="$(docker inspect -f '{{.Created}}' "$cid" 2>/dev/null)"
+  created_epoch="$(date -d "$created" +%s 2>/dev/null || echo 0)"
+  [ "$created_epoch" -gt 0 ] || continue
+  if [ $(( (now - created_epoch) / 3600 )) -ge "$REAP_AGE_H" ]; then
+    log "reaping leaked container ${name:-<unnamed>} ($cid)"
+    docker rm -f "$cid" >/dev/null 2>&1 || true
+  fi
+done
+
+# 2. Stopped containers, unused images, build cache. `until=24h` IS valid and
+#    correct on these (keeps the last day warm for cache hits). buildx's own
+#    cache lives inside the builder containers, invisible to `docker builder
+#    prune`, so prune it explicitly too.
+docker container prune -f --filter until=24h || true
+docker image prune -af --filter until=24h || true
+docker builder prune -af --filter until=24h || true
+docker buildx prune -af --filter until=24h 2>/dev/null || true
+
+# 3. Detached anonymous volumes — NO `until` (engine rejects it). This is the
+#    step the old broken command never reached.
+docker volume prune -f || true
+
+log "done; root fs now $(df -h / | awk 'NR==2 {print $5" used, "$4" free"}')"
+PRUNE
+chmod 755 /usr/local/sbin/gh-runner-docker-prune
+
 cat > /etc/systemd/system/docker-prune.service <<'PRUNESVC'
 [Unit]
-Description=Prune dangling Docker volumes/images/containers
+Description=Prune leaked Docker containers/volumes/images on gh-runners
 After=docker.service
 Requires=docker.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/docker system prune --volumes -f --filter until=24h
+ExecStart=/usr/local/sbin/gh-runner-docker-prune
 PRUNESVC
 
 cat > /etc/systemd/system/docker-prune.timer <<'PRUNETIMER'
@@ -447,8 +499,34 @@ Persistent=true
 WantedBy=timers.target
 PRUNETIMER
 
+# High-water safety net: a single runaway job can leak volumes faster than the
+# daily timer fires (35G in the incident), so check every 30 min and prune
+# early if the root fs crosses 80%. Cheap no-op when there's nothing to do.
+cat > /etc/systemd/system/docker-prune-highwater.service <<'HWSVC'
+[Unit]
+Description=Trigger Docker prune when gh-runners root fs exceeds 80%
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'u=$(df --output=pcent / | tr -dc 0-9); [ "$u" -ge 80 ] && systemctl start docker-prune.service || true'
+HWSVC
+
+cat > /etc/systemd/system/docker-prune-highwater.timer <<'HWTIMER'
+[Unit]
+Description=Check gh-runners disk high-water every 30 min
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=30min
+
+[Install]
+WantedBy=timers.target
+HWTIMER
+
 systemctl daemon-reload
-systemctl enable --now docker-prune.timer
+systemctl enable --now docker-prune.timer docker-prune-highwater.timer
 
 # ---------------------------------------------------------------------------
 # Per-org instances
