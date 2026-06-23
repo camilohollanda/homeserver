@@ -150,6 +150,31 @@ Use `pg-provision.sh` to create databases for applications:
 /opt/bootstrap/pg-provision.sh myapp --env prod   # Creates myapp_prod DB
 ```
 
+## Connection budget
+
+This is a **shared instance** — every app DB (werify prod+staging, iddh prod+staging,
+infisical, …) lives on the *same* PostgreSQL server and draws from one global
+`max_connections` pool. Each app holds its own client-side pool (e.g. werify's
+`POOL_SIZE`, plus its Go sidecar stores), so the slots add up fast.
+
+`max_connections = 200` (set in `install.sh`; was the stock 100, which got
+exhausted → clients see `FATAL 53300 too_many_connections / remaining connection
+slots are reserved for roles with the SUPERUSER attribute`). Changing it requires
+a restart — `install.sh` handles that, or `ALTER SYSTEM SET max_connections = N;`
+then `sudo systemctl restart postgresql@17-main`.
+
+Budget when adding/scaling an app: **a rolling deploy briefly runs two pods**, so
+an app can transiently need `2 × POOL_SIZE` (k8s Deployment `maxSurge`). Keep
+`Σ(pool_size) × peak_pods` comfortably under `max_connections − 3` (3 slots are
+reserved for superusers).
+
+```bash
+# Current usage vs cap, broken down by database
+sudo -u postgres psql -c "SHOW max_connections;"
+sudo -u postgres psql -c \
+  "SELECT datname, usename, count(*) FROM pg_stat_activity GROUP BY 1,2 ORDER BY 3 DESC;"
+```
+
 ## Troubleshooting
 
 ```bash

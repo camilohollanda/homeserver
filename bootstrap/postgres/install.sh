@@ -119,6 +119,16 @@ grep -q "^#ssl_cert_file" "$PG_CONF" \
 grep -q "^#ssl_key_file" "$PG_CONF" \
   && sed -i "s|#ssl_key_file = 'server.key'|ssl_key_file = '${SSL_DIR}/server.key'|" "$PG_CONF" || true
 
+# Raise the connection ceiling. This is a *shared* instance: werify (prod+staging),
+# iddh (prod+staging), infisical and others each hold their own pool, and a rolling
+# deploy briefly doubles an app's pool (Deployment maxSurge). The stock 100 was
+# exhausted in practice (clients got FATAL 53300 too_many_connections). 200 gives
+# headroom and fits the VM's RAM (~10 MB/backend << 7.7 GB). Requires a restart
+# (done below). Idempotent: rewrites whether the line is the commented default or
+# a previously-set value, and is a no-op once it already reads 200.
+grep -q "^max_connections = 200" "$PG_CONF" \
+  || sed -i -E "s/^[# ]*max_connections = .*/max_connections = 200/" "$PG_CONF"
+
 PG_HBA="/etc/postgresql/${PG_VERSION}/main/pg_hba.conf"
 if ! grep -q "$ALLOWED_NETWORK" "$PG_HBA"; then
   cat >> "$PG_HBA" <<HBA
