@@ -129,6 +129,14 @@ grep -q "^#ssl_key_file" "$PG_CONF" \
 grep -q "^max_connections = 200" "$PG_CONF" \
   || sed -i -E "s/^[# ]*max_connections = .*/max_connections = 200/" "$PG_CONF"
 
+# Reserve a few slots so Infisical keeps priority over the apps. Roles that are
+# members of the predefined pg_use_reserved_connections role (the grant lives in
+# bootstrap/infisical/db-setup.sh) can draw from these slots after the apps have
+# filled the rest, so an app pool can never starve secret reads/writes. Postmaster
+# context -> needs a restart (done below). Idempotent.
+grep -q "^reserved_connections = 5" "$PG_CONF" \
+  || sed -i -E "s/^[# ]*reserved_connections = .*/reserved_connections = 5/" "$PG_CONF"
+
 PG_HBA="/etc/postgresql/${PG_VERSION}/main/pg_hba.conf"
 if ! grep -q "$ALLOWED_NETWORK" "$PG_HBA"; then
   cat >> "$PG_HBA" <<HBA

@@ -163,6 +163,13 @@ slots are reserved for roles with the SUPERUSER attribute`). Changing it require
 a restart — `install.sh` handles that, or `ALTER SYSTEM SET max_connections = N;`
 then `sudo systemctl restart postgresql@17-main`.
 
+**Infisical has priority.** `reserved_connections = 5` (set in `install.sh`) holds
+back 5 slots that only members of the predefined `pg_use_reserved_connections` role
+may use once the apps have filled the rest. Infisical's role is granted that
+membership in `bootstrap/infisical/db-setup.sh`, so a runaway app pool can never
+lock Infisical out of its own DB (which would otherwise block *changing* the secret
+that caused the runaway). Apps therefore top out at `max_connections − 3 − 5 = 192`.
+
 Budget when adding/scaling an app: **a rolling deploy briefly runs two pods**, so
 an app can transiently need `2 × POOL_SIZE` (k8s Deployment `maxSurge`). Keep
 `Σ(pool_size) × peak_pods` comfortably under `max_connections − 3` (3 slots are

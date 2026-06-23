@@ -43,6 +43,12 @@ BEGIN
 END
 \$\$;
 
+-- Give Infisical priority on the shared instance: members of
+-- pg_use_reserved_connections may draw from reserved_connections (set in
+-- bootstrap/postgres/install.sh) once the apps have filled the normal pool,
+-- so a runaway app pool can't lock Infisical out of its own database.
+GRANT pg_use_reserved_connections TO ${DB_USER};
+
 SELECT 'CREATE DATABASE ${DB_NAME} OWNER ${DB_USER}'
 WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '${DB_NAME}')\gexec
 
