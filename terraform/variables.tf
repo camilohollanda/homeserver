@@ -153,7 +153,7 @@ variable "pm_ssh_user" {
 
 # Let's Encrypt / Cloudflare configuration (shared)
 variable "cloudflare_api_token" {
-  description = "Cloudflare API token. Needs: Zone.DNS Edit, Zone.Zone Read, Account.Cloudflare Tunnel Edit, Account.Access: Apps and Policies Edit, Account.Access: Device Posture Edit (last two for cloudflare-access.tf). Same token is reused on VMs for DNS-01 cert challenges."
+  description = "Cloudflare API token used by Terraform only (NOT distributed to the VMs — those use the separate CF_API_TOKEN env var for certbot DNS-01, see bootstrap/*/install.sh). Needs: Zone.DNS Edit, Zone.Zone Read, Account.Cloudflare Tunnel Edit, Account.Access: Apps and Policies Edit, Account.Zero Trust Edit (last two for cloudflare-access.tf — note the device-posture endpoint wants 'Zero Trust', not 'Access: Device Posture')."
   type        = string
   sensitive   = true
 }
