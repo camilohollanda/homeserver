@@ -153,7 +153,7 @@ variable "pm_ssh_user" {
 
 # Let's Encrypt / Cloudflare configuration (shared)
 variable "cloudflare_api_token" {
-  description = "Cloudflare API token. Needs: Zone.DNS Edit, Zone.Zone Read, Account.Cloudflare Tunnel Edit. Same token is reused on VMs for DNS-01 cert challenges."
+  description = "Cloudflare API token. Needs: Zone.DNS Edit, Zone.Zone Read, Account.Cloudflare Tunnel Edit, Account.Access: Apps and Policies Edit, Account.Access: Device Posture Edit (last two for cloudflare-access.tf). Same token is reused on VMs for DNS-01 cert challenges."
   type        = string
   sensitive   = true
 }
@@ -297,4 +297,43 @@ variable "media_bazarr_domain" {
   description = "Local domain for Bazarr (served via reverse proxy)"
   type        = string
   default     = "bazarr.internal.prakash.com.br"
+}
+
+# Cloudflare Access — staging gating (see cloudflare-access.tf)
+variable "staging_gate_via_warp" {
+  description = <<-EOT
+    Gate the staging apps on Cloudflare WARP enrollment: only devices running
+    your enrolled WARP client reach them. IP-independent, so a dynamic home/ISP
+    IP is fine. Creates a device-posture rule (type "warp") and requires it on
+    the staging allow policy. Set false to gate purely by IP/identity instead
+    (then set staging_allow_ip_cidrs and/or staging_access_email).
+  EOT
+  type        = bool
+  default     = true
+}
+
+variable "staging_allow_ip_cidrs" {
+  description = <<-EOT
+    Public egress IP(s), as CIDRs, that reach the staging apps with NO Access
+    login (your home/LAN egress, since the apps ride the Cloudflare tunnel so
+    Cloudflare sees the public source IP, not the RFC1918 address). Example:
+    ["203.0.113.4/32"]. Find yours with `curl -s https://ifconfig.me`.
+    Optional: OR-ed alongside the WARP gate via a separate Access policy, so
+    these get in whether or not they're on WARP. Leave empty to gate on WARP
+    only (the default).
+  EOT
+  type        = list(string)
+  default     = []
+}
+
+variable "staging_access_email" {
+  description = <<-EOT
+    Email allowed to authenticate to the staging apps from anywhere via
+    Cloudflare Access (one-time-PIN or your configured IdP). OR-ed alongside
+    the WARP gate via a separate Access policy. Silent when the device is
+    WARP-enrolled with the same IdP. Set "" to gate on WARP (and/or
+    staging_allow_ip_cidrs) only.
+  EOT
+  type        = string
+  default     = ""
 }
