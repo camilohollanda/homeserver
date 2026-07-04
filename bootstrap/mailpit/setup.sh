@@ -56,7 +56,7 @@ echo "  Mailpit Setup"
 echo "  Target:   ${MAILPIT_SSH}"
 echo "  Domain:   ${MAILPIT_DOMAIN}"
 echo "  Version:  ${MAILPIT_VERSION}"
-echo "  SMTP:     ${MAILPIT_VM_IP}:${MAILPIT_SMTP_PORT}"
+echo "  SMTP:     ${MAILPIT_VM_IP:-192.168.20.22}:${MAILPIT_SMTP_PORT}"
 echo "=============================================="
 echo ""
 
