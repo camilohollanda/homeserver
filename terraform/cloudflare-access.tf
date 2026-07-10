@@ -9,17 +9,17 @@
 # These Access apps gate them at the Cloudflare edge — no tunnel, DNS, or
 # ingress changes needed. Per host we register two Access "applications":
 #
-#   <host>/webhooks  -> Bypass  (no auth — payment webhooks from Asaas /
-#                                PagBank. Asaas signs with the
+#   <host>/<webhook_path>  -> Bypass  (no auth — payment webhooks from
+#                                Asaas / PagBank. Asaas signs with the
 #                                `asaas-access-token` header, PagBank with
 #                                `x-payload-signature`; the APP validates
 #                                those, so the open path is safe.)
-#   <host>           -> Allow   (catch-all gate: by default requires an
+#   <host>                 -> Allow   (catch-all gate: by default requires an
 #                                enrolled Cloudflare WARP device — IP-
 #                                independent, so a dynamic home IP is fine.
 #                                Optionally also allow a static IP / identity.)
 #
-# Cloudflare evaluates the MOST SPECIFIC path first, so the /webhooks
+# Cloudflare evaluates the MOST SPECIFIC path first, so the webhook
 # bypass wins over the catch-all gate for webhook POSTs.
 #
 # OAuth login needs nothing special: the standard Authorization-Code flow
@@ -29,14 +29,14 @@
 
 locals {
   # Staging hosts to gate. Production is intentionally left public.
-  staging_gated_hosts = {
-    werify_staging = { domain = "staging.werify.app" }
-    iddh_staging   = { domain = "iddh-members-staging.prakash.com.br" }
-  }
-
-  # Broad prefix bypass: everything under <host>/webhooks reaches the app
+  # webhook_path is the per-app prefix (no slashes at either end) under which
+  # payment webhooks are served — everything under it bypasses the gate
   # without Access auth (the app verifies the provider signature/token).
-  webhook_path = "webhooks"
+  # The two apps disagree: werify mounts webhooks under /api, iddh doesn't.
+  staging_gated_hosts = {
+    werify_staging = { domain = "staging.werify.app", webhook_path = "api/webhooks" }
+    iddh_staging   = { domain = "iddh-members-staging.prakash.com.br", webhook_path = "webhooks" }
+  }
 
   # Optional alternative ways in, OR-ed alongside WARP via a SEPARATE allow
   # policy (staging_identity below). Each entry is its own "allow from": a
@@ -122,7 +122,7 @@ resource "cloudflare_zero_trust_access_application" "staging_webhooks" {
 
   account_id           = var.cloudflare_account_id
   name                 = "${each.value.domain} — webhooks (bypass)"
-  domain               = "${each.value.domain}/${local.webhook_path}"
+  domain               = "${each.value.domain}/${each.value.webhook_path}"
   type                 = "self_hosted"
   session_duration     = "24h"
   app_launcher_visible = false
