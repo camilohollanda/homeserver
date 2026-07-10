@@ -145,6 +145,12 @@ resource "cloudflare_zero_trust_access_application" "staging_gate" {
   app_launcher_visible      = false
   auto_redirect_to_identity = true
 
+  # Reuse the WARP enrollment as the Access identity: devices already on our
+  # WARP get in silently instead of being bounced to the email-OTP login.
+  # Needs the account-level twin switch too (allow_authenticate_via_warp on
+  # the Zero Trust organization — dashboard-managed, like the rest of WARP).
+  allow_authenticate_via_warp = true
+
   # Allow if ANY attached policy matches (a WARP device, or a listed identity/
   # IP). Precedence is just the list order — among allow-only policies it has
   # no effect on the outcome.
