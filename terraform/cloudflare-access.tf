@@ -38,21 +38,29 @@ locals {
     iddh_staging   = { domain = "iddh-members-staging.prakash.com.br", webhook_path = "webhooks" }
   }
 
-  # Optional alternative ways in, OR-ed alongside WARP via a SEPARATE allow
-  # policy (staging_identity below). Each entry is its own "allow from": a
-  # static egress IP (silent, no login) or an email (Access login / OTP).
+  # Optional alternative ways in, OR-ed alongside WARP as SEPARATE policies.
+  #
+  #   * static egress IP(s) -> a BYPASS policy (staging_ip_bypass): matching IPs
+  #     reach the app with NO Access login. This MUST be `bypass`, not `allow`:
+  #     an Allow policy with an IP include still forces the user to authenticate
+  #     (the IP only narrows WHO may log in — auth_status stays NONE and the
+  #     edge 302s to the login). Only Bypass exempts a request from auth. WARP
+  #     stays silent under `allow` because the WARP client supplies an identity
+  #     (allow_authenticate_via_warp); a bare IP supplies none.
+  #   * an email -> an ALLOW policy (staging_identity): email IS an identity, so
+  #     it SHOULD prompt an Access login / OTP.
+  #
   # Leave both unset to gate purely on WARP.
-  staging_identity_include = concat(
-    [for cidr in var.staging_allow_ip_cidrs : { ip = { ip = cidr } }],
-    var.staging_access_email == "" ? [] : [{ email = { email = var.staging_access_email } }],
-  )
+  staging_ip_bypass_include = [for cidr in var.staging_allow_ip_cidrs : { ip = { ip = cidr } }]
+  staging_identity_include  = var.staging_access_email == "" ? [] : [{ email = { email = var.staging_access_email } }]
 
-  # Every allow policy attached to the gate app. A request gets in if it
-  # matches ANY of them — Cloudflare OR-s policies — so the WARP device check
-  # and the explicit identities/IPs are true alternatives, not a combined
-  # requirement. (Putting both in one policy's `include` + `require` would AND
-  # them instead — the bug this two-policy structure avoids.)
+  # Every policy attached to the gate app. A request gets in if it matches ANY
+  # of them — Cloudflare OR-s policies — so the IP bypass, the WARP device
+  # check, and the email identity are true alternatives, not a combined
+  # requirement. Bypass is listed first (highest precedence) so a matching IP
+  # short-circuits to no-login before the auth-requiring allow policies.
   staging_gate_policy_ids = concat(
+    cloudflare_zero_trust_access_policy.staging_ip_bypass[*].id,
     cloudflare_zero_trust_access_policy.staging_warp[*].id,
     cloudflare_zero_trust_access_policy.staging_identity[*].id,
   )
@@ -100,15 +108,30 @@ resource "cloudflare_zero_trust_access_policy" "staging_warp" {
   }]
 }
 
-# Allow gate #2 — explicit egress IPs / identities, OR-ed alongside the WARP
-# policy above (a separate policy = OR; the same policy with `require` = AND).
-# No WARP requirement here, so these get in whether or not they're on WARP.
-# Created only when staging_allow_ip_cidrs / staging_access_email are set.
+# Bypass gate — explicit egress IP(s) reach the app with NO Access login. A
+# separate policy = OR-ed alongside the WARP/identity allows. Bypass (not allow)
+# is what makes it silent — see the locals note above. No WARP requirement, so
+# these get in whether or not they're on WARP. Created only when
+# staging_allow_ip_cidrs is set (e.g. via ./allow-my-egress-ip.sh).
+resource "cloudflare_zero_trust_access_policy" "staging_ip_bypass" {
+  count = length(local.staging_ip_bypass_include) > 0 ? 1 : 0
+
+  account_id = var.cloudflare_account_id
+  name       = "staging — allowed egress IPs (no login)"
+  decision   = "bypass"
+
+  include = local.staging_ip_bypass_include
+}
+
+# Allow gate #2 — explicit email identities, OR-ed alongside the WARP policy
+# above (a separate policy = OR; the same policy with `require` = AND). Email is
+# an identity, so unlike the IP bypass these DO prompt an Access login / OTP.
+# Created only when staging_access_email is set.
 resource "cloudflare_zero_trust_access_policy" "staging_identity" {
   count = length(local.staging_identity_include) > 0 ? 1 : 0
 
   account_id = var.cloudflare_account_id
-  name       = "staging — allowed identities / IPs"
+  name       = "staging — allowed email identities"
   decision   = "allow"
 
   include = local.staging_identity_include
@@ -161,9 +184,9 @@ resource "cloudflare_zero_trust_access_application" "staging_gate" {
   lifecycle {
     precondition {
       # Block the foot-gun: WARP off AND no identity/IP would leave the gate
-      # with zero allow policies (Cloudflare also rejects an app with none).
+      # with zero policies (Cloudflare also rejects an app with none).
       condition     = length(local.staging_gate_policy_ids) > 0
-      error_message = "Staging gate would have no allow policy. Keep staging_gate_via_warp = true (default), or set staging_allow_ip_cidrs / staging_access_email."
+      error_message = "Staging gate would have no policy. Keep staging_gate_via_warp = true (default), or set staging_allow_ip_cidrs / staging_access_email."
     }
   }
 }
