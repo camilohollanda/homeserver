@@ -18,6 +18,7 @@ configMapGenerator:
       - dashboards/k8s-overview.json
       - dashboards/werify-production.json
       - dashboards/werify-staging.json
+      - dashboards/werify-connector-staging.json
       - dashboards/whisper-api.json
       - dashboards/iddh-members-production.json
       - dashboards/iddh-members-staging.json
