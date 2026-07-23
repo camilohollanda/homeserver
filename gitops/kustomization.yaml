@@ -11,6 +11,7 @@ resources:
   # ArgoCD Applications (app of apps pattern)
   - applications/cert-manager.yaml
   - applications/werify-production.yaml
+  - applications/werify-connector-production.yaml
   - applications/werify-staging.yaml
   - applications/werify-connector-staging.yaml
   - applications/bugsink.yaml
