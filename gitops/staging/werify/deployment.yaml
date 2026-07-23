@@ -50,6 +50,14 @@ spec:
           env:
             - name: DNS_CLUSTER_QUERY
               value: cluster.werify-staging.svc.cluster.local
+            # Phase 2 pod split (staging): the connector runs in its own Deployment
+            # (werify-connector), so the app must NOT spawn a second in-pod connector — the
+            # whatsmeow session is single-owner — and it talks to the pod over the DB transport.
+            # These override whatever the Infisical secret carries (env wins over envFrom).
+            - name: WHATSAPP_SIDECAR_ENABLED
+              value: "false"
+            - name: SIDECAR_MODE
+              value: "db"
           envFrom:
             - secretRef:
                 name: secrets

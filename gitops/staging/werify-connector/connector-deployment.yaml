@@ -1,0 +1,86 @@
+# WhatsApp connector, split into its own pod (Phase 2 of docs/whatsapp-connector-pod-split.md in
+# the werify repo). Same image as the app — the Go binary ships at /app/bin/whatsapp-sidecar — run
+# with a different command and SIDECAR_MODE=db, so it talks to the app over the whatsapp_events /
+# whatsapp_commands tables + LISTEN/NOTIFY instead of a BEAM Port.
+#
+# Why a separate Deployment (and a separate ArgoCD Application, not tracked by image-updater):
+# argocd-image-updater rewrites the werify image tag for the werify-staging app on every staging
+# build, which would restart this connector too if it lived in that app. Keeping it in its own
+# app — whose manifest doesn't change on app deploys — is exactly what stops the ~per-deploy
+# connector reconnects that trip WhatsApp's anti-automation enforcement.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: werify-staging
+  name: werify-connector
+  # Deliberately NO reloader.stakater.com/auto: a secret rotation must not restart the connector
+  # (decoupling it from that churn is the point). Roll it manually when its config truly changes:
+  #   kubectl rollout restart deployment/werify-connector -n werify-staging
+spec:
+  replicas: 1
+  # The whatsmeow companion session is single-owner (one active socket per device), so two
+  # connector pods must never run at once. Recreate terminates the old pod before starting the new
+  # — unlike the app's RollingUpdate, which would briefly run two that fight over the socket.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: werify-connector
+  template:
+    metadata:
+      labels:
+        app: werify-connector
+    spec:
+      imagePullSecrets:
+        - name: ghcr-credentials
+      containers:
+        - name: connector
+          # Moving :staging tag, pinned by NOT being in image-updater: ArgoCD never rewrites it and
+          # the manifest doesn't change on app deploys, so the pod is only recreated when this file
+          # changes or on a manual rollout restart (which repulls :staging → picks up a new build).
+          image: ghcr.io/prem-prakash/werify:staging
+          imagePullPolicy: Always
+          command: ["/app/bin/whatsapp-sidecar"]
+          env:
+            - name: SIDECAR_MODE
+              value: "db"
+            # Socket-free liveness signal: the connector rewrites this file every ~10s; the probe
+            # below restarts the pod if it goes stale (the hard-wedge case k8s must catch, since a
+            # wedged connector won't drain the recycle command either).
+            - name: WHATSAPP_SIDECAR_HEARTBEAT_FILE
+              value: /run/whatsapp-connector/heartbeat
+          envFrom:
+            # Everything else — SIDECAR_DATABASE_URL / DATABASE_URL, WHATSAPP_SIDECAR_ALLOWLIST,
+            # WHATSAPP_DEVICE_*, media-retry + log vars — comes from the same Infisical-backed secret
+            # the app uses, so the connector manages exactly what the in-pod one did. SIDECAR_MODE
+            # above overrides any value the secret carries (env wins over envFrom).
+            - secretRef:
+                name: secrets
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "test $(( $(date +%s) - $(stat -c %Y /run/whatsapp-connector/heartbeat) )) -lt 30"
+            # The heartbeat starts only after boot adoption (reconnectAll) finishes; give that room
+            # so a healthy-but-slow boot isn't killed. A boot that actually hangs never writes it,
+            # so it's restarted after the delay — which is the desired recovery.
+            initialDelaySeconds: 45
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: heartbeat
+              mountPath: /run/whatsapp-connector
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              # No Typst / PDF rendering here (that's the app) — just whatsmeow sockets, JSON, and
+              # bounded in-memory caches during a history backfill. Far lighter than the app's 4Gi.
+              memory: "512Mi"
+              cpu: "1"
+      volumes:
+        - name: heartbeat
+          emptyDir: {}
