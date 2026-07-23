@@ -14,9 +14,10 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: werify-staging
-  # Its own Application, deliberately absent from argocd-image-updater's applicationRefs, so `main`
-  # merges (staging builds) bump only the app Deployment's image — never the connector's. That
-  # decoupling is the whole point of the split.
+  # Its own Application. image-updater tracks it (see the werify-connector-staging entry in the
+  # ImageUpdater CR) but only by the DIGEST of the dedicated `:connector-staging` tag, which app
+  # builds never move — so `main` merges (staging builds) bump only the app Deployment's image,
+  # never the connector's. A deliberate promote of that tag is the only thing that rolls it.
   syncPolicy:
     automated:
       prune: true

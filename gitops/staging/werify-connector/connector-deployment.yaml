@@ -35,10 +35,13 @@ spec:
         - name: ghcr-credentials
       containers:
         - name: connector
-          # Moving :staging tag, pinned by NOT being in image-updater: ArgoCD never rewrites it and
-          # the manifest doesn't change on app deploys, so the pod is only recreated when this file
-          # changes or on a manual rollout restart (which repulls :staging → picks up a new build).
-          image: ghcr.io/prem-prakash/werify:staging
+          # Dedicated :connector-staging tag, moved only by a deliberate promote (the "Deploy
+          # WhatsApp connector" workflow in the werify repo re-points it at a chosen build).
+          # image-updater digest-tracks this tag (its CR entry) and rolls the pod when the digest
+          # changes — so a promote auto-deploys, no kubectl. App builds move :staging, never
+          # :connector-staging, so merges never touch it. image-updater pins the resolved digest,
+          # so an involuntary restart re-pulls the SAME image, never jumps to latest staging.
+          image: ghcr.io/prem-prakash/werify:connector-staging
           imagePullPolicy: Always
           command: ["/app/bin/whatsapp-sidecar"]
           env:

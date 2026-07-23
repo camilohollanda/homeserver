@@ -14,9 +14,11 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: werify-production
-  # Its own Application, deliberately absent from argocd-image-updater's applicationRefs, so a merge
-  # to main (which image-updater rolls onto the werify-production app Deployment) bumps only the app,
-  # never the connector. That decoupling is the whole point of the split.
+  # Its own Application. image-updater tracks it (see the werify-connector-production entry in the
+  # ImageUpdater CR) but only by the DIGEST of the dedicated `:connector-production` tag, which app
+  # builds never move — so a merge to main (which image-updater rolls onto the werify-production app
+  # Deployment) bumps only the app, never the connector. A deliberate promote of that tag is the
+  # only thing that rolls it. That decoupling is the whole point of the split.
   syncPolicy:
     automated:
       prune: true
