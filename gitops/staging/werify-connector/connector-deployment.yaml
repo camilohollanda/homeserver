@@ -44,6 +44,13 @@ spec:
           env:
             - name: SIDECAR_MODE
               value: "db"
+            # Structured JSON logs to stdout, so Loki collects them for the werify-connector-staging
+            # Grafana dashboard (the connector's default is "auto" — json off a TTY anyway, but pin
+            # it so the dashboard's `| json` + level parsing can't be broken by an env flip).
+            - name: SIDECAR_LOG_FORMAT
+              value: json
+            - name: SIDECAR_LOG_LEVEL
+              value: info
             # Socket-free liveness signal: the connector rewrites this file every ~10s; the probe
             # below restarts the pod if it goes stale (the hard-wedge case k8s must catch, since a
             # wedged connector won't drain the recycle command either).
