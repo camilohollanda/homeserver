@@ -12,6 +12,7 @@ resources:
   - applications/cert-manager.yaml
   - applications/werify-production.yaml
   - applications/werify-staging.yaml
+  - applications/werify-connector-staging.yaml
   - applications/bugsink.yaml
   - applications/grafana.yaml
   - applications/loki.yaml

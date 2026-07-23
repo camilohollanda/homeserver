@@ -1,0 +1,24 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: werify-connector-staging
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/prem-prakash/homeserver.git
+    targetRevision: main
+    path: gitops/staging/werify-connector
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: werify-staging
+  # Its own Application, deliberately absent from argocd-image-updater's applicationRefs, so `main`
+  # merges (staging builds) bump only the app Deployment's image — never the connector's. That
+  # decoupling is the whole point of the split.
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    # No CreateNamespace: the werify-staging app owns werify-staging (and the secrets in it).
