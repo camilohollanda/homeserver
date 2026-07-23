@@ -50,3 +50,25 @@ spec:
           commonUpdateSettings:
             updateStrategy: newest-build
             allowTags: "regexp:^staging-[0-9a-f]{7,}$"
+    - namePattern: "werify-connector-production"
+      images:
+        - alias: connector
+          # The connector runs the same werify image, but is deployed DELIBERATELY (a singleton
+          # whatsmeow session that should rarely restart), so it does NOT follow the `main-<sha>`
+          # stream the app does. Instead, digest-track a dedicated `:connector-production` tag that
+          # is moved only by the werify "Deploy WhatsApp connector" workflow — image-updater then
+          # rolls the connector Application when that tag's digest changes (auto-roll, no kubectl).
+          # App builds move `main-<sha>` / `:main`, never `:connector-production`, so merges to main
+          # STILL never restart the connector — the pod-split decoupling holds.
+          # (digest strategy tracks the tag embedded in imageName; allowTags is unused for digest.)
+          imageName: ghcr.io/prem-prakash/werify:connector-production
+          commonUpdateSettings:
+            updateStrategy: digest
+    - namePattern: "werify-connector-staging"
+      images:
+        - alias: connector
+          # Mirror of werify-connector-production: digest-track the dedicated `:connector-staging`
+          # tag (moved only by the "Deploy WhatsApp connector" workflow). See the production entry.
+          imageName: ghcr.io/prem-prakash/werify:connector-staging
+          commonUpdateSettings:
+            updateStrategy: digest

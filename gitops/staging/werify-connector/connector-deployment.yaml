@@ -36,10 +36,11 @@ spec:
       containers:
         - name: connector
           # Dedicated :connector-staging tag, moved only by a deliberate promote (the "Deploy
-          # WhatsApp connector" workflow in the werify repo re-points it at a chosen build; NOT in
-          # image-updater, so merges never touch it). ArgoCD never rewrites the tag string, so the
-          # pod is recreated only when this file changes or on `kubectl rollout restart`, which
-          # repulls the SAME pinned digest — an involuntary restart never jumps to latest staging.
+          # WhatsApp connector" workflow in the werify repo re-points it at a chosen build).
+          # image-updater digest-tracks this tag (its CR entry) and rolls the pod when the digest
+          # changes — so a promote auto-deploys, no kubectl. App builds move :staging, never
+          # :connector-staging, so merges never touch it. image-updater pins the resolved digest,
+          # so an involuntary restart re-pulls the SAME image, never jumps to latest staging.
           image: ghcr.io/prem-prakash/werify:connector-staging
           imagePullPolicy: Always
           command: ["/app/bin/whatsapp-sidecar"]
