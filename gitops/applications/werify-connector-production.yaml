@@ -1,0 +1,24 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: werify-connector-production
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/prem-prakash/homeserver.git
+    targetRevision: main
+    path: gitops/production/werify-connector
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: werify-production
+  # Its own Application, deliberately absent from argocd-image-updater's applicationRefs, so a merge
+  # to main (which image-updater rolls onto the werify-production app Deployment) bumps only the app,
+  # never the connector. That decoupling is the whole point of the split.
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    # No CreateNamespace: the werify-production app owns werify-production (and the secrets in it).
