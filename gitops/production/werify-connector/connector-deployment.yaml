@@ -34,10 +34,12 @@ spec:
         - name: ghcr-credentials
       containers:
         - name: connector
-          # Moving :main tag, pinned by NOT being in image-updater: ArgoCD never rewrites it and the
-          # manifest doesn't change on app deploys, so the pod is only recreated when this file
-          # changes or on a manual rollout restart (which repulls :main → picks up a new build).
-          image: ghcr.io/prem-prakash/werify:main
+          # Dedicated :connector-production tag, moved only by a deliberate promote (the "Deploy
+          # WhatsApp connector" workflow in the werify repo re-points it at a chosen build; NOT in
+          # image-updater, so app merges never touch it). ArgoCD never rewrites the tag string, so
+          # the pod is recreated only when this file changes or on `kubectl rollout restart`, which
+          # repulls the SAME pinned digest — an involuntary restart never jumps to latest main.
+          image: ghcr.io/prem-prakash/werify:connector-production
           imagePullPolicy: Always
           command: ["/app/bin/whatsapp-sidecar"]
           env:
