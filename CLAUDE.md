@@ -60,8 +60,11 @@ All env vars defaulting to "auto-generated random" use `openssl rand -base64 32 
 
 ## Domains & TLS
 
-- Public apps: `*.werify.app`, `prakash.com.br` → exposed via **Cloudflare Tunnel** from k3s-apps. Cert managed by cert-manager inside k3s.
-- Internal apps on the services VM: `<app>.internal.prakash.com.br` → **A record to 192.168.20.22**, reachable only on the LAN (or via Cloudflare Zero Trust internal DNS). Cert via **Let's Encrypt DNS-01** (no public HTTP needed).
+Three distinct paths — don't conflate them:
+
+- **Public apps** (`*.werify.app`, `prakash.com.br`, `membros.iddh.com.br`) → exposed via **Cloudflare Tunnel** from k3s-apps. **TLS terminates at the Cloudflare edge** — cloudflared forwards plain HTTP to `127.0.0.1:80` (ingress-nginx), and these Ingresses deliberately have **no `tls:` block**. cert-manager is not involved. Routes live in `terraform/cloudflare-tunnel.tf`; `*.werify.app` and `*.prakash.com.br` are already wildcards, anything else falls through to `http_status:404`.
+- **Internal apps inside k3s** (`argocd`, `grafana`, `bugsink`) → `<app>.internal.prakash.com.br` → **A record to 192.168.20.11** (a `*.internal` wildcard A record catches the rest). LAN-only. Cert via **cert-manager** + the `letsencrypt-dns` ClusterIssuer (DNS-01 over Cloudflare), **one Certificate per host**, declared in each app's own `gitops/<app>/ingress.yaml`. Don't try to replace these with one shared wildcard Certificate: an Ingress can only reference a Secret in **its own namespace**, so a wildcard living in `cert-manager` would need kubernetes-reflector to be usable at all. One was tried in Jan 2026 and sat unused until removed.
+- **Internal apps on the services VM** (`infisical`, `mailpit`, `garage`) → `<app>.internal.prakash.com.br` → **A record to 192.168.20.22**. LAN-only (or via Cloudflare Zero Trust internal DNS). Cert via **certbot** DNS-01, served by the shared nginx.
 
 `setup.sh` scripts on the services VM create the A record automatically unless `SKIP_DNS=1`. The CF token needs `Zone.DNS Edit` + `Zone.Read`.
 

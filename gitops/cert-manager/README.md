@@ -58,21 +58,21 @@ This makes all `*.internal.prakash.com.br` subdomains resolve to your k3s server
 The gitops changes will automatically:
 1. Deploy cert-manager configuration
 2. Create the ClusterIssuer
-3. Request wildcard certificate from Let's Encrypt
-4. cert-manager creates DNS TXT record for validation
-5. Let's Encrypt verifies and issues certificate
-6. Ingresses get valid TLS
+
+From there, **each Ingress requests its own per-host certificate** (see "Adding More Internal Services" below). For every annotated Ingress, cert-manager creates a DNS TXT record for validation, Let's Encrypt verifies it, and the Ingress gets valid TLS.
+
+There is deliberately **no shared wildcard Certificate**. An Ingress can only reference a Secret in its own namespace, so a `*.internal` cert living in `cert-manager` would need kubernetes-reflector to be usable. One existed from Jan 2026, was never consumed by anything, silently expired in Apr 2026, and was removed.
 
 ## Internal Services
 
-After setup, these services will be available with valid HTTPS:
+After setup, these services will be available with valid HTTPS. Only the k3s ones get their cert from cert-manager — apps on the services VM (192.168.20.22) use certbot behind the shared nginx and are **not** managed here.
 
-| Service | URL |
-|---------|-----|
-| Bugsink | https://bugsink.internal.prakash.com.br |
-| Grafana | https://grafana.internal.prakash.com.br |
-| ArgoCD | https://argocd.internal.prakash.com.br |
-| Infisical | https://infisical.internal.prakash.com.br |
+| Service | URL | Cert source |
+|---------|-----|-------------|
+| Bugsink | https://bugsink.internal.prakash.com.br | cert-manager (`bugsink-tls`) |
+| Grafana | https://grafana.internal.prakash.com.br | cert-manager (`grafana-tls`) |
+| ArgoCD | https://argocd.internal.prakash.com.br | cert-manager (`argocd-tls`) |
+| Infisical | https://infisical.internal.prakash.com.br | certbot on VM 114 |
 
 ## Adding More Internal Services
 
@@ -110,7 +110,7 @@ spec:
 ### Check certificate status
 ```bash
 kubectl get certificates -A
-kubectl describe certificate internal-wildcard -n cert-manager
+kubectl describe certificate <app>-tls -n <app>   # e.g. grafana-tls -n grafana
 ```
 
 ### Check cert-manager logs
