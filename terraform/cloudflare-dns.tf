@@ -50,6 +50,7 @@ locals {
     sonarr   = { name = "sonarr.internal.prakash.com.br", ip = local.media_vm_ip }
     bazarr   = { name = "bazarr.internal.prakash.com.br", ip = local.media_vm_ip }
     prowlarr = { name = "prowlarr.internal.prakash.com.br", ip = local.media_vm_ip }
+    home     = { name = "home.internal.prakash.com.br", ip = local.media_vm_ip }
   }
 }
 

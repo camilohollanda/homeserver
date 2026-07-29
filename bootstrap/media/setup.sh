@@ -24,6 +24,21 @@
 #   DOMAIN_SONARR         - default: sonarr.internal.prakash.com.br
 #   DOMAIN_PROWLARR       - default: prowlarr.internal.prakash.com.br
 #   DOMAIN_BAZARR         - default: bazarr.internal.prakash.com.br
+#   DOMAIN_HOMEPAGE       - default: home.internal.prakash.com.br
+#
+# Optional env vars (Homepage dashboard widgets):
+#   Mostly self-configuring: once the stack is up, install.sh reads the *arr API
+#   keys out of their config files and mints a Jellyfin key over the API, so a
+#   normal run needs none of these. Set one to override discovery.
+#   RADARR_API_KEY        - auto-discovered
+#   SONARR_API_KEY        - auto-discovered
+#   PROWLARR_API_KEY      - auto-discovered
+#   BAZARR_API_KEY        - auto-discovered
+#   JELLYFIN_API_KEY      - auto-minted when the two below are set
+#   JELLYFIN_USERNAME     - Jellyfin admin user
+#   JELLYFIN_PASSWORD     - Jellyfin admin password
+#   QBITTORRENT_USERNAME  - qBittorrent WebUI login. The only credential that
+#   QBITTORRENT_PASSWORD  - can't be discovered (stored as a PBKDF2 hash).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -54,6 +69,7 @@ export DOMAIN_RADARR="${DOMAIN_RADARR:-radarr.internal.prakash.com.br}"
 export DOMAIN_SONARR="${DOMAIN_SONARR:-sonarr.internal.prakash.com.br}"
 export DOMAIN_PROWLARR="${DOMAIN_PROWLARR:-prowlarr.internal.prakash.com.br}"
 export DOMAIN_BAZARR="${DOMAIN_BAZARR:-bazarr.internal.prakash.com.br}"
+export DOMAIN_HOMEPAGE="${DOMAIN_HOMEPAGE:-home.internal.prakash.com.br}"
 
 check_env CF_API_TOKEN LETSENCRYPT_EMAIL
 
