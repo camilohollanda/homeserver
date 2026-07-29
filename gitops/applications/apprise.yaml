@@ -8,7 +8,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/prem-prakash/homeserver.git
+    repoURL: https://github.com/camilohollanda/homeserver.git
     targetRevision: main
     path: gitops/apprise
   destination:

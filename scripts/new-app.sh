@@ -92,7 +92,7 @@ if [[ -z "$APP_NAME" ]]; then
 fi
 
 NAMESPACE="${APP_NAME}-${ENV}"
-ARGOCD_REPO="https://github.com/prem-prakash/homeserver.git"
+ARGOCD_REPO="https://github.com/camilohollanda/homeserver.git"
 INFISICAL_HOST="https://infisical.internal.prakash.com.br"
 INFISICAL_PROJECT="homeserver-1jj1"
 # Title-case app name for Infisical path (bash 3.2 compatible)
