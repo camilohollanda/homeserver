@@ -78,7 +78,7 @@ spec:
               # the layout + image/PDF encoding more parallelism to cut latency;
               # node has 8 cores allocatable.
               cpu: "4"
-          # TEST (staging only). A deploy races the ingress: the kubelet's SIGTERM
+          # A deploy races the ingress: the kubelet's SIGTERM
           # makes Phoenix drain its LiveView sockets (WS close 1012) while
           # ingress-nginx may still be routing here, because EndpointSlice removal
           # and SIGTERM are concurrent and unordered. The browser retries 10ms

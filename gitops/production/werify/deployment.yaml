@@ -78,6 +78,24 @@ spec:
             # the layout + image/PDF encoding more parallelism to cut latency;
             # node has 8 cores allocatable.
             cpu: "4"
+        # A deploy races the ingress: EndpointSlice removal and SIGTERM are
+        # concurrent and unordered, so when SIGTERM makes Phoenix drain its
+        # LiveView sockets (WS close 1012), ingress-nginx may still be routing
+        # here. The browser retries 10ms after that close — far faster than the
+        # ingress reacts — lands on the dying pod and gets a 502. That 502 pushes
+        # the socket onto its longpoll fallback, where it wedges: no further
+        # connect attempt, ever, so the page looks frozen (every phx-click inert)
+        # until a manual reload. Sleeping before SIGTERM lets the endpoint
+        # removal land first. Validated on staging: recovery went from never to
+        # 700ms.
+        lifecycle:
+          preStop:
+            sleep:
+              seconds: 10
+      # Covers preStop (10s) *plus* the BEAM shutdown after SIGTERM. The implicit
+      # 30s default would leave only 20s to drain Oban and sockets — less than the
+      # app has today.
+      terminationGracePeriodSeconds: 45
       volumes:
       - name: data
         persistentVolumeClaim:
