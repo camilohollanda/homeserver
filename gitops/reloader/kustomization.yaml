@@ -4,3 +4,12 @@ kind: Kustomization
 # Pull official Reloader manifests directly from GitHub
 resources:
   - https://github.com/stakater/Reloader/deployments/kubernetes
+
+# SUSPENDED: a secret rotation in Infisical must not restart pods on its own.
+# ESO keeps syncing Infisical -> Secret; the pods just keep their current env
+# until someone runs `kubectl rollout restart deploy/<name> -n <ns>` on purpose.
+# The `reloader.stakater.com/auto: "true"` annotations were left in place, so
+# resuming is a one-line revert: set count back to 1 (or drop this block).
+replicas:
+  - name: reloader-reloader
+    count: 0
