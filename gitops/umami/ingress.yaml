@@ -1,0 +1,41 @@
+# Public hosts: reached through the Cloudflare Tunnel, so TLS terminates at the
+# Cloudflare edge and cloudflared forwards plain HTTP to ingress-nginx. No `tls:`
+# block and no cert-manager annotation here — that is only for
+# `*.internal.prakash.com.br`.
+#
+# One hostname per tracked domain on purpose: the tracker script and the
+# /api/send beacon are then first-party for each site, which is what keeps
+# content blockers from eating them. Both hosts serve the same instance.
+#
+# `*.prakash.com.br` and `*.werify.app` are already wildcard tunnel routes +
+# wildcard CNAMEs, so neither needs anything in terraform. A host on a zone
+# without a wildcard (e.g. iddh.com.br) would need its own tunnel ingress rule
+# and CNAME added by hand.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: umami
+  namespace: umami
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: umami.prakash.com.br
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: umami
+            port:
+              number: 3000
+  - host: umami.werify.app
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: umami
+            port:
+              number: 3000

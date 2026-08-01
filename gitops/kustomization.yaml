@@ -21,3 +21,4 @@ resources:
   - applications/iddh-members-staging.yaml
   - applications/apprise.yaml
   - applications/victoria-metrics.yaml
+  - applications/umami.yaml
