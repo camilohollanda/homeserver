@@ -158,9 +158,55 @@ managed here:
   ingress block. The on-VM `/etc/cloudflared/config.yml` contains only
   `tunnel:` + `credentials-file:` — all ingress routes come from Cloudflare
   and live-reload on `terraform apply`.
-- `cloudflare-dns.tf` — public CNAMEs at the tunnel and internal A-records
-  for LAN-only services on `*.internal.prakash.com.br` (those records live
-  inside the `prakash.com.br` zone, not a separate delegated zone).
+- `cloudflare-dns.tf` — public CNAMEs at the tunnel, internal A-records for
+  LAN-only services on `*.internal.prakash.com.br` (those records live inside
+  the `prakash.com.br` zone, not a separate delegated zone), and the DNS-AID
+  agent discovery SVCBs under `_agents.werify.app`.
+
+### DNSSEC on werify.app — enabled, deliberately outside Terraform
+
+`werify.app` is DNSSEC-signed as of 2026-08-03. Cloudflare signs the zone
+(algorithm 13, ECDSAP256SHA256); the DS lives at the registrar, **Dynadot**,
+which is not Cloudflare Registrar — so there is no one-click flow and the DS
+was hand-entered:
+
+```
+werify.app. IN DS 2371 13 2 3BE9833617AD40E0612E6D96D1B4748AB65615D191DE615C23295D3D0157C92A
+```
+
+Key tag `2371` is the **KSK** (flags 257). `34505` is the ZSK and is *not*
+what goes in the DS — an easy mis-copy, since the ZSK tag is the one that
+shows up in ordinary RRSIGs.
+
+**Why it is not a `cloudflare_zone_dnssec` resource here.** It could be, and
+that resource only needs the DNS Read/Write the Terraform token already has.
+But adding it un-imported means the next `apply` calls the API to "create"
+something that already exists, and the blast radius if that ever churned the
+key is the whole domain going dark for validating resolvers — `.app` is
+HSTS-preloaded, so there is no HTTP fallback. That trade is bad for a one-time
+zone toggle whose other half (the DS at Dynadot) Terraform cannot manage
+anyway. To bring it in later, do it deliberately and import first:
+
+```bash
+# zone id = cloudflare_zone_ids.werify_app in terraform.tfvars
+terraform import cloudflare_zone_dnssec.werify_app '<werify_app zone id>'
+```
+
+Verify DNSSEC at the **registry**, not at a resolver — cache will lie to you:
+
+```bash
+curl -sL -H 'Accept: application/rdap+json' https://rdap.org/domain/werify.app
+#   secureDNS.delegationSigned must be true
+dig +dnssec werify.app A @1.1.1.1 | grep flags   # must carry "ad"
+```
+
+Two gotchas, both paid for once already: the **Dynadot DNSSEC form fails
+silently** (submissions vanish with no error and no registry change — if
+`delegationSigned` stays `false`, use their API `command=set_dnssec`, which
+returns an actual error), and going insecure→secure produces **intermittent
+SERVFAIL for ~30 min** while resolvers holding the cached "this zone is
+insecure" proof drain. Genuine breakage looks different: deterministic
+SERVFAIL everywhere, `ad` never appearing.
 
 ### Token model — two tokens, different scopes
 
