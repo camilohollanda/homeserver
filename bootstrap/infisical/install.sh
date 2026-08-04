@@ -91,6 +91,17 @@ DB_CONNECTION_URI=${INFISICAL_DB_URI}
 REDIS_URL=redis://redis:6379
 SITE_URL=https://${INFISICAL_DOMAIN}
 TELEMETRY_ENABLED=false
+# At INFO, Infisical logs every HTTP request across ~6 lines plus a "getPlan:"
+# pair per call (a licence-tier check that is pure noise when self-hosted).
+# ESO polling 13 ExternalSecrets every 30s is enough to keep that at ~100
+# req/min, which produced ~294 MiB/day of container log and filled the VM disk
+# on 2026-08-04. warn keeps errors and drops the request firehose; the request
+# trail is still in Loki for as long as promtail was shipping it.
+#
+# The knob is PINO_LOG_LEVEL, *not* LOG_LEVEL — it sets the root pino logger in
+# backend/dist/lib/logger/logger.mjs. Setting LOG_LEVEL is silently ignored
+# (the env schema is non-strict, so it parses and does nothing).
+PINO_LOG_LEVEL=warn
 ENV
 chmod 600 /opt/infisical/.env
 

@@ -52,6 +52,45 @@ https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_C
 fi
 
 # ---------------------------------------------------------------------------
+# Docker daemon log rotation
+#
+# json-file logs are *unbounded* by default. On 2026-08-04 Infisical's own
+# request log reached 22.8 GiB (~294 MiB/day at INFO) and filled this VM's
+# 40 GB disk. Redis, unable to write its RDB snapshot, entered MISCONF and
+# began rejecting every write; that 500'd Infisical's auth endpoint, which
+# took all seven ClusterSecretStores and thirteen ExternalSecrets in the k3s
+# cluster down with it. Capping the logs is the fix for the whole class, not
+# just for Infisical — every container on this VM had the same exposure.
+#
+# This is the daemon-wide *default*, so it only applies to containers created
+# after it lands; existing stacks need one `docker compose up -d
+# --force-recreate` to pick it up. A per-service `logging:` block in a compose
+# file still overrides it (see bootstrap/ai, bootstrap/whisper).
+#
+# 10m x 3 matches the cap already used on the ai/whisper VMs. Local files are
+# only a buffer — promtail ships everything to Loki, which is where log history
+# actually lives.
+# ---------------------------------------------------------------------------
+echo "==> Configuring Docker log rotation..."
+mkdir -p /etc/docker
+_daemon_json_before="$(cat /etc/docker/daemon.json 2>/dev/null || true)"
+cat > /etc/docker/daemon.json <<'DAEMONJSON'
+{
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  }
+}
+DAEMONJSON
+if [[ "$_daemon_json_before" != "$(cat /etc/docker/daemon.json)" ]]; then
+  echo "    daemon.json changed — restarting docker"
+  systemctl restart docker
+else
+  echo "    daemon.json already current — no restart needed"
+fi
+
+# ---------------------------------------------------------------------------
 # Cloudflare credentials for certbot DNS-01
 # ---------------------------------------------------------------------------
 echo "==> Writing Cloudflare credentials for DNS-01..."
