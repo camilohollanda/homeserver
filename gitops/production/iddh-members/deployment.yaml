@@ -61,6 +61,23 @@ spec:
           limits:
             memory: "1Gi"
             cpu: "500m"
+        # A deploy races the ingress: EndpointSlice removal and SIGTERM are
+        # concurrent and unordered, so when SIGTERM makes Phoenix drain its
+        # LiveView sockets (WS close 1012), ingress-nginx may still be routing
+        # here. The browser retries 10ms after that close — far faster than the
+        # ingress reacts — lands on the dying pod and gets a 502. That 502 pushes
+        # the socket onto its longpoll fallback (this app sets
+        # longPollFallbackMs: 2500), where it wedges: no further connect attempt,
+        # ever, so the page looks frozen until a manual reload. Sleeping before
+        # SIGTERM lets the endpoint removal land first. Measured on werify, which
+        # has the same shape: recovery went from never to 700ms.
+        lifecycle:
+          preStop:
+            sleep:
+              seconds: 10
+      # Covers preStop (10s) *plus* the BEAM shutdown after SIGTERM. The implicit
+      # 30s default would leave only 20s to drain.
+      terminationGracePeriodSeconds: 45
 
 ---
 apiVersion: v1
