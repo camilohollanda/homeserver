@@ -487,16 +487,32 @@ fi
 rm -f "$RESTORE_LOG"
 ok "restored with no errors"
 
-# Re-establish what pg-provision.sh grants, since --no-privileges dropped the
-# dump's copy of it. Runs as postgres so the default privileges end up owned by
-# postgres, exactly as provisioning leaves them.
+# Re-establish pg-provision.sh's access model, since --no-privileges dropped the
+# dump's copy of it and `createdb -O` does not reproduce it. Runs as postgres so
+# the default privileges end up owned by postgres, exactly as provisioning
+# leaves them.
+#
+# The REVOKE CONNECT ... FROM PUBLIC is the one that matters most: without it
+# `createdb` leaves datacl NULL, which means PUBLIC keeps CONNECT and every
+# other app's role on this shared instance can open this database. Measured:
+# on VM 113 iddh_members_staging cannot connect to werify_staging; without this
+# line, on VM 118 it can.
+#
+# Two statements from pg-provision.sh are deliberately not repeated here:
+# REVOKE ALL ON SCHEMA public FROM PUBLIC is already the PG 15+ default, and
+# REVOKE CONNECT ON DATABASE postgres/template1 FROM <role> is a no-op in both
+# clusters — CONNECT comes from PUBLIC's default grant, so revoking it from the
+# role removes nothing.
 ssh -o BatchMode=yes "$NEW_SSH" "sudo -u postgres psql -q -v ON_ERROR_STOP=1 -d $SRC_DB -c \
-  \"GRANT ALL ON SCHEMA public TO $SRC_USER;
+  \"GRANT ALL PRIVILEGES ON DATABASE $SRC_DB TO $SRC_USER;
+    REVOKE CONNECT ON DATABASE $SRC_DB FROM PUBLIC;
+    GRANT CONNECT ON DATABASE $SRC_DB TO $SRC_USER;
+    GRANT ALL ON SCHEMA public TO $SRC_USER;
     ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES    TO $SRC_USER;
     ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO $SRC_USER;
     ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO $SRC_USER;\"" ||
   die "could not re-apply the provisioning grants on $SRC_DB"
-ok "provisioning grants re-applied"
+ok "provisioning access model re-applied"
 
 # -----------------------------------------------------------------------------
 # Verify before switching
