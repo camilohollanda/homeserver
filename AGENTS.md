@@ -13,12 +13,12 @@ A new piece of infra usually lives in exactly one of these, not multiple.
 | vmid | name            | IP             | role                                                            |
 |------|-----------------|----------------|-----------------------------------------------------------------|
 | 112  | k3s-apps        | 192.168.20.11  | K3s single-node cluster (apps, ingress-nginx, Argo CD, ESO).    |
-| 113  | db-postgres     | 192.168.20.21  | PostgreSQL 17 (mDNS: `pg.local`). Origem do upgrade blue/green.  |
+| 113  | db-postgres     | 192.168.20.21  | PostgreSQL 17 (mDNS: `pg.local`). Source of the blue/green upgrade. |
 | 114  | infisical *     | 192.168.20.22  | **Services VM** — see below.                                    |
 | 115  | ai-gpu          | 192.168.20.30  | Whisper + Ollama. GPU passthrough.                              |
 | 116  | media-server    | 192.168.20.40  | Jellyfin / *arr stack (local nginx proxy, no TLS).              |
-| 117  | gh-runners      | 192.168.20.50  | Runners self-hosted do GitHub Actions.                          |
-| 118  | db-postgres-18  | 192.168.20.23  | PostgreSQL 18 — destino do upgrade. IP temporário até o cutover. |
+| 117  | gh-runners      | 192.168.20.50  | Self-hosted GitHub Actions runners.                             |
+| 118  | db-postgres-18  | 192.168.20.23  | PostgreSQL 18 — upgrade target. Apps move over one DATABASE_URL at a time. |
 
 \* Terraform still calls VM 114 `infisical` for legacy reasons; in practice it's a multi-tenant **services VM** hosting Infisical, Garage, Mailpit, … behind a shared nginx.
 

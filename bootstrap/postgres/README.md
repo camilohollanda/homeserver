@@ -3,23 +3,32 @@
 Cloud-init only preps the OS. PostgreSQL itself is installed by
 `bootstrap/postgres/setup.sh`, run from your machine.
 
-> **Duas VMs durante a migração para o PG 18.** A 113 (`.21`, PG 17) é a
-> produção; a 118 (`.23`, PG 18) é o destino do upgrade blue/green. Os comandos
-> deste README assumem a **118** — rodá-los contra a 113 reinicia o banco de
-> produção. Ver `docs/superpowers/specs/2026-08-06-pg18-blue-green-design.md`.
+> **Two VMs during the PG 18 migration.** 113 (`.21`, PG 17) is production; 118
+> (`.23`, PG 18) is the blue/green target. The commands in this README assume
+> **118** — running them against 113 restarts the production database.
+>
+> The cutover is **per application**, not global: each app's `DATABASE_URL` is
+> repointed at 118 on its own schedule. The 8 databases are independent, so
+> nothing forces the migration to be atomic — migrate `umami_prod` (9 MB) first,
+> then a staging DB, and only then production. Blast radius is one app, and
+> rollback is reverting one secret and restarting one pod while the old database
+> sits untouched beside it.
+>
+> After migrating an app, set `ALTER DATABASE <db> CONNECTION LIMIT 0` on 113 so
+> a stale config cannot silently write to the abandoned copy.
 
 ## Architecture
 
 - **OS Disk**: 20GB on SSD (local-lvm) - managed by Terraform
 - **Data Disk**: 60GB on SSD (local-lvm) - managed manually in Proxmox for persistence
-- **Hostname**: `pg18` na VM 118 (a 113 usa `pg`, acessível como `pg.local` via Avahi)
+- **Hostname**: `pg18` on VM 118 (113 uses `pg`, reachable as `pg.local` via Avahi)
 
 ## Data Disk Setup
 
 The PostgreSQL data directory lives on a separate disk (`/data`) that persists independently of the VM. This allows VM recreation without data loss.
 
-`install.sh` **aborta** se `/data` não for um mountpoint — este passo é
-pré-requisito dele, não opcional.
+`install.sh` **aborts** if `/data` is not a mountpoint — this step is a
+prerequisite, not an option.
 
 ### Create and Attach Data Disk (on Proxmox host)
 
@@ -52,23 +61,22 @@ sudo mount -a
 df -h /data
 ```
 
-### Colocar o cluster no disco de dados
+### Putting the cluster on the data disk
 
-**`install.sh` faz isso sozinho** desde 2026-08-06: se
-`/data/postgresql/<ver>_main` não existir, ele roda `pg_dropcluster` +
-`pg_createcluster -d` naquele caminho. O drop é destrutivo, então há duas
-guardas que precisam valer as duas: `/data` tem que ser mountpoint, e o cluster
-não pode ter nenhum banco de usuário.
+**`install.sh` handles this on its own** as of 2026-08-06: if
+`/data/postgresql/<ver>_main` does not exist, it runs `pg_dropcluster` +
+`pg_createcluster -d` against that path. The drop is destructive, so two guards
+must both hold: `/data` has to be a mountpoint, and the cluster must have no
+user databases.
 
-Não há passo manual a executar aqui — basta rodar `setup.sh` com o disco de
-dados já montado.
+There is no manual step here — just run `setup.sh` with the data disk mounted.
 
 <details>
-<summary>Histórico: os passos manuais usados na VM 113 (PG 17)</summary>
+<summary>History: the manual steps used on VM 113 (PG 17)</summary>
 
-Antes de o `install.sh` automatizar isso, a relocação era feita à mão, movendo
-um cluster que já existia em vez de recriá-lo. Registrado porque explica por que
-o `data_directory` da 113 não é o default do Debian:
+Before `install.sh` automated this, the relocation was done by hand, moving an
+existing cluster rather than recreating it. Recorded because it explains why
+113's `data_directory` is not the Debian default:
 
 ```bash
 sudo systemctl stop postgresql@17-main
@@ -83,15 +91,15 @@ sudo systemctl start postgresql@17-main
 sudo -u postgres psql -l
 ```
 
-Para disco novo/vazio, o caminho era `initdb` direto:
+For a new/empty disk the path was a direct `initdb`:
 
 ```bash
 sudo -u postgres /usr/lib/postgresql/17/bin/initdb -D /data/postgresql/17_main
 ```
 
-Note que esse `initdb` sem flags criava o cluster **sem** data checksums, que
-era o default até o PG 17. O `pg_createcluster` do `install.sh` no PG 18 os
-deixa ligados.
+Note that this flagless `initdb` created the cluster **without** data checksums,
+which was the default up to PG 17. `install.sh`'s `pg_createcluster` on PG 18
+leaves them on.
 
 </details>
 
@@ -142,6 +150,7 @@ sudo mount -a
 # does exactly this (pg_dropcluster + pg_createcluster -d) behind its guards:
 #   POSTGRES_SSH=deployer@192.168.20.23 ./bootstrap/postgres/setup.sh
 # By hand, if you must:
+
 sudo pg_dropcluster --stop 18 main
 sudo install -d -m 0755 -o postgres -g postgres /data/postgresql
 sudo pg_createcluster 18 main -d /data/postgresql/18_main
@@ -162,14 +171,14 @@ sudo sed -i 's/127.0.1.1.*/127.0.1.1\tpg/' /etc/hosts
 sudo systemctl enable avahi-daemon && sudo systemctl restart avahi-daemon
 ```
 
-## ⚠️ Rodar `install.sh` derruba as conexões
+## ⚠️ Running `install.sh` drops every connection
 
-O script termina com um restart do cluster. Não existe caminho sem isso para
-`shared_buffers` e `reserved_connections`, que são de contexto *postmaster*.
-Com ~122 conexões seguradas em pools estáticos do Ecto, o restart derruba todas
-de uma vez; os pools reconectam sozinhos, mas requisições no meio da janela
-erram, e uma liveness probe que falhe pode virar restart de pod. Rode
-deliberadamente, não por reflexo.
+The script ends with a cluster restart. There is no path around it for
+`shared_buffers` and `reserved_connections`, both of which are *postmaster*
+context. With ~122 connections held open in static Ecto pools, the restart drops
+all of them at once; the pools reconnect on their own, but requests in flight
+during the window fail, and a liveness probe that trips can escalate into a pod
+restart. Run it deliberately, not by reflex.
 
 ## Provisioning Databases
 
@@ -191,9 +200,10 @@ infisical, …) lives on the *same* PostgreSQL server and draws from one global
 exhausted → clients see `FATAL 53300 too_many_connections / remaining connection
 slots are reserved for roles with the SUPERUSER attribute`). Changing it requires
 a restart — `install.sh` handles that, or `ALTER SYSTEM SET max_connections = N;`
-then `sudo systemctl restart postgresql@18-main`. Desde 2026-08-06 o
-`install.sh` também roda `ALTER SYSTEM RESET max_connections`, para que o valor
-venha do `postgresql.conf` versionado e não de um override que só existe na VM.
+then `sudo systemctl restart postgresql@18-main`. Since 2026-08-06 `install.sh`
+also runs `ALTER SYSTEM RESET max_connections`, so the value comes from the
+version-controlled `postgresql.conf` rather than an override that exists only on
+the VM.
 
 **Infisical has priority.** `reserved_connections = 5` (set in `install.sh`) holds
 back 5 slots that only members of the predefined `pg_use_reserved_connections` role
@@ -202,14 +212,14 @@ membership in `bootstrap/infisical/db-setup.sh`, so a runaway app pool can never
 lock Infisical out of its own DB (which would otherwise block *changing* the secret
 that caused the runaway). Apps therefore top out at `max_connections − 3 − 5 = 192`.
 
-> **Correção — 2026-08-06.** Até esta data o parágrafo acima descrevia o estado
-> *pretendido*, não o real. Uma auditoria do cluster vivo encontrou
-> `reserved_connections = 0` e `pg_auth_members` vazio: o `GRANT` de
-> `bootstrap/infisical/db-setup.sh:50` nunca chegou a ser executado. A proteção
-> estava inerte nas duas pontas, e entre ~jan/2026 e ago/2026 o Infisical não
-> teve prioridade nenhuma sobre os apps. O valor e o grant passaram a ser
-> aplicados por `install.sh`; entram em vigor na próxima execução dele.
-> Conferir os dois lados com:
+> **Correction — 2026-08-06.** Until this date the paragraph above described the
+> *intended* state, not the real one. An audit of the live cluster found
+> `reserved_connections = 0` and `pg_auth_members` empty: the `GRANT` in
+> `bootstrap/infisical/db-setup.sh:50` had never been executed. The protection
+> was inert on both ends, and from ~Jan 2026 to Aug 2026 Infisical had no
+> priority over the apps whatsoever. Both the value and the grant are now
+> applied by `install.sh`, and take effect on its next run. Check both ends
+> with:
 >
 > ```bash
 > sudo -u postgres psql -tAc "SHOW reserved_connections;"
@@ -249,21 +259,21 @@ sudo -u postgres psql -l
 sudo -u postgres psql -c "SHOW data_directory;"
 ```
 
-## Histórico de configuração
+## Configuration history
 
-Mudanças de configuração deste cluster, com o que motivou cada uma. Entradas
-marcadas como **pendente** estão escritas no `install.sh` mas ainda não valem no
-cluster vivo — elas entram em vigor na próxima execução do script.
+Configuration changes to this cluster and what motivated each one. Entries
+marked **pending** are written into `install.sh` but do not yet hold on the live
+cluster — they take effect on the script's next run.
 
-| Data | Mudança | Motivo | Status |
+| Date | Change | Reason | Status |
 |---|---|---|---|
-| 2026-08-06 | `shared_buffers` 128MB → 2GB | VM de 7,7 GB rodando o default de 128MB; os ~925 MB de dados passam a caber inteiros | pendente |
-| 2026-08-06 | `random_page_cost` 4 → 1.1 | O default assume disco girando e faz o planner subestimar index scan em SSD | pendente |
-| 2026-08-06 | `effective_cache_size` 4GB → 5GB | Refletir a RAM real disponível para cache | pendente |
-| 2026-08-06 | `maintenance_work_mem` 64MB → 256MB | VACUUM e criação de índice; poucos concorrentes | pendente |
-| 2026-08-06 | `reserved_connections` 0 → 5 | Documentado como ativo desde ~jan/2026, mas o valor era 0 e o `GRANT` nunca rodou — ver a nota de correção acima | pendente |
-| 2026-08-06 | `max_connections` migra de `postgresql.auto.conf` para `postgresql.conf` | O valor existia só na VM, fora do git, vindo de um `ALTER SYSTEM` manual | pendente |
-| 2026-08-06 | certbot/Let's Encrypt removidos do caminho do Postgres | O cluster é só LAN e servia o cert snakeoil apesar de toda a maquinaria de DNS-01 — o `sed` procurava uma linha comentada que o Debian entrega descomentada | pendente |
-| ~2026-01 | `max_connections` 100 → 200 | Pool esgotado em produção: `FATAL 53300 too_many_connections` | aplicado (via `ALTER SYSTEM`, fora do git) |
-| ~2025-11 | `data_directory` movido para `/data/postgresql/17_main` | Disco de dados separado, para o banco sobreviver à recriação da VM | aplicado |
+| 2026-08-06 | `shared_buffers` 128MB → 2GB | 7.7 GB VM running the 128MB default; the ~925 MB of data now fits entirely | pending |
+| 2026-08-06 | `random_page_cost` 4 → 1.1 | The default assumes spinning rust and makes the planner underestimate index scans on SSD | pending |
+| 2026-08-06 | `effective_cache_size` 4GB → 5GB | Reflect the RAM actually available for cache | pending |
+| 2026-08-06 | `maintenance_work_mem` 64MB → 256MB | VACUUM and index builds; few run concurrently | pending |
+| 2026-08-06 | `reserved_connections` 0 → 5 | Documented as active since ~Jan 2026, but the value was 0 and the `GRANT` never ran — see the correction note above | pending |
+| 2026-08-06 | `max_connections` moves from `postgresql.auto.conf` to `postgresql.conf` | The value existed only on the VM, outside git, from a manual `ALTER SYSTEM` | pending |
+| 2026-08-06 | certbot/Let's Encrypt dropped from the Postgres path | The cluster is LAN-only and served the snakeoil cert despite all the DNS-01 machinery — the `sed` looked for a commented line that Debian ships uncommented | pending |
+| ~2026-01 | `max_connections` 100 → 200 | Pool exhausted in production: `FATAL 53300 too_many_connections` | applied (via `ALTER SYSTEM`, outside git) |
+| ~2025-11 | `data_directory` moved to `/data/postgresql/17_main` | Separate data disk, so the database survives VM recreation | applied |
 

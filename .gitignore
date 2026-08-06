@@ -1,3 +1,6 @@
 .claude
 .env
 *.pem
+
+# Working notes (specs, implementation plans). Not repository content.
+docs/superpowers/

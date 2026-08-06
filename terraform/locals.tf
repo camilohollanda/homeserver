@@ -23,10 +23,13 @@ locals {
     tags      = "db,postgres"
   }
 
-  # PostgreSQL 18 — target of the blue/green upgrade (spec:
-  # docs/superpowers/specs/2026-08-06-pg18-blue-green-design.md).
-  # Runs alongside db_vm (113) for the duration of the migration. At cutover the
-  # .21 address moves here and 113 is shut down; until then this IP is temporary.
+  # PostgreSQL 18 — target of the blue/green upgrade.
+  # Runs alongside db_vm (113) for the duration of the migration. This address is
+  # permanent and the two VMs keep their own: the cutover moves one app at a time
+  # by repointing its DATABASE_URL, so both clusters must stay addressable
+  # throughout. (A single DNS flip was considered and dropped — it is atomic and
+  # global, which rules out migrating one database at a time and makes rollback
+  # wait on TTL expiry.)
   db_vm_18 = {
     name      = "db-postgres-18"
     vmid      = 118
