@@ -224,6 +224,21 @@ sudo -u postgres pg_isready -q || { echo "Error: cluster did not come up." >&2; 
 sudo -u postgres psql -qc "ALTER SYSTEM RESET max_connections;"
 sudo -u postgres psql -qc "SELECT pg_reload_conf();" >/dev/null
 
+# Keep app roles out of the system databases. This is cluster policy, not
+# per-app provisioning, because it can only be expressed by revoking from
+# PUBLIC: CONNECT on a database with a NULL datacl is inherited from PUBLIC's
+# default grant, and PostgreSQL has no negative grants, so taking it away from
+# one role takes away nothing. pg-provision.sh used to try exactly that
+# (`REVOKE CONNECT ON DATABASE postgres FROM <role>`) and had no effect on
+# either cluster for as long as it existed.
+#
+# Safe because superusers bypass ACL checks entirely, so postgres, pg_dumpall
+# and wal-g are unaffected; and no login role has CREATEDB, so nothing needs to
+# read template1 in order to create a database from it.
+sudo -u postgres psql -qc "REVOKE CONNECT ON DATABASE postgres FROM PUBLIC;"
+sudo -u postgres psql -qc "REVOKE CONNECT ON DATABASE template1 FROM PUBLIC;"
+echo "  ✓ PUBLIC cannot connect to the postgres/template1 databases"
+
 # Heal the reserved-connections grant. The same GRANT lives in
 # bootstrap/infisical/db-setup.sh for fresh provisioning, but that script needs
 # DB_PASSWORD and re-running it with the wrong one would break Infisical's

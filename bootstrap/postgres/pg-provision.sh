@@ -147,9 +147,16 @@ GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME} TO ${DB_USER};
 REVOKE CONNECT ON DATABASE ${DB_NAME} FROM PUBLIC;
 GRANT CONNECT ON DATABASE ${DB_NAME} TO ${DB_USER};
 
--- Revoke this user's ability to connect to other system databases
-REVOKE CONNECT ON DATABASE postgres FROM ${DB_USER};
-REVOKE CONNECT ON DATABASE template1 FROM ${DB_USER};
+-- Keeping this role out of the system databases is NOT done here. Two lines
+-- used to sit at this spot:
+--     REVOKE CONNECT ON DATABASE postgres  FROM ${DB_USER};
+--     REVOKE CONNECT ON DATABASE template1 FROM ${DB_USER};
+-- They never did anything. CONNECT on those databases is inherited from
+-- PUBLIC's default grant rather than granted to the role, and PostgreSQL has no
+-- negative grants, so revoking from a single role removes nothing —
+-- has_database_privilege() still returned true on every cluster. The revoke has
+-- to come off PUBLIC, which makes it cluster-wide policy and therefore lives in
+-- bootstrap/postgres/install.sh. Removed 2026-08-06.
 
 -- Connect to the database and grant schema privileges
 \c ${DB_NAME}
