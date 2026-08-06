@@ -1,0 +1,17 @@
+#cloud-config
+# Minimal OS prep only.
+# Full PostgreSQL installation is handled by bootstrap/postgres/setup.sh (runs locally).
+#
+# Hostname is `pg18`, not `pg`: the VM 113 already answers to `pg` and both boxes
+# run side by side during the blue/green migration. Renaming happens at cutover.
+
+hostname: pg18
+manage_etc_hosts: true
+
+package_update: true
+package_upgrade: false
+
+packages:
+  - curl
+  - ca-certificates
+  - gnupg
