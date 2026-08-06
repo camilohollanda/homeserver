@@ -21,6 +21,26 @@ SSH_KEYS_FILE="/root/.ssh/authorized_keys"
 # Debian 12 cloud image
 DEBIAN12_IMAGE_URL="https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2"
 
+# NVIDIA driver, from NVIDIA's CUDA repo — NOT Debian non-free.
+#
+# Debian 12 non-free caps out at 535, and no Debian suite anywhere ships past
+# 550 (trixie/forky/sid). That is not enough: Ollama 0.30.0+ refuses compute < 7
+# GPUs on drivers older than 570 and silently falls back to CPU. The Quadro
+# M4000 on VM 115 is compute 5.2, so a 535 template means a GPU that looks
+# attached, passes nvidia-smi, and never gets used.
+#
+# 580 is the LAST branch supporting Maxwell/Pascal/Volta — 590+ drops them, and
+# the repo already carries newer nvidia-kernel-dkms, so the pinning package is
+# mandatory or apt drifts onto a version that will not drive the card.
+#
+# Use cuda-drivers-* (proprietary, -> nvidia-kernel-dkms), NEVER nvidia-open-*
+# (-> nvidia-kernel-open-dkms): the open modules need the GSP, introduced in
+# Turing, so they cannot drive Maxwell at all. This is why a past attempt to
+# move this VM to Debian 13 failed — it reads as a CUDA/card incompatibility
+# but is really the wrong kernel-module variant.
+NVIDIA_DRIVER_BRANCH="580"
+CUDA_KEYRING_VERSION="1.1-1"
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -126,8 +146,8 @@ if [ "$NEED_CUSTOMIZATION" = true ]; then
     echo "  - Image resized to 20GB (NVIDIA needs ~5-6GB)"
     echo "  - Updating all packages"
     echo "  - Blacklisting nouveau driver"
-    echo "  - Enabling non-free repositories"
-    echo "  - Installing NVIDIA drivers + DKMS"
+    echo "  - Enabling non-free repositories (firmware only)"
+    echo "  - Installing NVIDIA driver ${NVIDIA_DRIVER_BRANCH} proprietary + DKMS (NVIDIA CUDA repo)"
     echo "  - Installing qemu-guest-agent"
     echo "  - Creating user: ${CLOUD_INIT_USER}"
     echo ""
@@ -145,7 +165,11 @@ if [ "$NEED_CUSTOMIZATION" = true ]; then
         --run-command 'echo \"alias lbm-nouveau off\" >> /etc/modprobe.d/blacklist-nouveau.conf' \
         --run-command 'if [ -f /etc/apt/sources.list.d/debian.sources ]; then sed -i \"s/Components: main\$/Components: main contrib non-free non-free-firmware/\" /etc/apt/sources.list.d/debian.sources; fi' \
         --run-command 'apt-get update' \
-        --install linux-headers-amd64,nvidia-driver,nvidia-kernel-dkms,firmware-misc-nonfree,qemu-guest-agent \
+        --install linux-headers-amd64,firmware-misc-nonfree,qemu-guest-agent,wget \
+        --run-command 'wget -qO /tmp/cuda-keyring.deb https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/cuda-keyring_${CUDA_KEYRING_VERSION}_all.deb && dpkg -i /tmp/cuda-keyring.deb && rm -f /tmp/cuda-keyring.deb' \
+        --run-command 'apt-get update' \
+        --install nvidia-driver-pinning-${NVIDIA_DRIVER_BRANCH} \
+        --install cuda-drivers-${NVIDIA_DRIVER_BRANCH} \
         --run-command 'update-initramfs -u' \
         --run-command 'useradd -m -s /bin/bash ${CLOUD_INIT_USER}' \
         --run-command 'usermod -aG sudo,video,render ${CLOUD_INIT_USER}' \
@@ -229,7 +253,7 @@ echo ""
 echo "Template: VMID ${TEMPLATE_VMID} (${TEMPLATE_NAME})"
 echo ""
 echo -e "${BLUE}Pre-installed:${NC}"
-echo "  • NVIDIA driver 535.x (from Debian non-free)"
+echo "  • NVIDIA driver ${NVIDIA_DRIVER_BRANCH}.x proprietary (NVIDIA CUDA repo, branch-pinned)"
 echo "  • NVIDIA kernel modules (DKMS)"
 echo "  • nouveau driver blacklisted"
 echo "  • Secure Boot disabled"

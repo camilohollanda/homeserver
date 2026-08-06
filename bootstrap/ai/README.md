@@ -142,24 +142,6 @@ terraform plan
 terraform apply
 ```
 
-### Migrate Existing Whisper VM
-
-```bash
-cd bootstrap/ai
-
-# Make executable
-chmod +x migrate-to-ai-services.sh
-
-# Run migration
-./migrate-to-ai-services.sh 192.168.20.30 your-username ghp_xxxx ai.internal.example.com
-```
-
-The migration script will:
-1. Add Ollama to docker-compose
-2. Update nginx configuration
-3. Obtain new SSL certificate
-4. Pull the Qwen model
-
 ## Configuration
 
 ### Terraform Variables
@@ -331,6 +313,50 @@ watch -n 1 nvidia-smi
 
 # Verify NVIDIA Container Toolkit
 nvidia-ctk --version
+```
+
+#### Ollama silently running on CPU
+
+The Quadro M4000 is Maxwell (compute 5.2). Ollama 0.30.0+ refuses compute < 7
+GPUs unless the NVIDIA driver is new enough, and **falls back to CPU without
+erroring** — inference still works, just far slower. Check with:
+
+```bash
+docker exec ollama ollama ps          # PROCESSOR must not say "100% CPU"
+docker logs ollama | grep -i "driver too old"
+```
+
+Driver thresholds (from `discover/cuda_compat.go`): CUDA 12.4+ builds need
+driver 550+, CUDA 12.8+ builds need **570+** for compute < 7.
+
+**Resolved 2026-08-06** by moving the VM to driver **580.178.04** from NVIDIA's
+CUDA repo; `terraform/create-nvidia-template.sh` now bakes this into the
+template. Debian cannot supply it — bookworm non-free caps at 535 and no
+Debian suite ships past 550. If this VM is ever rebuilt from an older 535
+image, ollama will quietly go back to CPU.
+
+Two things to get right when installing the driver, both documented in
+`create-nvidia-template.sh`: install `nvidia-driver-pinning-580` **before**
+`cuda-drivers-580` (its dependency has no upper bound and apt will otherwise
+resolve to 610, which drops Maxwell), and never use `nvidia-open-*` (the open
+kernel modules need a Turing-era GSP and cannot drive this card).
+
+#### VRAM contention with Whisper
+
+The M4000 has 8 GB and Whisper (`turbo`) holds ~5 GB whenever its model is
+loaded — measured, not the ~2-3 GB quoted in the GPU time-sharing section
+above. A large Ollama model cannot load alongside it: `frob/unlimited-ocr`
+needs ~5 GB and fails with `cudaMalloc failed: out of memory`.
+
+Whisper does release it — verified unloading after ~270s idle (its
+`model_unload_timeout` is 300s), dropping the GPU back to ~2.2 GB. Polling
+`/health` does not reset that timer. But Whisper **preloads at startup**, so
+for the first ~5 minutes after a reboot or `docker compose up` it holds the
+5 GB even with no traffic. If an Ollama model OOMs, check who owns the memory
+before assuming the model is too big:
+
+```bash
+nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv
 ```
 
 ### Ollama Model Not Loading

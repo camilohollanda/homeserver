@@ -18,7 +18,8 @@ if [[ -n "${REMOTE_HOST:-}" ]]; then
       GITHUB_OWNER      "${GITHUB_OWNER:-}" \
       GHCR_USERNAME     "${GHCR_USERNAME:-}" \
       GHCR_TOKEN        "${GHCR_TOKEN:-}" \
-      OLLAMA_MODEL      "${OLLAMA_MODEL:-qwen2.5:3b}"
+      OLLAMA_MODEL      "${OLLAMA_MODEL:-qwen2.5:3b}" \
+      OLLAMA_VERSION    "${OLLAMA_VERSION:-latest}"
     cat "$0"
   } | ssh "$REMOTE_HOST" "sudo bash -s"
   exit $?
@@ -31,6 +32,19 @@ if [[ "$EUID" -ne 0 ]]; then
 fi
 
 OLLAMA_MODEL="${OLLAMA_MODEL:-qwen2.5:3b}"
+
+# Tracks :latest again as of 2026-08-06. This REQUIRES NVIDIA driver 570+.
+#
+# Ollama 0.30.0 added discover/cuda_compat.go, which refuses compute < 7 GPUs on
+# old drivers (570+ for the CUDA 12.8 builds it ships) and falls back to 100% CPU
+# *silently* — no error, just ~2x slower generation and ~23x slower prompt eval.
+# The Quadro M4000 is compute 5.2, so this VM ran on CPU unnoticed until the
+# driver was moved off Debian's 535 to 580.178.04 from NVIDIA's CUDA repo.
+# See terraform/create-nvidia-template.sh, which now bakes 580 into the template.
+#
+# If this VM is ever rebuilt on a 535 image, ollama will go back to CPU without
+# complaining. Check with: docker exec ollama ollama ps  (PROCESSOR != 100% CPU)
+OLLAMA_VERSION="${OLLAMA_VERSION:-latest}"
 
 echo "==> Installing base dependencies..."
 apt-get update -qq
@@ -227,7 +241,7 @@ services:
               capabilities: [gpu]
 
   ollama:
-    image: ollama/ollama:latest
+    image: ollama/ollama:${OLLAMA_VERSION}
     container_name: ollama
     restart: unless-stopped
     ports:
