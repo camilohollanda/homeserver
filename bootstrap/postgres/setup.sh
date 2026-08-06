@@ -5,15 +5,13 @@
 # Usage:
 #   ./bootstrap/postgres/setup.sh
 #
-# Required env vars:
-#   CF_API_TOKEN       - Cloudflare API token (Zone.DNS Edit)
-#   PG_DOMAIN          - FQDN for the VM (e.g. pg.internal.prakash.com.br)
-#   LETSENCRYPT_EMAIL  - Email for Let's Encrypt notifications
-#
 # Optional env vars:
-#   POSTGRES_SSH       - SSH target (default: deployer@192.168.20.21)
-#   PG_VERSION         - PostgreSQL major version (default: 17)
+#   POSTGRES_SSH       - SSH target (default: deployer@192.168.20.23 — VM 118)
+#   PG_VERSION         - PostgreSQL major version (default: 18)
 #   ALLOWED_NETWORK    - CIDR allowed to connect (default: 192.168.20.0/24)
+#   RESERVED_ROLES     - roles granted pg_use_reserved_connections (default: infisical)
+#
+# TLS is deliberately not provisioned — the cluster is LAN-only. See install.sh.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -35,9 +33,7 @@ wait_ssh() {
   echo "✓ SSH ready"
 }
 
-POSTGRES_SSH="${POSTGRES_SSH:-deployer@192.168.20.21}"
-
-check_env CF_API_TOKEN PG_DOMAIN LETSENCRYPT_EMAIL
+POSTGRES_SSH="${POSTGRES_SSH:-deployer@192.168.20.23}"
 
 echo "=============================================="
 echo "  PostgreSQL Setup"
@@ -55,5 +51,5 @@ echo "  PostgreSQL setup complete!"
 echo "=============================================="
 echo ""
 echo "To provision a database for an app, run locally:"
-echo "  POSTGRES_SSH=${POSTGRES_SSH} ./bootstrap/postgres/pg-provision.sh <app> --env prod"
+echo "  POSTGRES_SSH=${POSTGRES_SSH} POSTGRES_HOST=192.168.20.23 ./bootstrap/postgres/pg-provision.sh <app> --env prod"
 echo ""
