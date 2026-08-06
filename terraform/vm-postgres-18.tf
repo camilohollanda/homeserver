@@ -1,9 +1,14 @@
 # PostgreSQL 18 host — destino do upgrade blue/green.
-# Espelha vm-postgres.tf (VM 113). Duas diferenças deliberadas:
+# Espelha vm-postgres.tf (VM 113). Uma única diferença deliberada:
 #   - prevent_destroy = false: durante a Fase A esta VM não guarda nada, e
 #     iterar sobre ela precisa ser barato. Vira true no cutover, quando passa a
-#     ser o banco de produção.
-#   - startup.order = 2: sobe depois da 113, que ainda é a produção.
+#     ser o banco de produção. É o ÚNICO campo a mudar no cutover.
+#
+# startup.order = 1, igual à 113: banco sobe no primeiro grupo. Ordens
+# duplicadas são a norma aqui (k3s e postgres em 1, ai e gh-runners em 3), e
+# order 2 pertence ao services, que hospeda o Infisical — ou seja, um consumidor
+# deste banco. Pôr o banco no mesmo grupo do consumidor inverteria a dependência
+# depois do cutover.
 resource "proxmox_virtual_environment_vm" "db_postgres_18" {
   name        = local.db_vm_18.name
   node_name   = var.pm_node
@@ -78,7 +83,7 @@ resource "proxmox_virtual_environment_vm" "db_postgres_18" {
   }
 
   startup {
-    order      = 2
+    order      = 1
     up_delay   = 60
     down_delay = 60
   }
