@@ -82,6 +82,8 @@ Options:
   --rollback      Point the app back at VM 113 and unlock the old database.
   --resume-only   Undo a failed run's pause: scale up + resume ArgoCD.
   --no-lock       Skip ALTER DATABASE ... CONNECTION LIMIT 0 on the old cluster.
+  --keep-dump     Keep the dump on VM 118 (default: delete it — it is a full
+                  copy of customer data in the clear)
   --jobs N        Parallel pg_restore jobs (default: 4)
   -y, --yes       Skip the confirmation prompt
   -h, --help      Show this help
@@ -130,7 +132,7 @@ load_app() {
 # Options
 # -----------------------------------------------------------------------------
 APP=""; ENVIRONMENT=""
-DRY_RUN=n; ROLLBACK=n; RESUME_ONLY=n; DO_LOCK=y; JOBS=4; ASSUME_YES=n
+DRY_RUN=n; ROLLBACK=n; RESUME_ONLY=n; DO_LOCK=y; JOBS=4; ASSUME_YES=n; KEEP_DUMP=n
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -138,6 +140,7 @@ while [[ $# -gt 0 ]]; do
     --rollback)    ROLLBACK=y; shift ;;
     --resume-only) RESUME_ONLY=y; shift ;;
     --no-lock)     DO_LOCK=n; shift ;;
+    --keep-dump)   KEEP_DUMP=y; shift ;;
     --jobs)        JOBS="${2:?--jobs needs a number}"; shift 2 ;;
     -y|--yes)      ASSUME_YES=y; shift ;;
     -h|--help)     usage; exit 0 ;;
@@ -551,7 +554,15 @@ info ""
 info "roll back with:"
 info "  $0 $APP $ENVIRONMENT --rollback"
 info ""
-warn "the dump is customer data in the clear on VM 118:"
-warn "  $DUMP"
-warn "  remove it once you are satisfied: ssh $NEW_SSH sudo rm -f $DUMP"
+if [[ "$KEEP_DUMP" == y ]]; then
+  warn "the dump is a full copy of customer data, in the clear, kept at your request:"
+  warn "  $NEW_SSH:$DUMP"
+  warn "  delete it when you no longer need it"
+else
+  # Deleted by default: a verified restore makes it redundant, and it is every
+  # customer's data unencrypted on a disk nobody is watching.
+  ssh -o BatchMode=yes "$NEW_SSH" "sudo rm -f $DUMP" >/dev/null 2>&1 &&
+    info "dump removed from VM 118 (--keep-dump retains it)" ||
+    warn "could not remove $DUMP from VM 118 — delete it by hand"
+fi
 echo ""
