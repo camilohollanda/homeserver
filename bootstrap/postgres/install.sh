@@ -109,29 +109,82 @@ fi
 # Configuration
 # ---------------------------------------------------------------------------
 echo ""
-echo "==> Configuring..."
+echo "==> Writing configuration..."
 
 PG_CONF="/etc/postgresql/${PG_VERSION}/main/postgresql.conf"
 
-grep -q "^#listen_addresses" "$PG_CONF" \
-  && sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" "$PG_CONF" || true
+# Idempotent setter. Rewrites the key whether it is the commented default, an
+# already-set value, or absent from the file entirely (some keys don't ship in
+# the stock config). Appending is safe: within postgresql.conf the last
+# occurrence wins.
+#
+# The `#?` sits between two whitespace classes rather than at the line start, so
+# `reserved_connections` can never match `superuser_reserved_connections` — the
+# literal key has to follow the optional comment marker directly.
+set_conf() {
+  local key="$1" val="$2"
+  if grep -qE "^[[:space:]]*#?[[:space:]]*${key}[[:space:]]*=" "$PG_CONF"; then
+    sed -i -E "s|^[[:space:]]*#?[[:space:]]*${key}[[:space:]]*=.*|${key} = ${val}|" "$PG_CONF"
+  else
+    printf '%s = %s\n' "$key" "$val" >> "$PG_CONF"
+  fi
+}
 
-# Raise the connection ceiling. This is a *shared* instance: werify (prod+staging),
-# iddh (prod+staging), infisical and others each hold their own pool, and a rolling
-# deploy briefly doubles an app's pool (Deployment maxSurge). The stock 100 was
-# exhausted in practice (clients got FATAL 53300 too_many_connections). 200 gives
-# headroom and fits the VM's RAM (~10 MB/backend << 7.7 GB). Requires a restart
-# (done below). Idempotent: rewrites whether the line is the commented default or
-# a previously-set value, and is a no-op once it already reads 200.
-grep -q "^max_connections = 200" "$PG_CONF" \
-  || sed -i -E "s/^[# ]*max_connections = .*/max_connections = 200/" "$PG_CONF"
+# Backup before touching anything, so a failed start has an obvious way back.
+cp -a "$PG_CONF" "${PG_CONF}.bak.$(date +%Y%m%d%H%M%S)"
 
-# Reserve a few slots so Infisical keeps priority over the apps. Roles that are
-# members of the predefined pg_use_reserved_connections role can draw from these
-# slots after the apps have filled the rest, so an app pool can never starve
-# secret reads/writes. Postmaster context -> needs a restart (done below).
-grep -q "^reserved_connections = 5" "$PG_CONF" \
-  || sed -i -E "s/^[# ]*reserved_connections = .*/reserved_connections = 5/" "$PG_CONF"
+set_conf listen_addresses "'*'"
+
+# Shared instance: werify (prod+staging), iddh (prod+staging), infisical, bugsink
+# and umami each hold their own pool, and a rolling deploy briefly doubles an
+# app's pool (Deployment maxSurge). The stock 100 was exhausted in practice
+# (FATAL 53300 too_many_connections). Measured baseline on the VM 113 on
+# 2026-08-06 was 122 held connections at rest, 116 of them idle.
+set_conf max_connections 200
+
+# Hold back slots that only members of pg_use_reserved_connections may use once
+# the apps have filled the rest, so a runaway app pool can never lock Infisical
+# out of its own DB — which would otherwise block *changing* the secret that
+# caused the runaway. The grant is applied further down. Apps top out at
+# max_connections - 3 (superuser) - 5 = 192.
+set_conf reserved_connections 5
+
+# 7.7 GB VM, 4 vCPU, SSD, ~925 MB of data. shared_buffers holds the whole
+# dataset with room to grow. work_mem is deliberately NOT raised: 200 potential
+# connections x 4 MB is already 800 MB of worst case.
+set_conf shared_buffers "2GB"
+set_conf effective_cache_size "5GB"
+set_conf maintenance_work_mem "256MB"
+
+# The default of 4 assumes spinning rust and makes the planner underestimate
+# index scans on SSD. This is the single change here most likely to show up in
+# query plans.
+set_conf random_page_cost "1.1"
+
+# --- assertion gate -------------------------------------------------------
+# A sed that matches nothing is silent, and the failure mode is shipping the
+# default (max_connections back to 100) into a restart. Verify every key landed
+# BEFORE restarting.
+echo ""
+echo "==> Verifying settings landed in ${PG_CONF}..."
+assert_conf() {
+  local key="$1" want="$2" got
+  got="$(grep -E "^${key}[[:space:]]*=" "$PG_CONF" | tail -1 \
+         | sed -E "s|^${key}[[:space:]]*=[[:space:]]*||; s|[[:space:]]*#.*$||; s|[[:space:]]*$||")"
+  if [[ "$got" != "$want" ]]; then
+    echo "Error: ${key} reads '${got}', expected '${want}' — aborting before restart." >&2
+    exit 1
+  fi
+  printf '  ✓ %-22s %s\n' "$key" "$got"
+}
+
+assert_conf listen_addresses "'*'"
+assert_conf max_connections "200"
+assert_conf reserved_connections "5"
+assert_conf shared_buffers "2GB"
+assert_conf effective_cache_size "5GB"
+assert_conf maintenance_work_mem "256MB"
+assert_conf random_page_cost "1.1"
 
 PG_HBA="/etc/postgresql/${PG_VERSION}/main/pg_hba.conf"
 if ! grep -q "$ALLOWED_NETWORK" "$PG_HBA"; then
@@ -148,14 +201,46 @@ fi
 # ---------------------------------------------------------------------------
 echo ""
 echo "==> Starting PostgreSQL..."
+echo "    NOTE: this restarts the cluster and drops every open connection."
 systemctl enable postgresql
-if systemctl is-active --quiet postgresql; then
-  systemctl restart postgresql
+if systemctl is-active --quiet "postgresql@${PG_VERSION}-main"; then
+  systemctl restart "postgresql@${PG_VERSION}-main"
 else
-  systemctl start postgresql
+  systemctl start "postgresql@${PG_VERSION}-main"
 fi
+
+echo -n "  Waiting for postgres to accept queries"
+for _ in $(seq 1 30); do
+  if sudo -u postgres pg_isready -q; then echo " ✓"; break; fi
+  echo -n "."; sleep 1
+done
+sudo -u postgres pg_isready -q || { echo "Error: cluster did not come up." >&2; exit 1; }
+
+# Consolidate the source of truth. On the VM 113 max_connections lived ONLY in
+# postgresql.auto.conf (set by a manual ALTER SYSTEM), i.e. a critical value that
+# existed on the box and nowhere in git. Dropping the override makes
+# postgresql.conf — which this script owns — authoritative. No-op on a fresh
+# cluster.
+sudo -u postgres psql -qc "ALTER SYSTEM RESET max_connections;"
+sudo -u postgres psql -qc "SELECT pg_reload_conf();" >/dev/null
+
+# Heal the reserved-connections grant. The same GRANT lives in
+# bootstrap/infisical/db-setup.sh for fresh provisioning, but that script needs
+# DB_PASSWORD and re-running it with the wrong one would break Infisical's
+# login. This path is cluster-level and needs no password. It exists because
+# db-setup.sh was never re-run after the GRANT was added, so the live cluster
+# went from ~jan/2026 to 2026-08-06 with the protection inert on both ends.
+for role in $RESERVED_ROLES; do
+  if sudo -u postgres psql -tAc "select 1 from pg_roles where rolname='${role}'" | grep -q 1; then
+    sudo -u postgres psql -qc "GRANT pg_use_reserved_connections TO ${role};"
+    echo "  ✓ granted pg_use_reserved_connections to '${role}'"
+  else
+    echo "  role '${role}' not present yet — db-setup.sh will apply the grant"
+  fi
+done
 
 echo ""
 echo "✓ PostgreSQL ${PG_VERSION} installed and running."
 echo "  Data dir   : ${PG_DATA}"
 echo "  Allowed    : ${ALLOWED_NETWORK}"
+echo "  Verify     : sudo -u postgres psql -c 'SHOW shared_buffers; SHOW reserved_connections;'"
