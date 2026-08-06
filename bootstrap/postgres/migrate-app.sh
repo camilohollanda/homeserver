@@ -105,24 +105,28 @@ load_app() {
       NAMESPACE=werify-production
       ARGO_APPS="werify-production werify-connector-production"
       DEPLOYMENTS="werify werify-connector"
+      EXTERNAL_SECRET=werify-secrets
       SECRET_KEYS="DATABASE_URL SIDECAR_DATABASE_URL" ;;
     werify:staging)
       INFISICAL_PATH=/Werify/;        INFISICAL_ENV=staging
       NAMESPACE=werify-staging
       ARGO_APPS="werify-staging werify-connector-staging"
       DEPLOYMENTS="werify werify-connector"
+      EXTERNAL_SECRET=werify-secrets
       SECRET_KEYS="DATABASE_URL SIDECAR_DATABASE_URL" ;;
     iddh-members:prod)
       INFISICAL_PATH=/Iddh-members/;  INFISICAL_ENV=prod
       NAMESPACE=iddh-members-production
       ARGO_APPS="iddh-members-production"
       DEPLOYMENTS="iddh-members"
+      EXTERNAL_SECRET=iddh-members-secrets
       SECRET_KEYS="DATABASE_URL" ;;
     iddh-members:staging)
       INFISICAL_PATH=/Iddh-members/;  INFISICAL_ENV=staging
       NAMESPACE=iddh-members-staging
       ARGO_APPS="iddh-members-staging"
       DEPLOYMENTS="iddh-members"
+      EXTERNAL_SECRET=iddh-members-secrets
       SECRET_KEYS="DATABASE_URL" ;;
     *) die "unknown app/environment: $1 $2 (see --help)" ;;
   esac
@@ -542,17 +546,25 @@ for k in $SECRET_KEYS; do
   ok "$k -> $TO_HOST"
 done
 
-# ESO refreshes every 30s; the pod only sees the new value when it starts, so
-# the k8s Secret has to carry it BEFORE we scale up. Waiting here is the
-# difference between a clean cutover and a pod that boots against the old host.
-info "waiting for External Secrets to propagate (refreshInterval 30s)…"
+# The pod only reads its environment at startup, so the k8s Secret has to carry
+# the new host BEFORE we scale up — a pod that starts early boots against the
+# old cluster.
+#
+# Rather than wait out the 30s refreshInterval, nudge the ExternalSecret: a
+# changed `force-sync` annotation makes the controller reconcile immediately.
+# Measured on ESO v1.2.1, this lands in about two seconds. ArgoCD is paused for
+# this app right now, so the annotation is not reconciled away mid-flight.
+kubectl -n "$NAMESPACE" annotate externalsecret "$EXTERNAL_SECRET" \
+  force-sync="$(date +%s)" --overwrite >/dev/null 2>&1 ||
+  warn "could not annotate externalsecret/$EXTERNAL_SECRET — falling back to the 30s refresh"
+
 propagated=n
-for _ in $(seq 1 20); do
+for _ in $(seq 1 45); do
   if kubectl -n "$NAMESPACE" get secret secrets -o jsonpath='{.data.DATABASE_URL}' 2>/dev/null \
      | base64 -d 2>/dev/null | grep -q "$TO_HOST"; then propagated=y; break; fi
-  sleep 5
+  sleep 1
 done
-[[ "$propagated" == y ]] || die "the k8s Secret still does not carry $TO_HOST after 100s.
+[[ "$propagated" == y ]] || die "the k8s Secret still does not carry $TO_HOST after 45s.
     The app is down. Check the ExternalSecret, then: $0 $APP $ENVIRONMENT --resume-only"
 ok "k8s Secret carries $TO_HOST"
 
