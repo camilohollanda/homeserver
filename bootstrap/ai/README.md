@@ -1,7 +1,7 @@
 # AI Services GPU Inference Server
 
 GPU-accelerated AI services running on a single VM with GPU time-sharing:
-- **Whisper** - Speech-to-text transcription using [faster-whisper](https://github.com/SYSTRAN/faster-whisper) with `large-v3-turbo`
+- **Whisper** - Speech-to-text transcription using [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with `large-v3-q5_0`
 - **Ollama** - LLM inference for text generation, translation, etc. using [Qwen 2.5](https://ollama.com/library/qwen2.5) or any other model
 
 ## Architecture
@@ -29,9 +29,12 @@ Both Whisper and Ollama share the same GPU. They can coexist because:
 
 1. **Ollama auto-unloads models** - After 5 minutes of inactivity, the model is unloaded from VRAM
 2. **Sequential processing** - Requests are processed one at a time
-3. **Memory footprint**:
-   - Whisper turbo: ~2-3GB VRAM when processing
-   - Qwen 2.5 3B: ~6GB VRAM when loaded
+3. **Memory footprint** (measured on the M4000, not estimated):
+   - Whisper `large-v3-q5_0` (whisper.cpp): ~1.6GB VRAM when loaded
+   - Qwen 2.5 3B: ~2.4GB VRAM when loaded
+
+   Whisper used ~4.87GB under the old PyTorch backend, which left too little for
+   a large Ollama model. At ~1.6GB the two now fit comfortably together.
 
 When you use transcription, Ollama's model may be unloaded. When you use Ollama, the model reloads (takes ~5-10 seconds first time).
 
@@ -343,16 +346,15 @@ kernel modules need a Turing-era GSP and cannot drive this card).
 
 #### VRAM contention with Whisper
 
-The M4000 has 8 GB and Whisper (`turbo`) holds ~5 GB whenever its model is
-loaded — measured, not the ~2-3 GB quoted in the GPU time-sharing section
-above. A large Ollama model cannot load alongside it: `frob/unlimited-ocr`
-needs ~5 GB and fails with `cudaMalloc failed: out of memory`.
+Largely resolved by the whisper.cpp migration: Whisper dropped from ~4.87 GB to
+**~1.6 GB**, so a large Ollama model now fits alongside it on the 8 GB card.
+Under the old PyTorch backend they could not coexist — `frob/unlimited-ocr`
+needs ~5 GB and failed with `cudaMalloc failed: out of memory`.
 
-Whisper does release it — verified unloading after ~270s idle (its
-`model_unload_timeout` is 300s), dropping the GPU back to ~2.2 GB. Polling
-`/health` does not reset that timer. But Whisper **preloads at startup**, so
-for the first ~5 minutes after a reboot or `docker compose up` it holds the
-5 GB even with no traffic. If an Ollama model OOMs, check who owns the memory
+Whisper still releases its model after ~270s idle (`model_unload_timeout` is
+300s); polling `/health` does not reset that timer, but it **preloads at
+startup**, so it holds memory for the first few minutes after a restart even
+with no traffic. If an Ollama model still OOMs, check who owns the memory
 before assuming the model is too big:
 
 ```bash

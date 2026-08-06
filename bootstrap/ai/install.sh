@@ -229,7 +229,10 @@ services:
     volumes:
       - whisper-cache:/app/.cache
     environment:
-      - WHISPER_MODEL=turbo
+      # whisper.cpp model name, not an openai-whisper one — the service moved to
+      # a ggml backend in 2026-08. "turbo" is not a valid ggml model and the
+      # container will not start with it.
+      - WHISPER_MODEL=large-v3-q5_0
       - WHISPER_DEVICE=cuda
       - XDG_CACHE_HOME=/app/.cache
     deploy:
