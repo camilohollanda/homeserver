@@ -213,23 +213,10 @@ variable "ai_ollama_model" {
   default     = "qwen2.5:3b"
 }
 
-# PostgreSQL configuration
-#
-# These two are declarative documentation only — no Terraform resource reads
-# them. The Postgres VM is configured by bootstrap/postgres/install.sh, which
-# takes PG_VERSION and ALLOWED_NETWORK as environment variables. Kept in sync
-# with the script's defaults so the intended topology is visible here.
-variable "postgres_version" {
-  description = "PostgreSQL version installed by bootstrap/postgres/install.sh"
-  type        = string
-  default     = "18"
-}
-
-variable "postgres_allowed_network" {
-  description = "Network CIDR allowed to connect to PostgreSQL"
-  type        = string
-  default     = "192.168.20.0/24"
-}
+# PostgreSQL is configured entirely by bootstrap/postgres/install.sh, which
+# reads PG_VERSION and ALLOWED_NETWORK from the environment. No Terraform
+# variables here — postgres_version, postgres_allowed_network and
+# postgres_domain were declared but never referenced by any resource.
 
 # Media stack configuration
 variable "media_library_path" {
