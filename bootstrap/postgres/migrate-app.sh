@@ -388,6 +388,15 @@ cleanup() {
   echo ""
   echo -e "${RED}Aborted with $APP/$ENVIRONMENT scaled down and ArgoCD paused.${NC}"
   echo -e "${RED}Undo with:  $0 $APP $ENVIRONMENT --resume-only${NC}"
+  # An abort after the dump leaves it behind, and it is customer data in the
+  # clear. It is not deleted here on purpose — a retry can reuse it — but it must
+  # never be left behind silently.
+  [[ -n "${DUMP:-}" ]] && {
+    echo -e "${YELLOW}The dump was left on VM 118 — customer data, unencrypted:${NC}"
+    echo -e "${YELLOW}  $NEW_SSH:$DUMP${NC}"
+    echo -e "${YELLOW}  ssh $NEW_SSH sudo rm -f $DUMP${NC}"
+  }
+  return 0
 }
 trap cleanup ERR INT TERM EXIT
 
