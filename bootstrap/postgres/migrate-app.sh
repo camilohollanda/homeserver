@@ -76,6 +76,9 @@ Apps and environments:
   werify staging      werify_staging   (+ werify-connector)
   iddh-members prod       iddh_members_prod
   iddh-members staging    iddh_members_staging
+  umami prod              umami_prod       (DATABASE_URL carries a raw IP —
+                                            pass OLD_HOST=192.168.20.21)
+  bugsink prod            bugsink
 
 Options:
   --dry-run       Preflight and report only. Touches nothing.
@@ -105,28 +108,45 @@ load_app() {
       NAMESPACE=werify-production
       ARGO_APPS="werify-production werify-connector-production"
       DEPLOYMENTS="werify werify-connector"
-      EXTERNAL_SECRET=werify-secrets
+      EXTERNAL_SECRET=werify-secrets; K8S_SECRET=secrets
       SECRET_KEYS="DATABASE_URL SIDECAR_DATABASE_URL" ;;
     werify:staging)
       INFISICAL_PATH=/Werify/;        INFISICAL_ENV=staging
       NAMESPACE=werify-staging
       ARGO_APPS="werify-staging werify-connector-staging"
       DEPLOYMENTS="werify werify-connector"
-      EXTERNAL_SECRET=werify-secrets
+      EXTERNAL_SECRET=werify-secrets; K8S_SECRET=secrets
       SECRET_KEYS="DATABASE_URL SIDECAR_DATABASE_URL" ;;
     iddh-members:prod)
       INFISICAL_PATH=/Iddh-members/;  INFISICAL_ENV=prod
       NAMESPACE=iddh-members-production
       ARGO_APPS="iddh-members-production"
       DEPLOYMENTS="iddh-members"
-      EXTERNAL_SECRET=iddh-members-secrets
+      EXTERNAL_SECRET=iddh-members-secrets; K8S_SECRET=secrets
       SECRET_KEYS="DATABASE_URL" ;;
     iddh-members:staging)
       INFISICAL_PATH=/Iddh-members/;  INFISICAL_ENV=staging
       NAMESPACE=iddh-members-staging
       ARGO_APPS="iddh-members-staging"
       DEPLOYMENTS="iddh-members"
-      EXTERNAL_SECRET=iddh-members-secrets
+      EXTERNAL_SECRET=iddh-members-secrets; K8S_SECRET=secrets
+      SECRET_KEYS="DATABASE_URL" ;;
+    umami:prod)
+      INFISICAL_PATH=/Umami/;         INFISICAL_ENV=prod
+      NAMESPACE=umami
+      ARGO_APPS="umami"
+      DEPLOYMENTS="umami"
+      EXTERNAL_SECRET=umami-secrets;  K8S_SECRET=umami-secrets
+      SECRET_KEYS="DATABASE_URL" ;;
+    bugsink:prod)
+      INFISICAL_PATH=/Bugsink/;       INFISICAL_ENV=prod
+      NAMESPACE=bugsink
+      ARGO_APPS="bugsink"
+      # apprise-shim also runs in this namespace and is deliberately left up: its
+      # only environment is APPRISE_KEY / APPRISE_URL / TAG_FALLBACK, so it holds
+      # no Postgres connection and stopping it would be downtime for nothing.
+      DEPLOYMENTS="bugsink"
+      EXTERNAL_SECRET=bugsink-secrets; K8S_SECRET=bugsink-secrets
       SECRET_KEYS="DATABASE_URL" ;;
     *) die "unknown app/environment: $1 $2 (see --help)" ;;
   esac
@@ -569,7 +589,7 @@ kubectl -n "$NAMESPACE" annotate externalsecret "$EXTERNAL_SECRET" \
 
 propagated=n
 for _ in $(seq 1 45); do
-  if kubectl -n "$NAMESPACE" get secret secrets -o jsonpath='{.data.DATABASE_URL}' 2>/dev/null \
+  if kubectl -n "$NAMESPACE" get secret "$K8S_SECRET" -o jsonpath='{.data.DATABASE_URL}' 2>/dev/null \
      | base64 -d 2>/dev/null | grep -q "$TO_HOST"; then propagated=y; break; fi
   sleep 1
 done

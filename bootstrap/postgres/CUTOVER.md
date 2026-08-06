@@ -23,9 +23,7 @@ Increasing stakes. Do not start at the top of the list.
 | 6 | werify | production | `werify` | largest, and the connector rides with it |
 | 7 | infisical | — | `infisical` | **last, and by hand** — see below |
 
-`migrate-app.sh` covers rows 2, 3, 5 and 6. umami and bugsink have no
-`werify`-style two-app coupling and can be done with the same steps by hand, or
-by adding them to the registry in the script.
+`migrate-app.sh` covers every row except infisical.
 
 ### Infisical is last, and is not scriptable
 
@@ -84,12 +82,18 @@ If a run aborts midway, it says so and leaves the app scaled down on purpose:
 
 ### Apps whose URL carries a raw IP
 
-`iddh-members staging` and `umami` point at `192.168.20.21` rather than
-`pg.internal`. The script refuses on an unexpected host rather than guessing:
+`umami` points at `192.168.20.21` rather than `pg.internal`. The script refuses
+on an unexpected host rather than guessing:
 
 ```bash
-OLD_HOST=192.168.20.21 ./bootstrap/postgres/migrate-app.sh iddh-members staging
+OLD_HOST=192.168.20.21 ./bootstrap/postgres/migrate-app.sh umami prod
 ```
+
+### bugsink shares its namespace
+
+`apprise-shim` runs alongside `bugsink` and is deliberately **not** scaled down:
+its entire environment is `APPRISE_KEY` / `APPRISE_URL` / `TAG_FALLBACK`, so it
+holds no Postgres connection and stopping it would be downtime for nothing.
 
 ## Why the quiescing is not just `kubectl scale`
 
