@@ -184,7 +184,7 @@ https://192.168.20.11:30443
 │   k3s-apps      │   db-postgres   │   infisical   │ whisper-gpu │
 │  192.168.20.11  │  192.168.20.21  │ 192.168.20.22 │ .20.30      │
 ├─────────────────┼─────────────────┼───────────────┼─────────────┤
-│ K3s cluster     │ PostgreSQL 17   │ Secrets mgmt  │ ML/GPU      │
+│ K3s cluster     │ PostgreSQL 17→18│ Secrets mgmt  │ ML/GPU      │
 │ ArgoCD          │ Databases for:  │ (Docker)      │ Whisper API │
 │ ingress-nginx   │ - Infisical     │               │             │
 │ External Secrets│ - Apps          │               │             │

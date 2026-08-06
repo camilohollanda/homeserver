@@ -47,6 +47,13 @@ END
 -- pg_use_reserved_connections may draw from reserved_connections (set in
 -- bootstrap/postgres/install.sh) once the apps have filled the normal pool,
 -- so a runaway app pool can't lock Infisical out of its own database.
+--
+-- HISTÓRICO: esta linha foi escrita por volta de jan/2026 e nunca rodou no
+-- cluster vivo — uma auditoria em 2026-08-06 encontrou pg_auth_members vazio e
+-- reserved_connections = 0, ou seja, a proteção estava inerte nas duas pontas.
+-- O install.sh passou a aplicar o mesmo GRANT com guarda de existência da role,
+-- porque este script exige DB_PASSWORD e re-executá-lo com a senha errada
+-- derrubaria o login do Infisical.
 GRANT pg_use_reserved_connections TO ${DB_USER};
 
 SELECT 'CREATE DATABASE ${DB_NAME} OWNER ${DB_USER}'
