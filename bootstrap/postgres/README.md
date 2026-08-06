@@ -30,35 +30,50 @@ The PostgreSQL data directory lives on a separate disk (`/data`) that persists i
 `install.sh` **aborts** if `/data` is not a mountpoint — this step is a
 prerequisite, not an option.
 
+The data disk is deliberately **not** managed by Terraform. In the `bpg/proxmox`
+provider `disk` is a nested block of the VM resource, not a resource of its own,
+so it cannot be protected independently: replacing the VM would take the
+database with it. Keeping it outside Terraform is what makes it survive, and
+`ignore_changes = [disk]` in the VM's lifecycle stops the manually-attached
+scsi1 from showing up as drift.
+
 ### Create and Attach Data Disk (on Proxmox host)
 
 ```bash
 # Create 60GB disk on SSD
 pvesm alloc local-lvm 118 vm-118-pgdata 60G
 
-# Attach to VM as scsi1
-qm set 118 --scsi1 local-lvm:vm-118-pgdata
+# Attach to VM as scsi1, matching the OS disk's flags
+qm set 118 --scsi1 local-lvm:vm-118-pgdata,discard=on,ssd=1,iothread=1,backup=1
 
 # Verify
 qm config 118 | grep scsi
 ```
 
+`discard=on` matters here: `local-lvm` is a **thin** pool, and without TRIM
+propagating from the guest the pool never reclaims deleted blocks.
+
 ### Format and Mount (on postgres VM)
 
 ```bash
-# Check disk device name
+# Check the device name, and confirm it is empty before formatting
 lsblk
+sudo blkid /dev/sdb   # must print nothing — no filesystem, no partition table
 
 # Format (only if new/empty disk!)
-sudo mkfs.ext4 -L pgdata /dev/sdc  # adjust device name as needed
+sudo mkfs.ext4 -L pgdata /dev/sdb  # adjust device name as needed
 
-# Create mount point and add to fstab
+# Create mount point and add to fstab. Mount by LABEL, not by device — the
+# kernel is free to hand out sd* names in a different order after a reboot.
 sudo mkdir -p /data
 echo 'LABEL=pgdata /data ext4 defaults,noatime 0 2' | sudo tee -a /etc/fstab
 sudo mount -a
+sudo systemctl daemon-reload   # otherwise systemd keeps the pre-edit fstab
 
-# Verify
+# Verify — the second command is what install.sh actually checks
 df -h /data
+mountpoint /data
+sudo findmnt --verify
 ```
 
 ### Putting the cluster on the data disk
