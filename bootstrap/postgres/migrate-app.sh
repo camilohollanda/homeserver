@@ -463,8 +463,18 @@ ssh -o BatchMode=yes "$NEW_SSH" "sudo -u postgres bash -c '
 # The exit code matters here, so no pipeline: piping into grep would report
 # grep's status and a failed restore would sail past as a success.
 RESTORE_LOG="$(mktemp)"
+# --no-privileges is required, not cosmetic. pg-provision.sh runs its
+# ALTER DEFAULT PRIVILEGES as the postgres superuser, so the dump carries
+# `ALTER DEFAULT PRIVILEGES FOR ROLE postgres …` — statements the restoring role
+# cannot execute. Without this the restore creates every table and then dies on
+# those, which reads like a data failure when it is a grant failure. The grants
+# pg-provision.sh establishes are re-applied below, as postgres.
+#
+# werify did not hit this only because its databases came from
+# clone_prod_to_staging.sh, which already restores with --no-privileges. Every
+# database provisioned the normal way carries them.
 if ! ssh -o BatchMode=yes "$NEW_SSH" "sudo -u postgres $PGBIN/pg_restore --dbname=$SRC_DB \
-     --jobs=$JOBS --no-owner --role=$SRC_USER --verbose $DUMP" >"$RESTORE_LOG" 2>&1; then
+     --jobs=$JOBS --no-owner --no-privileges --role=$SRC_USER --verbose $DUMP" >"$RESTORE_LOG" 2>&1; then
   grep -E 'pg_restore: error' "$RESTORE_LOG" | head -20
   die "pg_restore failed (full log: $RESTORE_LOG). The app is still down and the
     secret has NOT been changed. Resume with: $0 $APP $ENVIRONMENT --resume-only"
@@ -476,6 +486,17 @@ if [[ "$RESTORE_ERRORS" -gt 0 ]]; then
 fi
 rm -f "$RESTORE_LOG"
 ok "restored with no errors"
+
+# Re-establish what pg-provision.sh grants, since --no-privileges dropped the
+# dump's copy of it. Runs as postgres so the default privileges end up owned by
+# postgres, exactly as provisioning leaves them.
+ssh -o BatchMode=yes "$NEW_SSH" "sudo -u postgres psql -q -v ON_ERROR_STOP=1 -d $SRC_DB -c \
+  \"GRANT ALL ON SCHEMA public TO $SRC_USER;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES    TO $SRC_USER;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO $SRC_USER;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO $SRC_USER;\"" ||
+  die "could not re-apply the provisioning grants on $SRC_DB"
+ok "provisioning grants re-applied"
 
 # -----------------------------------------------------------------------------
 # Verify before switching
