@@ -1,14 +1,14 @@
-# PostgreSQL 18 host — destino do upgrade blue/green.
-# Espelha vm-postgres.tf (VM 113). Uma única diferença deliberada:
-#   - prevent_destroy = false: durante a Fase A esta VM não guarda nada, e
-#     iterar sobre ela precisa ser barato. Vira true no cutover, quando passa a
-#     ser o banco de produção. É o ÚNICO campo a mudar no cutover.
+# PostgreSQL 18 host — target of the blue/green upgrade.
+# Mirrors vm-postgres.tf (VM 113) with a single deliberate difference:
+#   - prevent_destroy = false: during phase A this VM holds nothing, and
+#     iterating on it has to stay cheap. Flip to true at cutover, when it becomes
+#     the production database. This is the ONLY field the cutover touches.
 #
-# startup.order = 1, igual à 113: banco sobe no primeiro grupo. Ordens
-# duplicadas são a norma aqui (k3s e postgres em 1, ai e gh-runners em 3), e
-# order 2 pertence ao services, que hospeda o Infisical — ou seja, um consumidor
-# deste banco. Pôr o banco no mesmo grupo do consumidor inverteria a dependência
-# depois do cutover.
+# startup.order = 1, same as 113: databases boot in the first group. Duplicate
+# orders are the norm here (k3s and postgres on 1, ai and gh-runners on 3), and
+# order 2 belongs to services, which hosts Infisical — a consumer of this very
+# database. Putting the database in the consumer's group would invert the boot
+# dependency after cutover.
 resource "proxmox_virtual_environment_vm" "db_postgres_18" {
   name        = local.db_vm_18.name
   node_name   = var.pm_node
@@ -36,9 +36,10 @@ resource "proxmox_virtual_environment_vm" "db_postgres_18" {
 
   scsi_hardware = "virtio-scsi-single"
 
-  # local-lvm (SSD) — mesmo raciocínio da VM 113: workload de banco ganha
-  # bastante com SSD. Atenção: o pool está em ~79% e é thin, então os 80 GB
-  # provisionados (20 OS + 60 dados) ficam sobrecomprometidos até a 113 sair.
+  # local-lvm (SSD) — same reasoning as VM 113: DB workloads benefit
+  # significantly from SSD. Caveat: the pool sits at ~79% and is thin, so the
+  # 80 GB provisioned here (20 OS + 60 data) leaves it overcommitted until 113
+  # goes away. Actual usage starts around 3 GB.
   disk {
     datastore_id = "local-lvm"
     file_format  = "raw"
@@ -89,8 +90,8 @@ resource "proxmox_virtual_environment_vm" "db_postgres_18" {
   }
 
   lifecycle {
-    # Fase A: a VM é descartável enquanto não houver dado real nela.
-    # No cutover, trocar para true (a 113 usa true pelo mesmo motivo).
+    # Phase A: the VM is disposable while it holds no real data.
+    # At cutover, flip to true (113 uses true for the same reason).
     prevent_destroy = false
 
     # - disk: ignore manually-attached data disk (scsi1) managed outside Terraform

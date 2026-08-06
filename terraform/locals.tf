@@ -23,10 +23,10 @@ locals {
     tags      = "db,postgres"
   }
 
-  # PostgreSQL 18 — VM de destino do upgrade blue/green (spec
+  # PostgreSQL 18 — target of the blue/green upgrade (spec:
   # docs/superpowers/specs/2026-08-06-pg18-blue-green-design.md).
-  # Vive em paralelo à db_vm (113) durante a migração. No cutover o IP .21
-  # migra para cá e a 113 é desligada; até lá este IP é temporário.
+  # Runs alongside db_vm (113) for the duration of the migration. At cutover the
+  # .21 address moves here and 113 is shut down; until then this IP is temporary.
   db_vm_18 = {
     name      = "db-postgres-18"
     vmid      = 118
