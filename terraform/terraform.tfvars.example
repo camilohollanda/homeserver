@@ -83,9 +83,10 @@ ai_github_owner   = "<github-org-or-username>"  # owns the whisper-api repo + GH
 # ---------------------------------------------------------------------------
 # PostgreSQL VM (defaults usually fine; override if you change topology)
 # ---------------------------------------------------------------------------
-# postgres_version         = "17"
+# postgres_version         = "18"
 # postgres_allowed_network = "192.168.20.0/24"
-# postgres_domain          = "pg.internal.example.com"
+# postgres_domain removed: the Postgres VM no longer provisions a certificate,
+# so nothing consumed it. The A record lives in cloudflare-dns.tf.
 
 # ---------------------------------------------------------------------------
 # Media stack (Jellyfin, *arr) — paths on the media VM, domains served by it

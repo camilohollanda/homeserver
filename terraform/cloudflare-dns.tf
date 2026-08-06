@@ -14,10 +14,11 @@
 locals {
   tunnel_cname_target = "${cloudflare_zero_trust_tunnel_cloudflared.homeserver.id}.cfargotunnel.com"
 
-  services_vm_ip = "192.168.20.22" # vmid 114
-  postgres_vm_ip = "192.168.20.21" # vmid 113
-  ai_vm_ip       = "192.168.20.30" # vmid 115
-  media_vm_ip    = "192.168.20.40" # vmid 116
+  services_vm_ip    = "192.168.20.22" # vmid 114
+  postgres_vm_ip    = "192.168.20.21" # vmid 113 (PG 17)
+  postgres_18_vm_ip = "192.168.20.23" # vmid 118 (PG 18)
+  ai_vm_ip          = "192.168.20.30" # vmid 115
+  media_vm_ip       = "192.168.20.40" # vmid 116
 
   # Public CNAMEs that route through the tunnel.
   # Order doesn't matter here (it's a map), but the corresponding tunnel
@@ -41,8 +42,14 @@ locals {
     gha_cache = { name = "gha-cache.internal.prakash.com.br", ip = local.services_vm_ip }
 
     # dedicated VMs
-    pg = { name = "pg.internal.prakash.com.br", ip = local.postgres_vm_ip }
-    ai = { name = "ai.internal.prakash.com.br", ip = local.ai_vm_ip }
+    #
+    # `pg` must NOT be repointed at 118 to perform the upgrade cutover — six of
+    # the nine live connection strings resolve through it, so moving it migrates
+    # every app at once. Apps move to `pg18` one at a time instead, by
+    # repointing their own DATABASE_URL.
+    pg   = { name = "pg.internal.prakash.com.br", ip = local.postgres_vm_ip }
+    pg18 = { name = "pg18.internal.prakash.com.br", ip = local.postgres_18_vm_ip }
+    ai   = { name = "ai.internal.prakash.com.br", ip = local.ai_vm_ip }
 
     # media stack (vmid 116, all share one VM behind a local nginx)
     jellyfin = { name = "jellyfin.internal.prakash.com.br", ip = local.media_vm_ip }
