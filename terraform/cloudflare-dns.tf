@@ -137,7 +137,13 @@ resource "cloudflare_dns_record" "dnsaid" {
     # No experimental keyNNNNN params: the draft's `cap`/`well-known` key
     # numbers are explicitly illustrative and unregistered, so anything we put
     # there would be a number we made up.
-    value = "alpn=\"h2,h3\" port=443 mandatory=alpn,port"
+    #
+    # Every param value is quoted, including `port` and `mandatory`, because
+    # that is the form Cloudflare stores and returns. RFC 9460 §2.1 treats
+    # `port=443` and `port="443"` as equivalent, but writing the bare form here
+    # produced a perpetual diff: Terraform proposed the unquoted string on every
+    # plan and Cloudflare normalised it straight back. Match the server's form.
+    value = "alpn=\"h2,h3\" port=\"443\" mandatory=\"alpn,port\""
   }
 
   comment = "managed by terraform — DNS-AID agent discovery"
