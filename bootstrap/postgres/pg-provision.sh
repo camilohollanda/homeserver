@@ -18,7 +18,11 @@ fi
 # Configuration
 POSTGRES_HOST="${POSTGRES_HOST:-192.168.20.21}"
 POSTGRES_PORT="${POSTGRES_PORT:-5432}"
-INFISICAL_PROJECT="${INFISICAL_PROJECT:-homeserver-1jj1}"
+INFISICAL_API_URL="${INFISICAL_API_URL:-https://infisical.internal.prakash.com.br}"
+# Workspace ID of the `homeserver-1jj1` project. The CLI's --projectId takes the
+# ID, not the slug — passing the slug returns an API error. Not a credential;
+# it is useless without a login.
+INFISICAL_PROJECT_ID="${INFISICAL_PROJECT_ID:-73e3fb3c-f972-4014-b70f-c519d5415684}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -184,9 +188,10 @@ echo ""
 echo -e "Run this command to store the DATABASE_URL in Infisical:"
 echo ""
 echo -e "${YELLOW}infisical secrets set ${INFISICAL_SECRET_NAME}=\"${DATABASE_URL}\" \\
-    --projectSlug ${INFISICAL_PROJECT} \\
+    --domain ${INFISICAL_API_URL} \\
+    --projectId ${INFISICAL_PROJECT_ID} \\
     --env ${ENVIRONMENT} \\
-    --secretPath \"${INFISICAL_PATH}\"${NC}"
+    --path \"${INFISICAL_PATH}\"${NC}"
 echo ""
 echo -e "Or copy to clipboard (macOS):"
 echo ""
