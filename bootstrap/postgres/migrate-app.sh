@@ -202,14 +202,26 @@ set_secret() {
   infisical "${flags[@]}" >/dev/null || die "could not write $key to Infisical"
 }
 
-# Runs psql/pg_dump/pg_restore on VM 118. Credentials go through the
-# environment, never argv, so they stay out of that host's process list.
-on_new() { ssh -o BatchMode=yes "$NEW_SSH" "sudo -u postgres env $* bash -s"; }
+# Every postgres client runs on VM 118 and authenticates through a PGPASSFILE
+# written over stdin, mode 0600, owned by postgres. Not `env PGPASSWORD=… cmd`:
+# that puts the password in env's own argv, where any user on the box can read
+# it out of ps for as long as the command runs.
+PGPASS_REMOTE=/var/lib/postgresql/.pgpass-migrate
 
-remote_psql() {  # remote_psql <host> <port> <user> <pass> <db> <args...>
-  local h="$1" p="$2" u="$3" w="$4" d="$5"; shift 5
+write_remote_pgpass() {  # write_remote_pgpass <host> <port> <db> <user> <pass>
+  printf '%s:%s:%s:%s:%s\n' "$1" "$2" "$3" "$4" "$5" \
+    | ssh -o BatchMode=yes "$NEW_SSH" \
+        "sudo -u postgres bash -c 'umask 077; cat > $PGPASS_REMOTE'" ||
+    die "could not write the credentials file on VM 118"
+}
+clear_remote_pgpass() {
+  ssh -o BatchMode=yes "$NEW_SSH" "sudo rm -f $PGPASS_REMOTE" >/dev/null 2>&1 || true
+}
+
+remote_psql() {  # remote_psql <host> <port> <user> <db> <args...>
+  local h="$1" p="$2" u="$3" d="$4"; shift 4
   ssh -o BatchMode=yes "$NEW_SSH" \
-    "sudo -u postgres env PGPASSWORD=$(printf %q "$w") $PGBIN/psql --host=$(printf %q "$h") \
+    "sudo -u postgres env PGPASSFILE=$PGPASS_REMOTE $PGBIN/psql --host=$(printf %q "$h") \
      --port=$(printf %q "$p") --username=$(printf %q "$u") --dbname=$(printf %q "$d") \
      -v ON_ERROR_STOP=1 --quiet --no-psqlrc $*"
 }
@@ -358,7 +370,22 @@ for k in $SECRET_KEYS; do
   ok "$k agrees: $PG_HOST/$PG_DB"
 done
 
-remote_psql "$SRC_HOST" "$SRC_PORT" "$SRC_USER" "$SRC_PASS" "$SRC_DB" -c 'SELECT 1' >/dev/null 2>&1 ||
+# One trap for the whole run. A second `trap ... EXIT` later would silently
+# replace this one and leave the credentials file behind on VM 118, so the
+# scaled-down warning is folded in here rather than registered separately.
+PAUSED=n; REPORTED=n
+cleanup() {
+  clear_remote_pgpass
+  [[ "$PAUSED" == y && "$REPORTED" == n ]] || return 0
+  REPORTED=y
+  echo ""
+  echo -e "${RED}Aborted with $APP/$ENVIRONMENT scaled down and ArgoCD paused.${NC}"
+  echo -e "${RED}Undo with:  $0 $APP $ENVIRONMENT --resume-only${NC}"
+}
+trap cleanup ERR INT TERM EXIT
+
+write_remote_pgpass "$SRC_HOST" "$SRC_PORT" "$SRC_DB" "$SRC_USER" "$SRC_PASS"
+remote_psql "$SRC_HOST" "$SRC_PORT" "$SRC_USER" "$SRC_DB" -c 'SELECT 1' >/dev/null 2>&1 ||
   die "cannot reach the source database $SRC_HOST/$SRC_DB from VM 118"
 ok "source reachable from VM 118"
 
@@ -373,7 +400,7 @@ if [[ "$TARGET_EXISTS" == "1" ]]; then
 fi
 ok "target is clear"
 
-SRC_ROWS_BEFORE="$(remote_psql "$SRC_HOST" "$SRC_PORT" "$SRC_USER" "$SRC_PASS" "$SRC_DB" -tAc "\"$ROWCOUNT_SQL\"")"
+SRC_ROWS_BEFORE="$(remote_psql "$SRC_HOST" "$SRC_PORT" "$SRC_USER" "$SRC_DB" -tAc "\"$ROWCOUNT_SQL\"")"
 SRC_TABLES="$(printf '%s\n' "$SRC_ROWS_BEFORE" | grep -c . || true)"
 ok "source has $SRC_TABLES tables"
 
@@ -402,16 +429,6 @@ fi
 # -----------------------------------------------------------------------------
 # Quiesce
 # -----------------------------------------------------------------------------
-PAUSED=n; REPORTED=n
-on_error() {
-  [[ "$PAUSED" == y && "$REPORTED" == n ]] || return 0
-  REPORTED=y
-  echo ""
-  echo -e "${RED}Aborted with $APP/$ENVIRONMENT scaled down and ArgoCD paused.${NC}"
-  echo -e "${RED}Undo with:  $0 $APP $ENVIRONMENT --resume-only${NC}"
-}
-trap on_error ERR INT TERM EXIT
-
 step "Quiescing $APP/$ENVIRONMENT"
 pause_argocd
 PAUSED=y
@@ -429,7 +446,7 @@ ssh -o BatchMode=yes "$NEW_SSH" "sudo install -d -m 0700 -o postgres -g postgres
 
 # umask 077 in the same shell as pg_dump: the file is customer data in the
 # clear, so it must never be group-readable, not even while being written.
-ssh -o BatchMode=yes "$NEW_SSH" "sudo -u postgres env PGPASSWORD=$(printf %q "$SRC_PASS") \
+ssh -o BatchMode=yes "$NEW_SSH" "sudo -u postgres env PGPASSFILE=$PGPASS_REMOTE \
   sh -c 'umask 077; $PGBIN/pg_dump --host=$FROM_HOST --port=$SRC_PORT --username=$SRC_USER \
   --dbname=$SRC_DB --format=custom --file=$DUMP'" || die "pg_dump failed"
 ok "dumped: $(ssh -o BatchMode=yes "$NEW_SSH" "sudo du -h $DUMP | cut -f1")"
@@ -440,16 +457,29 @@ ssh -o BatchMode=yes "$NEW_SSH" "sudo -u postgres bash -c '
   psql -tAc \"select 1 from pg_database where datname='\''$SRC_DB'\''\" | grep -q 1 ||
     createdb -O $SRC_USER $SRC_DB'" || die "could not prepare the target database"
 
-ssh -o BatchMode=yes "$NEW_SSH" "sudo -u postgres $PGBIN/pg_restore --dbname=$SRC_DB \
-  --jobs=$JOBS --no-owner --role=$SRC_USER $DUMP" 2>&1 | grep -E 'error|warning' | head -10 || true
-ok "restored"
+# The exit code matters here, so no pipeline: piping into grep would report
+# grep's status and a failed restore would sail past as a success.
+RESTORE_LOG="$(mktemp)"
+if ! ssh -o BatchMode=yes "$NEW_SSH" "sudo -u postgres $PGBIN/pg_restore --dbname=$SRC_DB \
+     --jobs=$JOBS --no-owner --role=$SRC_USER --verbose $DUMP" >"$RESTORE_LOG" 2>&1; then
+  grep -E 'pg_restore: error' "$RESTORE_LOG" | head -20
+  die "pg_restore failed (full log: $RESTORE_LOG). The app is still down and the
+    secret has NOT been changed. Resume with: $0 $APP $ENVIRONMENT --resume-only"
+fi
+RESTORE_ERRORS="$(grep -c 'pg_restore: error' "$RESTORE_LOG" || true)"
+if [[ "$RESTORE_ERRORS" -gt 0 ]]; then
+  grep -E 'pg_restore: error' "$RESTORE_LOG" | head -20
+  die "pg_restore reported $RESTORE_ERRORS error(s) despite exiting 0 (log: $RESTORE_LOG)"
+fi
+rm -f "$RESTORE_LOG"
+ok "restored with no errors"
 
 # -----------------------------------------------------------------------------
 # Verify before switching
 # -----------------------------------------------------------------------------
 step "Verifying the copy"
 DST_ROWS="$(ssh -o BatchMode=yes "$NEW_SSH" "sudo -u postgres psql -tAd $SRC_DB -c \"$ROWCOUNT_SQL\"")"
-SRC_ROWS_AFTER="$(remote_psql "$FROM_HOST" "$SRC_PORT" "$SRC_USER" "$SRC_PASS" "$SRC_DB" -tAc "\"$ROWCOUNT_SQL\"")"
+SRC_ROWS_AFTER="$(remote_psql "$FROM_HOST" "$SRC_PORT" "$SRC_USER" "$SRC_DB" -tAc "\"$ROWCOUNT_SQL\"")"
 
 if [[ "$SRC_ROWS_AFTER" != "$DST_ROWS" ]]; then
   echo ""; diff <(printf '%s\n' "$SRC_ROWS_AFTER") <(printf '%s\n' "$DST_ROWS") | head -20
@@ -493,7 +523,6 @@ step "Bringing $APP/$ENVIRONMENT back"
 scale_to 1
 resume_argocd
 PAUSED=n
-trap - ERR INT TERM EXIT
 
 # -----------------------------------------------------------------------------
 # Lock the abandoned copy
