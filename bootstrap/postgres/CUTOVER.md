@@ -125,6 +125,32 @@ agree before starting and rewrites both together. Moving only one would leave
 the connector writing to VM 113 while the web app writes to VM 118: two writers
 on two diverging copies, the worst outcome available.
 
+## The lock does not stop superusers
+
+`ALTER DATABASE ... CONNECTION LIMIT 0` blocks the app's role. It does **not**
+block superusers, and it does not drop connections that already exist — it only
+refuses new ones.
+
+So an open GUI client (TablePlus, DBeaver, pgAdmin) connected as `postgres`
+keeps working against the abandoned copy after the cutover, with no error to
+suggest anything changed. A `SELECT` there returns data frozen at the moment of
+the migration; an `UPDATE` writes to a database nobody reads and that disappears
+when VM 113 is decommissioned.
+
+Found in practice: a TablePlus session idle for nine days survived the lock on
+`iddh_members_prod` because it was connected as `postgres`.
+
+After migrating an app, repoint any saved connections at
+`pg18.internal.prakash.com.br`. To find them:
+
+```sql
+-- on VM 113, anything still attached to a migrated database
+SELECT datname, usename, application_name, client_addr,
+       now() - backend_start AS age, state
+  FROM pg_stat_activity
+ WHERE datname IN (SELECT datname FROM pg_database WHERE datconnlimit = 0);
+```
+
 ## After each app
 
 - Watch it come up: `kubectl logs -n <ns> deployment/<app> -f`
