@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
-# Runs on the postgres VM (vmid 113) as root.
+# Runs on a postgres VM as root.
 # Installs wal-g, wires PostgreSQL's archive_command to push WAL segments to an
 # S3-compatible bucket (Cloudflare R2 by default), and schedules a daily base
 # backup + weekly retention prune. Together these give point-in-time recovery.
 #
-# Remote: REMOTE_HOST=deployer@192.168.20.21 ./install.sh
+# Remote: REMOTE_HOST=deployer@192.168.20.23 WALG_PREFIX=wal-g-18 ./install.sh
+#
+# The target is deliberately NOT hardcoded to the production VM: 113 (.21) still
+# runs PG 17 and its own wal-g, and pointing this script at it would restart the
+# cluster. The blue/green target is 118 (.23) — see
+# docs/superpowers/specs/2026-08-06-pg18-blue-green-design.md.
 #
 # Required env vars:
 #   S3_ACCESS_KEY_ID      - Access key for the bucket (R2 API token or B2 keyID)
@@ -17,9 +22,18 @@
 #
 # Optional env vars:
 #   S3_REGION             - default: auto (R2 accepts "auto"; B2 wants "us-west-002" etc.)
-#   PG_VERSION            - default: 17
+#   PG_VERSION            - default: 18
 #   WALG_VERSION          - default: 3.0.8
 #   WALG_RETAIN_FULL      - number of base backups to keep (default: 7)
+#   WALG_PREFIX           - path inside the bucket (default: wal-g)
+#                           A NEW CLUSTER NEEDS A NEW PREFIX. pg_upgrade and a
+#                           fresh initdb both produce a new system identifier and
+#                           restart WAL at 000000010000000000000001, colliding
+#                           with the existing cluster's segment names. wal-g's
+#                           split-brain check only works against clean storage,
+#                           and mixing the two corrupts PITR and breaks
+#                           `wal-g wal-verify integrity` (used by
+#                           scripts/check-backups.sh).
 if [[ -n "${REMOTE_HOST:-}" ]]; then
   { printf 'export %s=%q\n' \
       S3_ACCESS_KEY_ID     "${S3_ACCESS_KEY_ID:-}" \
@@ -28,9 +42,10 @@ if [[ -n "${REMOTE_HOST:-}" ]]; then
       S3_BUCKET            "${S3_BUCKET:-}" \
       S3_REGION            "${S3_REGION:-auto}" \
       WALG_LIBSODIUM_KEY   "${WALG_LIBSODIUM_KEY:-}" \
-      PG_VERSION           "${PG_VERSION:-17}" \
+      PG_VERSION           "${PG_VERSION:-18}" \
       WALG_VERSION         "${WALG_VERSION:-3.0.8}" \
-      WALG_RETAIN_FULL     "${WALG_RETAIN_FULL:-7}"
+      WALG_RETAIN_FULL     "${WALG_RETAIN_FULL:-7}" \
+      WALG_PREFIX          "${WALG_PREFIX:-wal-g}"
     cat "$0"
   } | ssh "$REMOTE_HOST" "sudo bash -s"
   exit $?
@@ -49,9 +64,10 @@ fi
 : "${WALG_LIBSODIUM_KEY:?must be set}"
 
 S3_REGION="${S3_REGION:-auto}"
-PG_VERSION="${PG_VERSION:-17}"
+PG_VERSION="${PG_VERSION:-18}"
 WALG_VERSION="${WALG_VERSION:-3.0.8}"
 WALG_RETAIN_FULL="${WALG_RETAIN_FULL:-7}"
+WALG_PREFIX="${WALG_PREFIX:-wal-g}"
 
 PG_CONF="/etc/postgresql/${PG_VERSION}/main/postgresql.conf"
 [[ -f "$PG_CONF" ]] || { echo "Error: ${PG_CONF} not found — is postgres installed?" >&2; exit 1; }
@@ -89,7 +105,7 @@ install -d -m 0750 -o postgres -g postgres /etc/wal-g
 cat > /etc/wal-g/wal-g.env <<ENV
 # S3-compatible target. To swap R2 → B2, change S3_ENDPOINT + S3_REGION on the
 # command line and re-run install.sh — nothing else needs to change here.
-WALG_S3_PREFIX=s3://${S3_BUCKET}/wal-g
+WALG_S3_PREFIX=s3://${S3_BUCKET}/${WALG_PREFIX}
 AWS_ACCESS_KEY_ID=${S3_ACCESS_KEY_ID}
 AWS_SECRET_ACCESS_KEY=${S3_SECRET_ACCESS_KEY}
 AWS_ENDPOINT=${S3_ENDPOINT}
@@ -229,7 +245,7 @@ fi
 
 echo ""
 echo "✓ wal-g configured."
-echo "  Bucket   : s3://${S3_BUCKET}/wal-g"
+echo "  Bucket   : s3://${S3_BUCKET}/${WALG_PREFIX}"
 echo "  Endpoint : ${S3_ENDPOINT}"
 echo "  List     : sudo -u postgres bash -c 'set -a; . /etc/wal-g/wal-g.env; wal-g backup-list'"
 echo "  Restore  : see https://github.com/wal-g/wal-g/blob/master/docs/PostgreSQL.md#backup-fetch"

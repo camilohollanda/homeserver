@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# Provisions wal-g on the postgres VM (vmid 113, IP .21).
+# Provisions wal-g on a postgres VM. Defaults to the PG 18 box (vmid 118, .23);
+# the PG 17 production box (113, .21) already has its own wal-g and must not be
+# re-run against, since install.sh restarts the cluster.
 # Runs from your local machine — SSHes into the VM for all remote operations.
 #
 # Usage:
-#   ./bootstrap/wal-g/setup.sh
+#   WALG_PREFIX=wal-g-18 ./bootstrap/wal-g/setup.sh
 #
 # Required env vars:
 #   S3_ACCESS_KEY_ID      - Bucket access key (R2 API token ID, or B2 keyID)
@@ -20,10 +22,12 @@
 #   WALG_LIBSODIUM_KEY    - 32-byte hex; LOSING THIS LOSES THE BACKUPS
 #
 # Optional knobs:
-#   WALG_SSH              - default: deployer@192.168.20.21
-#   PG_VERSION            - default: 17
+#   WALG_SSH              - default: deployer@192.168.20.23
+#   PG_VERSION            - default: 18
 #   WALG_VERSION          - default: 3.0.8
 #   WALG_RETAIN_FULL      - default: 7
+#   WALG_PREFIX           - path inside the bucket (default: wal-g).
+#                           Use a fresh prefix for a new cluster — see install.sh.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -45,11 +49,12 @@ wait_ssh() {
   echo "✓ SSH ready"
 }
 
-WALG_SSH="${WALG_SSH:-deployer@192.168.20.21}"
-export PG_VERSION="${PG_VERSION:-17}"
+WALG_SSH="${WALG_SSH:-deployer@192.168.20.23}"
+export PG_VERSION="${PG_VERSION:-18}"
 export WALG_VERSION="${WALG_VERSION:-3.0.8}"
 export WALG_RETAIN_FULL="${WALG_RETAIN_FULL:-7}"
 export S3_REGION="${S3_REGION:-auto}"
+export WALG_PREFIX="${WALG_PREFIX:-wal-g}"
 
 # Resolve the endpoint: explicit S3_ENDPOINT wins, else derive from R2_ACCOUNT_ID.
 if [[ -z "${S3_ENDPOINT:-}" ]]; then
@@ -71,7 +76,7 @@ echo "  wal-g Setup (PostgreSQL PITR)"
 echo "  Target:   ${WALG_SSH}"
 echo "  PG ver:   ${PG_VERSION}"
 echo "  wal-g:    v${WALG_VERSION}"
-echo "  Bucket:   s3://${S3_BUCKET}/wal-g"
+echo "  Bucket:   s3://${S3_BUCKET}/${WALG_PREFIX}"
 echo "  Endpoint: ${S3_ENDPOINT}"
 echo "  Region:   ${S3_REGION}"
 echo "=============================================="
