@@ -322,6 +322,184 @@ else
     --must-change-password=false
 fi
 
+# ---------------------------------------------------------------------------
+# GitHub → Forgejo sync
+#
+# Forgejo holds regular repos, so something has to carry GitHub commits across.
+# The primary CI trigger is a second push URL on the dev machine (a real push
+# event, no latency); this timer is the safety net for anything that lands on
+# GitHub another way, such as a PR merged in the GitHub UI.
+#
+# Its single most important property is that it NEVER force-pushes.
+# ---------------------------------------------------------------------------
+cat > /usr/local/sbin/forgejo-sync-repos <<'SYNC'
+#!/usr/bin/env bash
+# Mirrors GitHub → Forgejo for the configured repos.
+#
+# NEVER force-pushes. A rejected push means Forgejo holds commits GitHub does
+# not — almost always work pushed straight to Forgejo during an outage — so the
+# sync stops and says so rather than deleting it.
+#
+# Config: /etc/forgejo-sync/repos  (one "owner/name" per line, # comments ok)
+#         /etc/forgejo-sync/env    (GITHUB_SYNC_PAT, FORGEJO_SYNC_TOKEN)
+set -uo pipefail
+
+CONF_DIR=/etc/forgejo-sync
+STATE_DIR=/var/lib/forgejo-sync
+FORGEJO_HOST="${FORGEJO_HOST:-forgejo.internal.prakash.com.br}"
+SYNC_FAIL_THRESHOLD="${SYNC_FAIL_THRESHOLD:-3}"
+
+# shellcheck disable=SC1091
+. "${CONF_DIR}/env"
+: "${GITHUB_SYNC_PAT:?not set in ${CONF_DIR}/env}"
+: "${FORGEJO_SYNC_USER:?not set in ${CONF_DIR}/env}"
+: "${FORGEJO_SYNC_TOKEN:?not set in ${CONF_DIR}/env}"
+
+mkdir -p "$STATE_DIR"
+rc=0
+
+while read -r repo; do
+  [[ -z "$repo" || "$repo" =~ ^[[:space:]]*# ]] && continue
+  name="${repo##*/}"
+  work="${STATE_DIR}/${name}.git"
+
+  gh_url="https://x-access-token:${GITHUB_SYNC_PAT}@github.com/${repo}.git"
+  fj_url="https://${FORGEJO_SYNC_USER}:${FORGEJO_SYNC_TOKEN}@${FORGEJO_HOST}/${repo}.git"
+
+  if [[ ! -d "$work" ]]; then
+    git clone --bare "$gh_url" "$work" >/dev/null 2>&1 || { echo "sync ${repo}: initial clone failed" >&2; rc=1; continue; }
+  fi
+
+  git -C "$work" remote set-url origin "$gh_url" 2>/dev/null \
+    || git -C "$work" remote add origin "$gh_url"
+  git -C "$work" remote set-url forgejo "$fj_url" 2>/dev/null \
+    || git -C "$work" remote add forgejo "$fj_url"
+
+  if ! git -C "$work" fetch --prune origin '+refs/heads/*:refs/heads/*' >/dev/null 2>&1; then
+    echo "sync ${repo}: fetch from GitHub failed (outage?) — Forgejo left untouched" >&2
+    rc=1
+    continue
+  fi
+
+  # No --force, no --mirror. The rejection IS the feature.
+  if ! git -C "$work" push forgejo 'refs/heads/*:refs/heads/*' >/dev/null 2>&1; then
+    echo "sync ${repo}: PUSH REJECTED — Forgejo has diverged from GitHub." >&2
+    echo "  Nothing was changed. Reconcile deliberately, most likely with:" >&2
+    echo "    git -C ${work} push origin 'refs/heads/*:refs/heads/*'" >&2
+    rc=1
+    continue
+  fi
+
+  echo "sync ${repo}: ok"
+done < "${CONF_DIR}/repos"
+
+# Alert only after repeated failures. During a GitHub outage this runs every
+# few minutes; without the threshold the incident becomes a notification storm.
+if [[ $rc -ne 0 ]]; then
+  fails=$(( $(cat "${STATE_DIR}/consecutive_failures" 2>/dev/null || echo 0) + 1 ))
+  echo "$fails" > "${STATE_DIR}/consecutive_failures"
+  if [[ $fails -ge $SYNC_FAIL_THRESHOLD ]]; then
+    echo "forgejo-sync has failed ${fails} consecutive times" >&2
+  fi
+else
+  echo 0 > "${STATE_DIR}/consecutive_failures"
+fi
+
+exit $rc
+SYNC
+chmod 755 /usr/local/sbin/forgejo-sync-repos
+
+install -d -m 0700 /etc/forgejo-sync
+if [[ ! -f /etc/forgejo-sync/repos ]]; then
+  cat > /etc/forgejo-sync/repos <<'REPOS'
+# One "owner/name" per line. Start with the infra repo only; add the app repos
+# once the Forgejo CI has proven itself on it.
+camilohollanda/homeserver
+REPOS
+fi
+
+# Placeholder so the unit fails with a clear message rather than a shell error.
+if [[ ! -f /etc/forgejo-sync/env ]]; then
+  cat > /etc/forgejo-sync/env <<'ENVF'
+# Fill these in, then: systemctl start forgejo-sync.service
+GITHUB_SYNC_PAT=
+FORGEJO_SYNC_USER=
+FORGEJO_SYNC_TOKEN=
+ENVF
+  chmod 600 /etc/forgejo-sync/env
+fi
+
+cat > /etc/systemd/system/forgejo-sync.service <<'SVC'
+[Unit]
+Description=Sync GitHub repositories into Forgejo (fast-forward only)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/forgejo-sync-repos
+SVC
+
+cat > /etc/systemd/system/forgejo-sync.timer <<'TIMER'
+[Unit]
+Description=Periodic GitHub to Forgejo sync
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target
+TIMER
+
+systemctl daemon-reload
+systemctl enable -q --now forgejo-sync.timer
+
+# ---------------------------------------------------------------------------
+# Backup support
+#
+# restic must never upload the live SQLite file: a byte-for-byte copy of a
+# database being written to can capture a torn write, and you only discover
+# that at restore time. `.backup` takes a consistent snapshot while the server
+# keeps running, and restic backs up the snapshot instead.
+#
+# Registry blobs under data/packages are deliberately NOT part of the backup
+# set — they are rebuildable artifacts, and paying R2 storage plus egress for
+# them buys nothing.
+# ---------------------------------------------------------------------------
+cat > /usr/local/sbin/forgejo-db-backup <<'DUMP'
+#!/bin/bash
+set -euo pipefail
+mkdir -p /opt/forgejo/backup
+sqlite3 /opt/forgejo/data/forgejo.db ".backup '/opt/forgejo/backup/forgejo.db.tmp'"
+mv /opt/forgejo/backup/forgejo.db.tmp /opt/forgejo/backup/forgejo.db
+chmod 600 /opt/forgejo/backup/forgejo.db
+DUMP
+chmod 755 /usr/local/sbin/forgejo-db-backup
+
+cat > /etc/systemd/system/forgejo-db-backup.service <<'SVC'
+[Unit]
+Description=Consistent SQLite snapshot of the Forgejo database
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/forgejo-db-backup
+SVC
+
+cat > /etc/systemd/system/forgejo-db-backup.timer <<'TIMER'
+[Unit]
+Description=Snapshot the Forgejo SQLite DB ahead of the restic run
+
+[Timer]
+# Must fire before the restic timer so the snapshot it uploads is fresh.
+OnCalendar=*-*-* 02:30:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+TIMER
+
+systemctl daemon-reload
+systemctl enable -q --now forgejo-db-backup.timer
+
 echo ""
 echo "✓ Forgejo is running."
 echo "  Web UI:   https://${FORGEJO_DOMAIN}"
