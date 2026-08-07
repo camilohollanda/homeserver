@@ -605,6 +605,32 @@ scale_to 1
 resume_argocd
 PAUSED=n
 
+# Scaling to 1 asks for a pod; it says nothing about whether the app can serve.
+# Across the cutovers done so far this gap is the largest part of the window:
+# bugsink spent about 50s failing its readiness probe while Django booted,
+# against 1.9s of actual data movement. Returning "done" at scale-up time is
+# what makes a healthy cutover look like an outage.
+#
+# A timeout here is a warning, not a failure: the database work is finished and
+# committed by this point, so aborting would be both wrong and unhelpful.
+waited_from=$(date +%s)
+for d in $DEPLOYMENTS; do
+  ready=n
+  for _ in $(seq 1 60); do
+    r="$(kubectl -n "$NAMESPACE" get deployment "$d" -o jsonpath='{.status.readyReplicas}' 2>/dev/null)"
+    if [[ "$r" =~ ^[0-9]+$ ]] && (( r >= 1 )); then ready=y; break; fi
+    sleep 3
+  done
+  if [[ "$ready" == y ]]; then
+    ok "deployment/$d ready after $(( $(date +%s) - waited_from ))s"
+  else
+    warn "deployment/$d still not ready after 180s."
+    warn "  The migration completed and the secret is switched, so this is an"
+    warn "  application problem rather than a database one:"
+    warn "    kubectl logs -n $NAMESPACE deployment/$d --tail=50"
+  fi
+done
+
 # -----------------------------------------------------------------------------
 # Lock the abandoned copy
 # -----------------------------------------------------------------------------
