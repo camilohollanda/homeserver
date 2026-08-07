@@ -58,6 +58,24 @@ Every app folder under `bootstrap/<app>/` has **two scripts**:
 
 DNS automation in `setup.sh` is shared boilerplate: `get_zone_id` (longest-suffix match across CF zones) + `ensure_a_record`. Copy these helpers when adding a new service.
 
+> **Correction — 2026-08-06.** The paragraph above no longer holds. All DNS —
+> internal A-records included — is declared in `terraform/cloudflare-dns.tf`,
+> whose header states explicitly that it replaces the `ensure_a_record` /
+> `create_dns_route` helpers in `bootstrap/*/setup.sh`. When adding a new
+> service, **don't copy those helpers**: add an entry to `internal_a_records`
+> (or to `public_tunnel_records`, if it's public) and run terraform.
+
+<details>
+<summary>Historical DNS flow (before the move to terraform)</summary>
+
+Each `setup.sh` carried its own copy of `get_zone_id` (longest-suffix match
+across CF zones) and `ensure_a_record`, creating the record through the
+Cloudflare API at provisioning time, with `SKIP_DNS=1` to skip it. The same
+record ended up described in N scripts with no single source of truth — which is
+what the move to `cloudflare-dns.tf` fixed.
+
+</details>
+
 All env vars defaulting to "auto-generated random" use `openssl rand -base64 32 | tr -d '=+/' | cut -c1-32`.
 
 ## Domains & TLS
@@ -69,6 +87,12 @@ Three distinct paths — don't conflate them:
 - **Internal apps on the services VM** (`infisical`, `mailpit`, `garage`) → `<app>.internal.prakash.com.br` → **A record to 192.168.20.22**. LAN-only (or via Cloudflare Zero Trust internal DNS). Cert via **certbot** DNS-01, served by the shared nginx.
 
 `setup.sh` scripts on the services VM create the A record automatically unless `SKIP_DNS=1`. The CF token needs `Zone.DNS Edit` + `Zone.Read`.
+
+> **Correction — 2026-08-06.** The first sentence describes the old flow (see the
+> note under "Bootstrap script convention" above). Internal A-records now live in
+> `internal_a_records` in `terraform/cloudflare-dns.tf` and are applied by
+> terraform, not by the `setup.sh` scripts. The CF token requirement
+> (`Zone.DNS Edit` + `Zone.Read`) still holds — now for the terraform provider.
 
 ## Secrets
 
@@ -90,3 +114,14 @@ Three distinct paths — don't conflate them:
 - SMTP listener: `mailpit.internal.prakash.com.br:2525` **and** `:587` (both reach the same container; 587 exists for apps that hardcode the submission port). **STARTTLS + AUTH PLAIN/LOGIN required** (`MP_SMTP_REQUIRE_STARTTLS=true` + `MP_SMTP_AUTH`); SMTP credentials are the same as the web UI basic-auth user. Connect by hostname, not IP — the LE cert is bound to the FQDN.
 - Persistence: `/opt/mailpit/data/mailpit.db` (sqlite — fine, retention is bounded by `MP_MAX_MESSAGES`).
 - This is **for development email capture only.** Real outbound mail still goes through whatever production SMTP each app is configured with.
+
+## Correction history
+
+| Date | What this doc claimed | Reality | Status |
+|---|---|---|---|
+| 2026-08-06 | DNS created by the `ensure_a_record` / `get_zone_id` helpers in each `bootstrap/*/setup.sh`, with `SKIP_DNS=1` to skip | All DNS, internal included, declared in `terraform/cloudflare-dns.tf` (`internal_a_records` / `public_tunnel_records`) | Corrected with an inline note; original text preserved |
+
+The drift surfaced while designing VM 119 (Forgejo): this doc led to planning the
+DNS record via `setup.sh` when `cloudflare-dns.tf` was already the source of
+truth. There's no record of when the migration happened — the header of
+`cloudflare-dns.tf` describes it as already done.
