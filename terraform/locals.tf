@@ -90,4 +90,22 @@ locals {
     disk_size = 60 # Docker layer cache + Elixir build artifacts + per-instance runner copies
     tags      = "ci,github-actions,runners"
   }
+
+  # Forgejo — warm failover for GitHub Actions: git forge, Actions control
+  # plane and OCI registry. The self-hosted runners on 117 never protected
+  # against an Actions outage, because the scheduling lives on GitHub's side.
+  # Spec: docs/superpowers/specs/2026-08-06-forgejo-actions-design.md
+  forgejo_vm = {
+    name      = "forgejo"
+    vmid      = 119
+    ip_cidr   = "192.168.20.24/24"
+    cores     = 2
+    memory_mb = 4096
+    disk_size = 20 # OS disk only — lives on local-lvm (SSD)
+    # Repos, SQLite and registry blobs, on tank. Immutable per-commit image
+    # tags grow without bound, so [cron.cleanup_packages] retention is not
+    # optional — see bootstrap/forgejo/install.sh.
+    data_size = 200
+    tags      = "ci,forgejo,registry"
+  }
 }

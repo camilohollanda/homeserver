@@ -1,0 +1,14 @@
+#cloud-config
+# Minimal OS prep only.
+# Full Forgejo installation is handled by bootstrap/forgejo/setup.sh (runs locally).
+
+hostname: forgejo
+manage_etc_hosts: true
+
+package_update: true
+package_upgrade: false
+
+packages:
+  - curl
+  - ca-certificates
+  - gnupg
