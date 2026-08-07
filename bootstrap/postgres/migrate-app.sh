@@ -236,7 +236,16 @@ set_secret() {
 PGPASS_REMOTE=/var/lib/postgresql/.pgpass-migrate
 
 write_remote_pgpass() {  # write_remote_pgpass <host> <port> <db> <user> <pass>
-  printf '%s:%s:%s:%s:%s\n' "$1" "$2" "$3" "$4" "$5" \
+  # `:` and `\` are field separators in .pgpass and have to be backslash-escaped
+  # in the password, or libpq stops parsing the line and reports the far more
+  # confusing "no password supplied" rather than a wrong one. Today's generated
+  # passwords cannot contain either (pg-provision.sh draws from
+  # a-zA-Z0-9!@#%^&*()_+-=), so this is protection against a future charset
+  # change or a hand-set password, not a bug being fixed.
+  local pass="$5"
+  pass="${pass//\\/\\\\}"
+  pass="${pass//:/\\:}"
+  printf '%s:%s:%s:%s:%s\n' "$1" "$2" "$3" "$4" "$pass" \
     | ssh -o BatchMode=yes "$NEW_SSH" \
         "sudo -u postgres bash -c 'umask 077; cat > $PGPASS_REMOTE'" ||
     die "could not write the credentials file on VM 118"
