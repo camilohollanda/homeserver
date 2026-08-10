@@ -17,7 +17,14 @@
 #
 # Optional env vars:
 #   RUNNERS_PER_ORG          - Ephemeral runner slots per org (default: 4)
-#   RUNNER_VERSION           - actions/runner release version (default: 2.328.0)
+#   RUNNER_VERSION           - actions/runner release version (default: 2.336.0)
+#                              GitHub hard-blocks deprecated runner versions: the
+#                              runner still connects and reaches "Listening for
+#                              Jobs", then the broker rejects it with "Runner
+#                              version vX is deprecated and cannot receive
+#                              messages" and it exits. With Restart=always that
+#                              looks like a crash-loop, not an upgrade prompt.
+#                              Keep this near the latest actions/runner release.
 #   RUNNER_LABELS            - Comma-separated labels (default: "self-hosted,linux,homeserver")
 #   ACTIONS_RESULTS_URL      - Self-hosted cache server URL (must end with /).
 #                              When set, every runner binary is patched so it
@@ -48,7 +55,7 @@ fi
 : "${GH_ORGS:?must be set}"
 
 RUNNERS_PER_ORG="${RUNNERS_PER_ORG:-4}"
-RUNNER_VERSION="${RUNNER_VERSION:-2.334.0}"
+RUNNER_VERSION="${RUNNER_VERSION:-2.336.0}"
 RUNNER_LABELS="${RUNNER_LABELS:-self-hosted,linux,homeserver}"
 ACTIONS_RESULTS_URL="${ACTIONS_RESULTS_URL:-}"
 

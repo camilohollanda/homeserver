@@ -20,7 +20,8 @@
 # Optional env vars:
 #   GH_RUNNERS_SSH             - default: deployer@192.168.20.50
 #   RUNNERS_PER_ORG            - default: 4
-#   RUNNER_VERSION             - default: 2.328.0
+#   RUNNER_VERSION             - default: 2.336.0 (GitHub hard-blocks deprecated
+#                                runner versions — see install.sh)
 #   RUNNER_LABELS              - default: "self-hosted,linux,homeserver"
 #   ACTIONS_RESULTS_URL        - Self-hosted gha-cache URL (e.g.
 #                                https://gha-cache.internal.prakash.com.br/).
@@ -51,7 +52,7 @@ wait_ssh() {
 
 GH_RUNNERS_SSH="${GH_RUNNERS_SSH:-deployer@192.168.20.50}"
 export RUNNERS_PER_ORG="${RUNNERS_PER_ORG:-4}"
-export RUNNER_VERSION="${RUNNER_VERSION:-2.334.0}"
+export RUNNER_VERSION="${RUNNER_VERSION:-2.336.0}"
 export RUNNER_LABELS="${RUNNER_LABELS:-self-hosted,linux,homeserver}"
 export ACTIONS_RESULTS_URL="${ACTIONS_RESULTS_URL:-}"
 
