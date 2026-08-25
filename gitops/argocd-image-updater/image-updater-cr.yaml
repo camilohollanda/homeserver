@@ -23,25 +23,22 @@ spec:
     - namePattern: "werify-production"
       images:
         - alias: werify
-          # Track the immutable per-commit tag (werify CI pushes `main-<shortsha>`)
-          # instead of the mutable `:main`, so the deployed ref — and thus the
-          # deploy notification — carries the source commit. `newest-build` =
-          # newest by build time among tags matching allowTags (which uses the
-          # image-updater `regexp:` match-option syntax). Overrides the CR-wide
-          # `updateStrategy: digest` default.
-          imageName: ghcr.io/prem-prakash/werify
+          # CI moves :main only after a successful build. Digest tracking makes that
+          # environment tag the explicit promotion pointer, so moving it back to an
+          # existing main-<shortsha> artifact performs a rollback without rebuilding.
+          # Unlike newest-build, this never infers deploy order from the image's
+          # cache-sensitive internal creation timestamp.
+          imageName: ghcr.io/prem-prakash/werify:main
           commonUpdateSettings:
-            updateStrategy: newest-build
-            allowTags: "regexp:^main-[0-9a-f]{7,}$"
+            updateStrategy: digest
     - namePattern: "werify-staging"
       images:
         - alias: werify
-          # Mirror of werify-production: track the immutable `staging-<shortsha>`
-          # tag so staging deploy notifications also show the source commit.
-          imageName: ghcr.io/prem-prakash/werify
+          # Mirror of production: CI (or the manual app promotion workflow) moves
+          # :staging to the desired immutable artifact; the digest change rolls it.
+          imageName: ghcr.io/prem-prakash/werify:staging
           commonUpdateSettings:
-            updateStrategy: newest-build
-            allowTags: "regexp:^staging-[0-9a-f]{7,}$"
+            updateStrategy: digest
     - namePattern: "iddh-members-staging"
       images:
         - alias: iddh-members
