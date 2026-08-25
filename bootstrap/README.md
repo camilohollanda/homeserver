@@ -103,34 +103,49 @@ sudo /opt/bootstrap/setup.sh
 #### GitHub Actions Runners (gh-runners VM)
 
 Self-hosted, ephemeral, JIT-registered runners (one job per process, fresh
-state every time). Registered **per repo** via a GitHub App.
+state every time). Registered **per org** via a GitHub App — every repo in an
+org draws from that org's pool.
 
 Prerequisites:
-- A GitHub App with permissions `Administration: R/W`, `Actions: R/W`,
-  `Metadata: R`, installed on every account/org that owns a repo in
-  `GH_REPOS`. Per-repo installation IDs are auto-discovered at runtime,
-  so repos can span multiple owners (org + personal account, etc.).
+- A GitHub App with the org permission `Self-hosted runners: Read & write`
+  (plus the default `Metadata: R`), installed on every org in `GH_ORGS`.
+  Per-org installation IDs are auto-discovered at runtime.
 
 ```bash
 export GH_APP_CLIENT_ID=<client id>     # shown on the App's settings page
 export GH_APP_PRIVATE_KEY_FILE=/path/to/app-private-key.pem
-export GH_REPOS="iddh-com-br/members,prem-prakash/werify"
-# optional: RUNNERS_PER_REPO (default 2), RUNNER_VERSION, RUNNER_LABELS
+export GH_ORGS="iddh-com-br:2,prem-prakash:12"
+# optional: RUNNERS_PER_ORG (default 4), RUNNER_VERSION, RUNNER_LABELS,
+#           RUNNER_ERL_FLAGS, ACTIONS_RESULTS_URL
 
 ./bootstrap/gh-runners/setup.sh
 ```
 
-Workflows in those repos must opt in with:
+Each `GH_ORGS` entry is `org` or `org:count`; a bare org falls back to
+`RUNNERS_PER_ORG`. Size the counts from how many jobs a single push fans out
+to, not from repo count — one werify PR opens three at once (`PR Checks`
+splits into `check` + `sidecar`, and `Claude PR Review` is a third), so a
+four-slot pool queues on the second concurrent PR.
+
+`RUNNER_ERL_FLAGS` (default `+S 4:4`) caps the BEAM scheduler pool for every
+job. Without it the BEAM opens one scheduler per core, so a single `mix test`
+saturates the VM and starves every other slot.
+
+Workflows in those orgs' repos must opt in with:
 
 ```yaml
 runs-on: [self-hosted, linux, homeserver]
 ```
 
+On the free plan there is only one runner group (Default), so restrict which
+repos may schedule jobs under the org's Settings → Actions → Runner groups →
+Repository access.
+
 Operational:
 - Status: `systemctl status 'gh-runner@*'`
 - Logs:   `journalctl -u 'gh-runner@*' -f`
-- Adding/removing a repo: update `GH_REPOS` and re-run `setup.sh` (idempotent;
-  orphan instances are disabled and cleaned up).
+- Resizing a pool: update `GH_ORGS` and re-run `setup.sh` (idempotent; orphan
+  instances are disabled and cleaned up).
 
 #### Media Server (media-server VM)
 

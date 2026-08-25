@@ -9,8 +9,9 @@
 # Required env vars:
 #   GH_APP_CLIENT_ID           - GitHub App Client ID (preferred) or numeric App ID
 #   GH_APP_PRIVATE_KEY_FILE    - Path to the App's PEM private key on your laptop
-#   GH_ORGS                    - Comma-separated org list
-#                                e.g. "iddh-com-br,prem-prakash"
+#   GH_ORGS                    - Comma-separated org list, each entry `org` or
+#                                `org:count`, e.g. "iddh-com-br:2,prem-prakash:12".
+#                                A bare org falls back to RUNNERS_PER_ORG.
 #
 # The App must be installed on every org in GH_ORGS with the org-level
 # "Self-hosted runners: Read & write" permission. Per-org installation IDs
@@ -19,10 +20,14 @@
 #
 # Optional env vars:
 #   GH_RUNNERS_SSH             - default: deployer@192.168.20.50
-#   RUNNERS_PER_ORG            - default: 4
+#   RUNNERS_PER_ORG            - default: 4. Only applies to orgs listed without
+#                                a `:count` — prefer per-org counts in GH_ORGS.
 #   RUNNER_VERSION             - default: 2.336.0 (GitHub hard-blocks deprecated
 #                                runner versions — see install.sh)
 #   RUNNER_LABELS              - default: "self-hosted,linux,homeserver"
+#   RUNNER_ERL_FLAGS           - default: "+S 4:4". Caps the BEAM scheduler pool
+#                                for every job so one `mix test` can't take the
+#                                whole box. Set empty to leave the BEAM alone.
 #   ACTIONS_RESULTS_URL        - Self-hosted gha-cache URL (e.g.
 #                                https://gha-cache.internal.prakash.com.br/).
 #                                When set, install.sh patches each Runner.Worker.dll
@@ -54,6 +59,9 @@ GH_RUNNERS_SSH="${GH_RUNNERS_SSH:-deployer@192.168.20.50}"
 export RUNNERS_PER_ORG="${RUNNERS_PER_ORG:-4}"
 export RUNNER_VERSION="${RUNNER_VERSION:-2.336.0}"
 export RUNNER_LABELS="${RUNNER_LABELS:-self-hosted,linux,homeserver}"
+# Unset-only default (`-`, not `:-`) so an explicit empty value survives as the
+# "leave the BEAM alone" opt-out — see install.sh.
+export RUNNER_ERL_FLAGS="${RUNNER_ERL_FLAGS-+S 4:4}"
 export ACTIONS_RESULTS_URL="${ACTIONS_RESULTS_URL:-}"
 
 check_env GH_APP_CLIENT_ID GH_APP_PRIVATE_KEY_FILE GH_ORGS
@@ -70,9 +78,10 @@ echo "=============================================="
 echo "  GitHub Actions Runners Setup"
 echo "  Target:           ${GH_RUNNERS_SSH}"
 echo "  Orgs:             ${GH_ORGS}"
-echo "  Runners per org:  ${RUNNERS_PER_ORG}"
+echo "  Default per org:  ${RUNNERS_PER_ORG}  (entries with :count override it)"
 echo "  Runner version:   ${RUNNER_VERSION}"
 echo "  Labels:           ${RUNNER_LABELS}"
+echo "  ERL_FLAGS:        ${RUNNER_ERL_FLAGS:-(unset — BEAM unconstrained)}"
 if [[ -n "$ACTIONS_RESULTS_URL" ]]; then
   echo "  Cache server:     ${ACTIONS_RESULTS_URL}"
 else

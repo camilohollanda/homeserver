@@ -82,10 +82,14 @@ locals {
   }
 
   gh_runners_vm = {
-    name      = "gh-runners"
-    vmid      = 117
-    ip_cidr   = "192.168.20.50/24"
-    cores     = 8
+    name    = "gh-runners"
+    vmid    = 117
+    ip_cidr = "192.168.20.50/24"
+    # 16 of the host's 36 cores. CI is bursty and the other VMs sit near idle
+    # (host load ~4 of 36), so oversubscribing the box across all VMs is fine —
+    # what isn't fine is 8 cores against a dozen runner slots, where a single
+    # `mix test` saturates the VM and every other job crawls.
+    cores     = 16
     memory_mb = 16384
     disk_size = 60 # Docker layer cache + Elixir build artifacts + per-instance runner copies
     tags      = "ci,github-actions,runners"
