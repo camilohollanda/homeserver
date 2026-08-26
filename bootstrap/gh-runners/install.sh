@@ -600,6 +600,11 @@ now="$(date +%s)"
 for cid in $(docker ps -aq); do
   name="$(docker inspect -f '{{.Name}}' "$cid" 2>/dev/null | sed 's#^/##')"
   case "$name" in buildx_buildkit_*) continue ;; esac
+  # Long-lived sidecars on this shared Docker host opt out explicitly. The
+  # Forgejo act_runner uses this label; without it the age-based CI cleanup
+  # would delete its healthy daemon after 12 hours.
+  keep="$(docker inspect -f '{{index .Config.Labels "homeserver.keep"}}' "$cid" 2>/dev/null)"
+  [ "$keep" = "true" ] && continue
   created="$(docker inspect -f '{{.Created}}' "$cid" 2>/dev/null)"
   created_epoch="$(date -d "$created" +%s 2>/dev/null || echo 0)"
   [ "$created_epoch" -gt 0 ] || continue

@@ -1,0 +1,32 @@
+name: Validate homeserver mirror
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: docker
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Validate Forgejo bootstrap shell syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n \
+            bootstrap/forgejo/install.sh \
+            bootstrap/forgejo/setup.sh \
+            bootstrap/forgejo/switch-argo-source.sh \
+            bootstrap/forgejo-runner/install.sh \
+            bootstrap/forgejo-runner/setup.sh \
+            bootstrap/restic/configure.sh
+
+      - name: Reject whitespace errors
+        shell: bash
+        run: git diff --check HEAD^ HEAD

@@ -20,6 +20,7 @@ locals {
   postgres_18_vm_ip = "192.168.20.23" # vmid 118 (PG 18)
   ai_vm_ip          = "192.168.20.30" # vmid 115
   media_vm_ip       = "192.168.20.40" # vmid 116
+  forgejo_vm_ip     = "192.168.20.24" # vmid 119
 
   # Public CNAMEs that route through the tunnel.
   # Order doesn't matter here (it's a map), but the corresponding tunnel
@@ -53,6 +54,11 @@ locals {
     pg   = { name = "pg.internal.prakash.com.br", ip = local.postgres_vm_ip }
     pg18 = { name = "pg18.internal.prakash.com.br", ip = local.postgres_18_vm_ip }
     ai   = { name = "ai.internal.prakash.com.br", ip = local.ai_vm_ip }
+
+    # Forgejo (vmid 119) — LAN only, deliberately. The repo sync polls GitHub
+    # outbound, so nothing ever needs to reach this host from the internet and
+    # no tunnel route exists for it.
+    forgejo = { name = "forgejo.internal.prakash.com.br", ip = local.forgejo_vm_ip }
 
     # media stack (vmid 116, all share one VM behind a local nginx)
     jellyfin = { name = "jellyfin.internal.prakash.com.br", ip = local.media_vm_ip }

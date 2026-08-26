@@ -5,3 +5,4 @@ resources:
   - argocd-server-service.yaml
   - ingress.yaml
   - notifications-cm.yaml
+  - forgejo-repo-secret.yaml

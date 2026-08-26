@@ -7,3 +7,4 @@ resources:
   - deployment.yaml
   - ingress.yaml
   - ghcr-external-secret.yaml
+  - forgejo-registry-secret.yaml

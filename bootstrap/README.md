@@ -31,6 +31,14 @@ bootstrap/
 ├── gh-runners/             # gh-runners VM (192.168.20.50)
 │   ├── setup.sh
 │   └── install.sh
+├── forgejo/                # Forgejo VM (192.168.20.24)
+│   ├── setup.sh
+│   ├── install.sh
+│   ├── switch-argo-source.sh
+│   └── README.md
+├── forgejo-runner/         # act_runner on VM 117
+│   ├── setup.sh
+│   └── install.sh
 ├── dns/                    # DNS helpers (Cloudflare Zero Trust Internal DNS)
 │   └── zero-trust-internal-dns.sh
 └── README.md               # This file
@@ -146,6 +154,27 @@ Operational:
 - Logs:   `journalctl -u 'gh-runner@*' -f`
 - Resizing a pool: update `GH_ORGS` and re-run `setup.sh` (idempotent; orphan
   instances are disabled and cleaned up).
+
+#### Forgejo Actions failover
+
+Forgejo runs on VM 119 and provides a warm fallback git forge, Actions control
+plane and OCI registry. Its `act_runner` runs beside, but independently from,
+the GitHub runners on VM 117.
+
+```bash
+# After applying Terraform for VM 119:
+./bootstrap/forgejo/setup.sh
+
+# After creating the runner registration token in Forgejo:
+FORGEJO_RUNNER_TOKEN=... ./bootstrap/forgejo-runner/setup.sh
+
+# After Forgejo has produced its initial SQLite snapshot:
+./bootstrap/restic/configure.sh forgejo
+```
+
+The rollout is deliberately per application and reversible. See
+`bootstrap/forgejo/README.md` for repository sync, application workflows,
+secrets, preflight checks, cutover and recovery.
 
 #### Media Server (media-server VM)
 

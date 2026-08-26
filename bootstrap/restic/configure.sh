@@ -7,8 +7,9 @@
 # Usage:
 #   ./bootstrap/restic/configure.sh services    # VM 114 (Garage meta, Infisical, ...)
 #   ./bootstrap/restic/configure.sh k3s         # VM 112 (werify uploads, k3s state, ...)
+#   ./bootstrap/restic/configure.sh forgejo     # VM 119 (repos, SQLite snapshot, config)
 #   ./bootstrap/restic/configure.sh proxmox     # Host 192.168.20.10 (/etc/pve, templates, NIC fix)
-#   ./bootstrap/restic/configure.sh all         # all three, in sequence
+#   ./bootstrap/restic/configure.sh all         # all four, in sequence
 #
 # Same S3/R2 credentials as setup.sh (re-exported from env):
 #   S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, S3_BUCKET
@@ -74,6 +75,18 @@ k3s-server:/var/lib/rancher/k3s/server/tls,/var/lib/rancher/k3s/server/cred,/var
   PROFILE_NOTES="k3s VM (112) — werify uploads (11G prod + 2.2G stg), grafana, loki, k3s cluster state"
 }
 
+profile_forgejo() {
+  RESTIC_SSH="deployer@192.168.20.24"
+  # Registry blobs are deliberately omitted: application workflows can rebuild
+  # them. Repositories, Forgejo's consistent SQLite snapshot, app.ini, sync
+  # credentials and the TLS account/certificates are the irreplaceable state.
+  # bootstrap/forgejo/install.sh refreshes the SQLite snapshot at 01:30, before
+  # this profile's first restic timer starts at 02:00.
+  JOBS="\
+forgejo-core:/opt/forgejo/backup,/opt/forgejo/data/forgejo-repositories,/opt/forgejo/data/gitea/conf,/etc/forgejo-sync,/etc/letsencrypt"
+  PROFILE_NOTES="Forgejo VM (119) — repositories, consistent SQLite snapshot, configuration and sync credentials"
+}
+
 profile_proxmox() {
   RESTIC_SSH="root@192.168.20.10"
   # Why each path:
@@ -115,7 +128,7 @@ vz-template:/var/lib/vz/template/iso"
 
 usage() {
   cat >&2 <<EOF
-Usage: $0 {services|k3s|proxmox|all}
+Usage: $0 {services|k3s|forgejo|proxmox|all}
 
 Requires the following env vars set (same as bootstrap/restic/setup.sh):
   S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, S3_BUCKET
@@ -155,6 +168,7 @@ run_profile() {
   case "$p" in
     services) profile_services ;;
     k3s)      profile_k3s ;;
+    forgejo)  profile_forgejo ;;
     proxmox)  profile_proxmox ;;
     *)        echo "Unknown profile: $p" >&2; usage ;;
   esac
@@ -204,11 +218,13 @@ run_profile() {
 }
 
 case "$profile" in
-  services|k3s|proxmox) run_profile "$profile" ;;
+  services|k3s|forgejo|proxmox) run_profile "$profile" ;;
   all)
     run_profile services
     echo ""
     run_profile k3s
+    echo ""
+    run_profile forgejo
     echo ""
     run_profile proxmox
     ;;
