@@ -48,6 +48,16 @@ output "gh_runners_vm_ip" {
   value       = split("/", local.gh_runners_vm.ip_cidr)[0]
 }
 
+output "forgejo_vm_ip" {
+  description = "IP address for the Forgejo failover VM"
+  value       = split("/", local.forgejo_vm.ip_cidr)[0]
+}
+
+output "forgejo_url" {
+  description = "Internal URL for Forgejo"
+  value       = "https://forgejo.internal.prakash.com.br"
+}
+
 output "media_proxy_urls" {
   description = "Local domain URLs via reverse proxy (no ports)"
   value = {

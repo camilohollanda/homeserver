@@ -2,8 +2,8 @@
 # Registers the Forgejo act_runner on the gh-runners VM (vmid 117, IP .50).
 # Runs from your local machine — SSHes into the VM for all remote operations.
 #
-# The GitHub Actions runners on that VM are left running. install.sh counts them
-# before and after and fails if the number drops.
+# The GitHub Actions runners on that VM are left running. install.sh counts the
+# active gh-runner@* units before and after and fails if the number drops.
 #
 # Usage:
 #   FORGEJO_RUNNER_TOKEN=... ./bootstrap/forgejo-runner/setup.sh
@@ -17,6 +17,7 @@
 #   RUNNER_SSH           - default: deployer@192.168.20.50
 #   RUNNER_NAME          - default: homeserver-117
 #   RUNNER_CAPACITY      - default: 2
+#   RUNNER_IMAGE_VERSION - default: 13.0.0
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -44,12 +45,14 @@ RUNNER_SSH="${RUNNER_SSH:-deployer@192.168.20.50}"
 export FORGEJO_URL="${FORGEJO_URL:-https://forgejo.internal.prakash.com.br}"
 export RUNNER_NAME="${RUNNER_NAME:-homeserver-117}"
 export RUNNER_CAPACITY="${RUNNER_CAPACITY:-2}"
+export RUNNER_IMAGE_VERSION="${RUNNER_IMAGE_VERSION:-13.0.0}"
 
 echo "=============================================="
 echo "  Forgejo runner registration"
 echo "  Target:   ${RUNNER_SSH}  (vmid 117)"
 echo "  Instance: ${FORGEJO_URL}"
 echo "  Name:     ${RUNNER_NAME}"
+echo "  Version:  ${RUNNER_IMAGE_VERSION}"
 echo "=============================================="
 echo ""
 
@@ -73,5 +76,8 @@ echo "  Confirm the runner is Idle:"
 echo "    ${FORGEJO_URL%/}/-/admin/actions/runners"
 echo ""
 echo "  Confirm the GitHub runners are still up:"
-echo "    ssh ${RUNNER_SSH} 'systemctl list-units \"runner@*\" --state=active'"
+echo "    ssh ${RUNNER_SSH} 'systemctl list-units \"gh-runner@*.service\" --state=active'"
+echo ""
+echo "  Forgejo workflows must select the registered execution label:"
+echo "    runs-on: docker"
 echo ""

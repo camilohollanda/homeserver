@@ -50,6 +50,20 @@ for bin in yq kubectl git curl; do
   command -v "$bin" >/dev/null || { echo "Error: $bin is required but not installed" >&2; exit 1; }
 done
 
+CUTOVER_BRANCH="${CUTOVER_BRANCH:-main}"
+if [[ $DRY_RUN -eq 0 ]]; then
+  current_branch="$(git branch --show-current)"
+  [[ "$current_branch" == "$CUTOVER_BRANCH" ]] || {
+    echo "Error: cutovers must run from ${CUTOVER_BRANCH}; current branch is ${current_branch:-detached}." >&2
+    echo "       Use --dry-run to preview from another branch." >&2
+    exit 1
+  }
+  git diff --cached --quiet || {
+    echo "Error: the index already contains staged changes; refusing to include them in a cutover commit." >&2
+    exit 1
+  }
+fi
+
 # ---------------------------------------------------------------------------
 # Preflight
 #
@@ -75,6 +89,12 @@ preflight() {
     return 1
   fi
   echo "    ok: Argo repository credential present"
+
+  if ! kubectl -n argocd get secret forgejo-image-updater >/dev/null 2>&1; then
+    echo "    FAIL: secret argocd/forgejo-image-updater is missing — image discovery would fail"
+    return 1
+  fi
+  echo "    ok: Image Updater registry credential present"
 
   ns="$(kubectl -n argocd get application "$app" -o jsonpath='{.spec.destination.namespace}' 2>/dev/null || true)"
   [[ -n "$ns" ]] || { echo "    FAIL: Application ${app} not found in the cluster"; return 1; }
@@ -131,6 +151,11 @@ switch_one() {
   local from_repo to_repo from_reg to_reg
   [[ -f "$file" ]] || { echo "No such Application manifest: $file" >&2; return 1; }
 
+  if ! git diff --quiet -- "$file" "$CR" || ! git diff --cached --quiet -- "$file" "$CR"; then
+    echo "Refusing to overwrite existing changes in ${file} or ${CR}." >&2
+    return 1
+  fi
+
   preflight "$app" || return 1
 
   if [[ "$TO" == "forgejo" ]]; then
@@ -171,7 +196,7 @@ switch_one() {
 
   git add "$file" "$CR"
   git commit -q -m "gitops: point ${app} at ${TO}"
-  git push -q
+  git push -q origin "$CUTOVER_BRANCH"
 
   echo ""
   echo "    pushed. Watch it land:"

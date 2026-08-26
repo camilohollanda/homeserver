@@ -19,7 +19,7 @@
 # Optional knobs:
 #   FORGEJO_DOMAIN       - default: forgejo.internal.prakash.com.br
 #   FORGEJO_SSH          - default: deployer@192.168.20.24
-#   FORGEJO_VERSION      - default: 15.0.1
+#   FORGEJO_VERSION      - default: 16.0.3
 #   FORGEJO_SSH_PORT     - default: 2222
 set -euo pipefail
 
@@ -46,7 +46,7 @@ check_env CF_API_TOKEN LETSENCRYPT_EMAIL
 
 FORGEJO_SSH="${FORGEJO_SSH:-deployer@192.168.20.24}"
 export FORGEJO_DOMAIN="${FORGEJO_DOMAIN:-forgejo.internal.prakash.com.br}"
-export FORGEJO_VERSION="${FORGEJO_VERSION:-15.0.1}"
+export FORGEJO_VERSION="${FORGEJO_VERSION:-16.0.3}"
 export FORGEJO_SSH_PORT="${FORGEJO_SSH_PORT:-2222}"
 export FORGEJO_ADMIN_USER="${FORGEJO_ADMIN_USER:-camilo}"
 export FORGEJO_ADMIN_EMAIL="${FORGEJO_ADMIN_EMAIL:-${LETSENCRYPT_EMAIL}}"
@@ -96,7 +96,13 @@ echo ""
 echo "  The sync timer reads its own credentials from /etc/forgejo-sync/env on"
 echo "  the VM (created empty by install.sh). Fill it in, then start the unit:"
 echo "    GITHUB_SYNC_PAT=<GitHub PAT, repo:read>"
-echo "    FORGEJO_SYNC_USER=<Forgejo user with write access>"
-echo "    FORGEJO_SYNC_TOKEN=<its access token>"
-echo "    ssh ${FORGEJO_SSH} 'sudo systemctl start forgejo-sync.service'"
+echo "    FORGEJO_SYNC_USER=<Forgejo automation/admin user>"
+echo "    FORGEJO_SYNC_TOKEN=<token allowed to create orgs/repos and push>"
+echo "    ssh ${FORGEJO_SSH} 'sudo systemctl start forgejo-sync.service && sudo systemctl start forgejo-sync.timer'"
+echo ""
+echo "  Then register the runner and configure encrypted backups:"
+echo "    FORGEJO_RUNNER_TOKEN=... ./bootstrap/forgejo-runner/setup.sh"
+echo "    ./bootstrap/restic/configure.sh forgejo"
+echo ""
+echo "  Full rollout and cutover runbook: bootstrap/forgejo/README.md"
 echo ""

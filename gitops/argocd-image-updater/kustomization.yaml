@@ -3,11 +3,12 @@ kind: Kustomization
 
 # NOTE: ArgoCD Image Updater operator is installed during bootstrap via helm.
 # This directory only contains app-level configuration:
-# - GHCR credentials (via ExternalSecret)
+# - GHCR and Forgejo credentials (via ExternalSecret)
 # - ImageUpdater CR defining which apps to watch
 
 namespace: argocd
 
 resources:
   - ghcr-secret.yaml
+  - forgejo-secret.yaml
   - image-updater-cr.yaml

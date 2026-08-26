@@ -21,7 +21,8 @@ spec:
         app: werify
     spec:
       imagePullSecrets:
-      - name: ghcr-credentials
+        - name: ghcr-credentials
+        - name: forgejo-credentials
       containers:
       - name: werify
         image: ghcr.io/prem-prakash/werify:main

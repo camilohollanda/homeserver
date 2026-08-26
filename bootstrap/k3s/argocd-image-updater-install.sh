@@ -22,7 +22,9 @@ if ! command -v helm &> /dev/null; then
   curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 fi
 
-# Create values file for GHCR registry configuration
+# Create values file for both registries. Keeping both active makes a per-app
+# cutover reversible: applications that remain on GHCR continue to update while
+# migrated applications are resolved against Forgejo.
 cat > /tmp/image-updater-values.yaml << 'EOF'
 config:
   registries:
@@ -30,6 +32,10 @@ config:
       api_url: https://ghcr.io
       prefix: ghcr.io
       credentials: "secret:argocd/ghcr-image-updater#creds"
+    - name: forgejo
+      api_url: https://forgejo.internal.prakash.com.br
+      prefix: forgejo.internal.prakash.com.br
+      credentials: "secret:argocd/forgejo-image-updater#creds"
 extraArgs:
   - --interval=30s
 EOF
@@ -47,5 +53,5 @@ rm /tmp/image-updater-values.yaml
 echo "==> ArgoCD Image Updater installed!"
 echo ""
 echo "Next steps:"
-echo "  1. Create GHCR credentials secret (via ExternalSecret or manually)"
+echo "  1. Create GHCR and Forgejo credentials (via ExternalSecret or manually)"
 echo "  2. Apply ImageUpdater CR from gitops/argocd-image-updater/"

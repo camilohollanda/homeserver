@@ -98,7 +98,7 @@ locals {
   # Forgejo — warm failover for GitHub Actions: git forge, Actions control
   # plane and OCI registry. The self-hosted runners on 117 never protected
   # against an Actions outage, because the scheduling lives on GitHub's side.
-  # Spec: docs/superpowers/specs/2026-08-06-forgejo-actions-design.md
+  # Design and runbook: bootstrap/forgejo/README.md
   forgejo_vm = {
     name      = "forgejo"
     vmid      = 119

@@ -19,6 +19,7 @@ A new piece of infra usually lives in exactly one of these, not multiple.
 | 116  | media-server    | 192.168.20.40  | Jellyfin / *arr stack (local nginx proxy, no TLS).              |
 | 117  | gh-runners      | 192.168.20.50  | Self-hosted GitHub Actions runners.                             |
 | 118  | db-postgres-18  | 192.168.20.23  | PostgreSQL 18 — upgrade target. Apps move over one DATABASE_URL at a time. |
+| 119  | forgejo         | 192.168.20.24  | Forgejo git forge, Actions failover control plane and OCI registry.       |
 
 \* Terraform still calls VM 114 `infisical` for legacy reasons; in practice it's a multi-tenant **services VM** hosting Infisical, Garage, Mailpit, … behind a shared nginx.
 
