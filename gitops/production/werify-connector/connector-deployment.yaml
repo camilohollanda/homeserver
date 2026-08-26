@@ -57,12 +57,19 @@ spec:
             - name: WHATSAPP_SIDECAR_HEARTBEAT_FILE
               value: /run/whatsapp-connector/heartbeat
           envFrom:
-            # Everything else — SIDECAR_DATABASE_URL / DATABASE_URL, WHATSAPP_SIDECAR_ALLOWLIST (=all
-            # in production), WHATSAPP_DEVICE_*, media-retry + log vars — comes from the same
-            # Infisical-backed secret the app uses, so the connector manages exactly what the in-pod
-            # one did. SIDECAR_MODE above overrides any value the secret carries (env wins over envFrom).
+            # The connector's OWN secret (external-secret.yaml → Infisical /WerifyConnector/), not
+            # the app's `secrets`. Carries SIDECAR_DATABASE_URL, WHATSAPP_SIDECAR_ALLOWLIST (=all in
+            # production), WHATSAPP_MEDIA_RETRY_RECEIPT_INTERVAL_MS, ENVIRONMENT and
+            # SIDECAR_SENTRY_DSN — and nothing else, so this pod no longer holds the app's Asaas /
+            # OpenAI / signing-certificate credentials. SIDECAR_MODE above still overrides any value
+            # the secret carries (env wins over envFrom).
+            #
+            # WHATSAPP_SIDECAR_ALLOWLIST is the one to watch: it is deny-by-default, so if it goes
+            # missing the connector does not crash — it goes inert (no reconnect, no capture) while
+            # the heartbeat keeps the liveness probe green. Verify the key is present in the new
+            # secret before rolling, not after.
             - secretRef:
-                name: secrets
+                name: connector-secrets
           livenessProbe:
             exec:
               command:

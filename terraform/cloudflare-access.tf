@@ -14,6 +14,9 @@
 #                                `asaas-access-token` header, PagBank with
 #                                `x-payload-signature`; the APP validates
 #                                those, so the open path is safe.)
+#   <host>/<public_path>   -> Bypass  (no auth — the MCP connector surface
+#                                Claude.ai / ChatGPT call server-to-server;
+#                                see `public_paths` in the locals.)
 #   <host>                 -> Allow   (catch-all gate: by default requires an
 #                                enrolled Cloudflare WARP device — IP-
 #                                independent, so a dynamic home IP is fine.
@@ -33,10 +36,46 @@ locals {
   # payment webhooks are served — everything under it bypasses the gate
   # without Access auth (the app verifies the provider signature/token).
   # The two apps disagree: werify mounts webhooks under /api, iddh doesn't.
+  #
+  # public_paths are further prefixes that bypass the gate for the same
+  # reason: something that is NOT a person's browser must reach them. For
+  # werify that is the MCP connector surface — Claude.ai / ChatGPT call these
+  # server-to-server from their own backends (no WARP, no fixed egress IP),
+  # so gating them makes a staging MCP connection impossible. Each is already
+  # public on production and guards itself: `/mcp` demands a bearer token,
+  # `/oauth/token` a code + PKCE verifier, `/media` the same bearer or a
+  # session; `/register` (RFC 7591 dynamic client registration) and the two
+  # `/.well-known` documents are public metadata by design. The browser half
+  # of OAuth (`/oauth/authorize`, the consent screen) stays behind the gate —
+  # that one IS a person, on WARP.
   staging_gated_hosts = {
-    werify_staging = { domain = "staging.werify.app", webhook_path = "api/webhooks" }
-    iddh_staging   = { domain = "iddh-members-staging.prakash.com.br", webhook_path = "webhooks" }
+    werify_staging = {
+      domain       = "staging.werify.app"
+      webhook_path = "api/webhooks"
+      public_paths = [
+        "mcp",
+        ".well-known/oauth-protected-resource",
+        ".well-known/oauth-authorization-server",
+        "register",
+        "oauth/token",
+        "media",
+      ]
+    }
+    iddh_staging = {
+      domain       = "iddh-members-staging.prakash.com.br"
+      webhook_path = "webhooks"
+      public_paths = []
+    }
   }
+
+  # One (host, path) pair per public path, flattened for a for_each. Keys are
+  # stable (host key + path) so adding a path never recreates the others.
+  staging_public_paths = merge([
+    for host_key, host in local.staging_gated_hosts : {
+      for path in host.public_paths :
+      "${host_key}/${path}" => { domain = host.domain, path = path }
+    }
+  ]...)
 
   # Optional alternative ways in, OR-ed alongside WARP as SEPARATE policies.
   #
@@ -80,10 +119,12 @@ resource "cloudflare_zero_trust_device_posture_rule" "warp" {
 
 # --- Reusable policies ------------------------------------------------
 
-# Let payment webhooks through with no authentication.
+# Let the self-authenticating paths through with no Access authentication —
+# payment webhooks and the MCP connector surface alike (both applications
+# below attach this one policy).
 resource "cloudflare_zero_trust_access_policy" "staging_webhook_bypass" {
   account_id = var.cloudflare_account_id
-  name       = "staging — payment webhook bypass"
+  name       = "staging — self-authenticating paths bypass (webhooks, MCP)"
   decision   = "bypass"
 
   include = [{
@@ -146,6 +187,24 @@ resource "cloudflare_zero_trust_access_application" "staging_webhooks" {
   account_id           = var.cloudflare_account_id
   name                 = "${each.value.domain} — webhooks (bypass)"
   domain               = "${each.value.domain}/${each.value.webhook_path}"
+  type                 = "self_hosted"
+  session_duration     = "24h"
+  app_launcher_visible = false
+
+  policies = [{
+    id         = cloudflare_zero_trust_access_policy.staging_webhook_bypass.id
+    precedence = 1
+  }]
+}
+
+# Bypass app: <host>/<public path>  (the MCP connector surface; the same
+# "everyone" bypass policy as the webhooks — the app authenticates the path)
+resource "cloudflare_zero_trust_access_application" "staging_public_paths" {
+  for_each = local.staging_public_paths
+
+  account_id           = var.cloudflare_account_id
+  name                 = "${each.value.domain} — /${each.value.path} (bypass)"
+  domain               = "${each.value.domain}/${each.value.path}"
   type                 = "self_hosted"
   session_duration     = "24h"
   app_launcher_visible = false

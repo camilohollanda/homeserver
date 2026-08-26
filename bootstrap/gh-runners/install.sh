@@ -9,16 +9,37 @@
 # Required env vars:
 #   GH_APP_CLIENT_ID         - GitHub App Client ID (preferred) or numeric App ID — used as the JWT `iss` claim
 #   GH_APP_PRIVATE_KEY       - PEM contents of the App's private key (with newlines)
-#   GH_ORGS                  - Comma-separated org list (e.g. "iddh-com-br,prem-prakash")
+#   GH_ORGS                  - Comma-separated org list, each entry `org` or
+#                              `org:count` (e.g. "iddh-com-br:2,prem-prakash:12").
+#                              A bare org falls back to RUNNERS_PER_ORG.
 #
 # The App's per-org installation is auto-discovered at runtime via
 # GET /orgs/{org}/installation. The App must be installed on every org in
 # GH_ORGS with the "Self-hosted runners: Read & write" org permission.
 #
 # Optional env vars:
-#   RUNNERS_PER_ORG          - Ephemeral runner slots per org (default: 4)
-#   RUNNER_VERSION           - actions/runner release version (default: 2.328.0)
+#   RUNNERS_PER_ORG          - Default slots for orgs listed without `:count`
+#                              (default: 4). Orgs are not equally busy — one
+#                              repo's PR opens 3 jobs at once (checks, sidecar,
+#                              review), so a flat count either starves the busy
+#                              org or parks idle runners on the quiet one.
+#                              Prefer per-org counts in GH_ORGS.
+#   RUNNER_VERSION           - actions/runner release version (default: 2.336.0)
+#                              GitHub hard-blocks deprecated runner versions: the
+#                              runner still connects and reaches "Listening for
+#                              Jobs", then the broker rejects it with "Runner
+#                              version vX is deprecated and cannot receive
+#                              messages" and it exits. With Restart=always that
+#                              looks like a crash-loop, not an upgrade prompt.
+#                              Keep this near the latest actions/runner release.
 #   RUNNER_LABELS            - Comma-separated labels (default: "self-hosted,linux,homeserver")
+#   RUNNER_ERL_FLAGS         - ERL_FLAGS handed to every job (default: "+S 4:4").
+#                              The BEAM sizes its scheduler pool from the host's
+#                              core count, so an unconstrained `mix test` opens
+#                              one scheduler per core and a single job saturates
+#                              the box. Capping schedulers costs a little
+#                              wall-clock per job and buys back concurrency
+#                              across jobs. Set empty to leave the BEAM alone.
 #   ACTIONS_RESULTS_URL      - Self-hosted cache server URL (must end with /).
 #                              When set, every runner binary is patched so it
 #                              doesn't overwrite this value at job start, and
@@ -31,6 +52,7 @@ if [[ -n "${REMOTE_HOST:-}" ]]; then
       RUNNERS_PER_ORG          "${RUNNERS_PER_ORG:-}" \
       RUNNER_VERSION           "${RUNNER_VERSION:-}" \
       RUNNER_LABELS            "${RUNNER_LABELS:-}" \
+      RUNNER_ERL_FLAGS         "${RUNNER_ERL_FLAGS-+S 4:4}" \
       ACTIONS_RESULTS_URL      "${ACTIONS_RESULTS_URL:-}"
     cat "$0"
   } | ssh "$REMOTE_HOST" "sudo bash -s"
@@ -48,8 +70,12 @@ fi
 : "${GH_ORGS:?must be set}"
 
 RUNNERS_PER_ORG="${RUNNERS_PER_ORG:-4}"
-RUNNER_VERSION="${RUNNER_VERSION:-2.334.0}"
+RUNNER_VERSION="${RUNNER_VERSION:-2.336.0}"
 RUNNER_LABELS="${RUNNER_LABELS:-self-hosted,linux,homeserver}"
+# Unset-only default (`-`, not `:-`): an explicitly empty value is a request to
+# leave the BEAM unconstrained, and the remote-exec block above always exports
+# this var, so `:-` would silently override that opt-out on remote runs.
+RUNNER_ERL_FLAGS="${RUNNER_ERL_FLAGS-+S 4:4}"
 ACTIONS_RESULTS_URL="${ACTIONS_RESULTS_URL:-}"
 
 # Cache-server URL must end with a slash per falcondev docs; tolerate either form.
@@ -250,22 +276,18 @@ fi
 # Helper scripts in /usr/local/sbin (kept out of /opt/actions-runner so they
 # don't get copied into every per-instance dir).
 # ---------------------------------------------------------------------------
-cat > /usr/local/sbin/gh-runner-mint-jit <<'MINT'
+cat > /usr/local/sbin/gh-runner-app-token <<'TOKEN'
 #!/usr/bin/env bash
-# Mints an ephemeral JIT runner config for ORG and prints it on stdout.
-# Usage: gh-runner-mint-jit ORG INSTANCE_NAME
+# Prints a GitHub App installation access token for ORG on stdout.
+# Usage: gh-runner-app-token ORG
 #
-# Auto-discovers the App's installation on the target org. Runner registers
-# into the org's Default runner group (id 1) — the only group available on
-# the free plan.
+# Auto-discovers the App's installation on the target org, so adding an org
+# needs no installation id anywhere in the config.
 set -euo pipefail
 
-ORG="$1"
-INSTANCE_NAME="$2"
-
+ORG="${1:?org required}"
 CLIENT_ID="${GH_APP_CLIENT_ID:?missing GH_APP_CLIENT_ID}"
 PRIVATE_KEY_PATH="${GH_APP_PRIVATE_KEY_PATH:-/etc/gh-runners/private-key.pem}"
-LABELS_CSV="${RUNNER_LABELS:-self-hosted,linux,homeserver}"
 
 [[ -r "$PRIVATE_KEY_PATH" ]] || { echo "cannot read $PRIVATE_KEY_PATH" >&2; exit 1; }
 
@@ -281,21 +303,12 @@ sig=$(printf '%s.%s' "$header" "$payload" \
 jwt="${header}.${payload}.${sig}"
 
 gh_api() {
-  # gh_api METHOD URL [BODY]
-  local method="$1" url="$2" body="${3:-}"
-  if [[ -n "$body" ]]; then
-    curl -fsS -X "$method" \
-      -H "Authorization: Bearer ${jwt}" \
-      -H "Accept: application/vnd.github+json" \
-      -H "X-GitHub-Api-Version: 2022-11-28" \
-      -d "$body" "$url"
-  else
-    curl -fsS -X "$method" \
-      -H "Authorization: Bearer ${jwt}" \
-      -H "Accept: application/vnd.github+json" \
-      -H "X-GitHub-Api-Version: 2022-11-28" \
-      "$url"
-  fi
+  # gh_api METHOD URL
+  curl -fsS -X "$1" \
+    -H "Authorization: Bearer ${jwt}" \
+    -H "Accept: application/vnd.github+json" \
+    -H "X-GitHub-Api-Version: 2022-11-28" \
+    "$2"
 }
 
 # 2. Find the App's installation on this org (404 = App not installed there).
@@ -309,13 +322,33 @@ installation_id=$(printf '%s' "$inst_lookup" | jq -r .id)
 [[ -n "$installation_id" && "$installation_id" != "null" ]] || {
   echo "Could not extract installation id: $inst_lookup" >&2; exit 1; }
 
-# 3. Exchange App JWT for installation access token (scoped to this installation).
+# 3. Exchange the App JWT for an installation access token.
 inst_resp=$(gh_api POST "https://api.github.com/app/installations/${installation_id}/access_tokens")
 inst_token=$(printf '%s' "$inst_resp" | jq -r .token)
 [[ -n "$inst_token" && "$inst_token" != "null" ]] || {
   echo "installation token failed: $inst_resp" >&2; exit 1; }
 
-# 4. Mint the JIT runner config (this call uses the installation token, not the App JWT).
+printf '%s' "$inst_token"
+TOKEN
+chmod 755 /usr/local/sbin/gh-runner-app-token
+
+cat > /usr/local/sbin/gh-runner-mint-jit <<'MINT'
+#!/usr/bin/env bash
+# Mints an ephemeral JIT runner config for ORG and prints it on stdout.
+# Usage: gh-runner-mint-jit ORG INSTANCE_NAME
+#
+# Runner registers into the org's Default runner group (id 1) — the only
+# group available on the free plan.
+set -euo pipefail
+
+ORG="$1"
+INSTANCE_NAME="$2"
+LABELS_CSV="${RUNNER_LABELS:-self-hosted,linux,homeserver}"
+
+inst_token=$(/usr/local/sbin/gh-runner-app-token "$ORG")
+
+# The `-<epoch>-<pid>` suffix is what gh-runner-reap-registrations reads to age
+# out leaked registrations, so keep the shape if you ever rename instances.
 labels_json=$(printf '%s' "$LABELS_CSV" | jq -Rc 'split(",")')
 runner_name="${INSTANCE_NAME}-$(date +%s)-$$"
 
@@ -333,6 +366,115 @@ encoded=$(printf '%s' "$jit_resp" | jq -r .encoded_jit_config)
 printf '%s' "$encoded"
 MINT
 chmod 755 /usr/local/sbin/gh-runner-mint-jit
+
+cat > /usr/local/sbin/gh-runner-reap-registrations <<'REAP'
+#!/usr/bin/env bash
+# Deletes leaked runner registrations from every org this host serves.
+#
+# A JIT runner deregisters itself only when it *completes* a job. Every other
+# exit path — the host rebooting, `systemctl stop`, a job cancelled mid-flight,
+# a mint that never gets picked up — strands the registration as `offline`
+# forever. With Restart=always minting a fresh config every ~10s, they pile up
+# fast: this host had accumulated 1096 of them per org before the first reap.
+#
+# Safety: only registrations whose name matches this host's `<instance>-<epoch>
+# -<pid>` shape are touched, and only when the embedded epoch is older than
+# REAP_REGISTRATION_AGE_H. That age gate is the important one — a runner that
+# has minted a config but hasn't connected yet also reads as `offline`, and
+# deleting it would break the job it was about to take.
+set -uo pipefail
+log() { echo "[reap-registrations] $*"; }
+
+MAX_AGE_H="${REAP_REGISTRATION_AGE_H:-2}"
+ETC_DIR=/etc/gh-runners
+cutoff=$(( $(date +%s) - MAX_AGE_H * 3600 ))
+
+shopt -s nullglob
+mapfile -t ORGS < <(
+  for envfile in "${ETC_DIR}"/instances/*.env; do
+    sed -n 's/^GH_ORG=//p' "$envfile"
+  done | sort -u
+)
+shopt -u nullglob
+
+[[ ${#ORGS[@]} -gt 0 ]] || { log "no orgs configured; nothing to do"; exit 0; }
+
+for ORG in "${ORGS[@]}"; do
+  token=$(/usr/local/sbin/gh-runner-app-token "$ORG") || {
+    log "$ORG: could not mint an installation token; skipping"
+    continue
+  }
+
+  # Collect first, delete second: deleting while paginating shifts every
+  # later page and would silently skip half the list.
+  stale=()
+  page=1
+  while :; do
+    resp=$(curl -fsS \
+      -H "Authorization: Bearer ${token}" \
+      -H "Accept: application/vnd.github+json" \
+      -H "X-GitHub-Api-Version: 2022-11-28" \
+      "https://api.github.com/orgs/${ORG}/actions/runners?per_page=100&page=${page}") || {
+      log "$ORG: listing failed on page ${page}; keeping what we have"
+      break
+    }
+    count=$(printf '%s' "$resp" | jq '.runners | length')
+    [[ "$count" -gt 0 ]] || break
+    while IFS=$'\t' read -r id name; do
+      # Trailing `-<epoch>-<pid>`; anything else was registered by some other
+      # tool and is none of our business.
+      pid_stripped="${name%-*}"
+      ts="${pid_stripped##*-}"
+      [[ "$ts" =~ ^[0-9]{9,}$ ]] || continue
+      (( ts < cutoff )) && stale+=("$id")
+    done < <(printf '%s' "$resp" \
+             | jq -r '.runners[] | select(.status == "offline") | "\(.id)\t\(.name)"')
+    [[ "$count" -lt 100 ]] && break
+    page=$((page + 1))
+  done
+
+  deleted=0 failed=0
+  for id in "${stale[@]:-}"; do
+    [[ -n "$id" ]] || continue
+    if curl -fsS -o /dev/null -X DELETE \
+        -H "Authorization: Bearer ${token}" \
+        -H "Accept: application/vnd.github+json" \
+        -H "X-GitHub-Api-Version: 2022-11-28" \
+        "https://api.github.com/orgs/${ORG}/actions/runners/${id}"; then
+      deleted=$((deleted + 1))
+    else
+      failed=$((failed + 1))
+    fi
+  done
+  log "$ORG: deleted ${deleted} stale registration(s) older than ${MAX_AGE_H}h (${failed} failed)"
+done
+REAP
+chmod 755 /usr/local/sbin/gh-runner-reap-registrations
+
+cat > /etc/systemd/system/gh-runner-reap-registrations.service <<'REAPSVC'
+[Unit]
+Description=Delete leaked GitHub Actions runner registrations
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/gh-runners/env
+ExecStart=/usr/local/sbin/gh-runner-reap-registrations
+REAPSVC
+
+cat > /etc/systemd/system/gh-runner-reap-registrations.timer <<'REAPTIMER'
+[Unit]
+Description=Daily reap of leaked GitHub Actions runner registrations
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+REAPTIMER
 
 cat > /usr/local/sbin/gh-runner-run-instance <<'RUN'
 #!/usr/bin/env bash
@@ -364,11 +506,16 @@ install -d -m 0750 -o root -g runner "$ETC_DIR/instances"
 chown root:runner "$ETC_DIR/private-key.pem"
 chmod 0640 "$ETC_DIR/private-key.pem"
 
+# ERL_FLAGS is quoted because its value contains a space (`+S 4:4`). systemd
+# strips the quotes when reading an EnvironmentFile, and quoting also keeps the
+# file safe to `source` from a shell — unquoted, `ERL_FLAGS=+S 4:4` parses as an
+# assignment followed by an attempt to run `4:4` as a command.
 cat > "$ETC_DIR/env" <<ENVFILE
-GH_APP_CLIENT_ID=${GH_APP_CLIENT_ID}
-GH_APP_PRIVATE_KEY_PATH=${ETC_DIR}/private-key.pem
-RUNNER_LABELS=${RUNNER_LABELS}
-ACTIONS_RESULTS_URL=${ACTIONS_RESULTS_URL}
+GH_APP_CLIENT_ID="${GH_APP_CLIENT_ID}"
+GH_APP_PRIVATE_KEY_PATH="${ETC_DIR}/private-key.pem"
+RUNNER_LABELS="${RUNNER_LABELS}"
+ERL_FLAGS="${RUNNER_ERL_FLAGS}"
+ACTIONS_RESULTS_URL="${ACTIONS_RESULTS_URL}"
 ENVFILE
 chown root:runner "$ETC_DIR/env"
 chmod 0640 "$ETC_DIR/env"
@@ -397,6 +544,10 @@ Environment=MIX_HOME=/opt/runners/%i/.mix
 Environment=HEX_HOME=/opt/runners/%i/.hex
 Environment=REBAR_CACHE_DIR=/opt/runners/%i/.cache/rebar3
 Environment=RUNNER_TOOL_CACHE=/opt/runner-tool-cache
+# Carries GH_APP_CLIENT_ID, RUNNER_LABELS, ACTIONS_RESULTS_URL and ERL_FLAGS.
+# ERL_FLAGS lands in the job's environment because the runner hands its own
+# process env down to every step, so it constrains `mix`/`iex` without any
+# workflow-side opt-in.
 EnvironmentFile=/etc/gh-runners/env
 EnvironmentFile=/etc/gh-runners/instances/%i.env
 ExecStart=/usr/local/sbin/gh-runner-run-instance %i
@@ -526,7 +677,8 @@ WantedBy=timers.target
 HWTIMER
 
 systemctl daemon-reload
-systemctl enable --now docker-prune.timer docker-prune-highwater.timer
+systemctl enable --now docker-prune.timer docker-prune-highwater.timer \
+  gh-runner-reap-registrations.timer
 
 # ---------------------------------------------------------------------------
 # Per-org instances
@@ -538,18 +690,32 @@ install -d -m 0755 "$INSTANCE_ROOT"
 
 IFS=',' read -ra ORGS <<< "$GH_ORGS"
 declare -a WANTED_INSTANCES=()
+declare -a ORG_SUMMARY=()
 
 for org_spec in "${ORGS[@]}"; do
-  ORG="$(echo "$org_spec" | xargs)"  # trim
-  [[ -z "$ORG" ]] && continue
+  ENTRY="$(echo "$org_spec" | xargs)"  # trim
+  [[ -z "$ENTRY" ]] && continue
+
+  # Each entry is `org` or `org:count`. Splitting on the first colon keeps bare
+  # org names working unchanged, so existing callers don't have to be updated.
+  ORG="${ENTRY%%:*}"
+  COUNT="${ENTRY#*:}"
+  if [[ "$COUNT" == "$ENTRY" ]]; then
+    COUNT="$RUNNERS_PER_ORG"
+  elif [[ ! "$COUNT" =~ ^[1-9][0-9]*$ ]]; then
+    echo "  Skipping org spec with a non-positive-integer count: $ENTRY" >&2
+    continue
+  fi
+
   if [[ "$ORG" == */* ]]; then
     echo "  Skipping invalid org spec (must be a bare org name, not owner/repo): $ORG" >&2
     continue
   fi
   # Filesystem-safe slug — strip anything outside [A-Za-z0-9._-] just in case
   SLUG="${ORG//[^A-Za-z0-9._-]/-}"
+  ORG_SUMMARY+=("${ORG}=${COUNT}")
 
-  for n in $(seq 1 "$RUNNERS_PER_ORG"); do
+  for n in $(seq 1 "$COUNT"); do
     INSTANCE="${SLUG}-${n}"
     WANTED_INSTANCES+=("$INSTANCE")
     INSTANCE_DIR="${INSTANCE_ROOT}/${INSTANCE}"
@@ -603,10 +769,12 @@ shopt -u nullglob
 
 echo ""
 echo "✓ GitHub Actions runners installed."
-echo "  Orgs:             ${GH_ORGS}"
-echo "  Runners per org:  ${RUNNERS_PER_ORG}"
+echo "  Runners per org:  ${ORG_SUMMARY[*]}  (${#WANTED_INSTANCES[@]} instances total)"
 echo "  Labels:           ${RUNNER_LABELS}"
 echo "  Runner version:   ${RUNNER_VERSION}"
+if [[ -n "$RUNNER_ERL_FLAGS" ]]; then
+  echo "  ERL_FLAGS:        ${RUNNER_ERL_FLAGS}"
+fi
 echo ""
 if [[ -n "$ACTIONS_RESULTS_URL" ]]; then
   echo "  Cache server:     ${ACTIONS_RESULTS_URL}  (Runner.Worker.dll patched)"
