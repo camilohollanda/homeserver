@@ -17,6 +17,7 @@ resources:
   - applications/bugsink.yaml
   - applications/grafana.yaml
   - applications/loki.yaml
+  - applications/mailpit.yaml
   - applications/iddh-members-production.yaml
   - applications/iddh-members-staging.yaml
   - applications/apprise.yaml

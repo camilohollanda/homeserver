@@ -13,7 +13,7 @@
 #   S3_BUCKET             - Bucket name (shared across hosts; per-host prefix below)
 #   RESTIC_PASSWORD       - Repo passphrase; LOSING THIS LOSES THE BACKUPS
 #   JOBS                  - Space-separated "name:/path[,/path...]" entries, e.g.
-#                           "services-data:/opt/garage/meta,/opt/mailpit/data app-conf:/opt/infisical/data"
+#                           "services-data:/opt/garage/meta app-conf:/opt/infisical/data"
 #
 # Optional env vars:
 #   RESTIC_HOST_PREFIX    - Path prefix inside the bucket. Default: hostname -s.
@@ -53,7 +53,7 @@ fi
 : "${S3_ENDPOINT:?must be set}"
 : "${S3_BUCKET:?must be set}"
 : "${RESTIC_PASSWORD:?must be set}"
-: "${JOBS:?must be set (e.g. \"services-data:/opt/garage/meta,/opt/mailpit/data\")}"
+: "${JOBS:?must be set (e.g. \"services-data:/opt/garage/meta\")}"
 
 RESTIC_HOST_PREFIX="${RESTIC_HOST_PREFIX:-$(hostname -s)}"
 RESTIC_KEEP_DAILY="${RESTIC_KEEP_DAILY:-7}"

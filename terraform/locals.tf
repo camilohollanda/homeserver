@@ -47,8 +47,8 @@ locals {
     cores     = 2
     memory_mb = 4096
     # OS disk lives on local-lvm (SSD). 20G was tight: ~5-6 GB is locked
-    # behind running Docker images (Garage, garage-ui, Infisical, Mailpit,
-    # gha-cache, Redis, nginx) and each version bump leaves the prior image
+    # behind running Docker images (Garage, garage-ui, Infisical, gha-cache,
+    # Redis, nginx) and each version bump leaves the prior image
     # around until the daily prune fires. 40G gives ~10x normal image-bump
     # headroom; the daily docker-prune timer in bootstrap/services/install.sh
     # keeps growth bounded after that.
@@ -56,7 +56,7 @@ locals {
     # Garage object data lives on this disk (mounted at /var/lib/garage/data).
     # Backed by the 4TB ZFS pool 'tank' (see var.tank_storage).
     garage_data_size = 500
-    tags             = "infisical,garage,mailpit"
+    tags             = "infisical,garage"
   }
 
   ai_vm = {

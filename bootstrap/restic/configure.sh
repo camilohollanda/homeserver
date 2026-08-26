@@ -39,14 +39,12 @@ profile_services() {
   #                      these, the Infisical Postgres backup is undecryptable.
   #   services-cfg     — Live shared nginx vhosts (conf.d/*.conf). Mostly
   #                      reproducible from git, but captures any drift.
-  #   mailpit-data     — Dev SMTP capture sqlite. Low value but tiny (~150K).
   #   letsencrypt      — LE account + issued certs. Renewable, but skips a
   #                      few hours of re-issuing during a full rebuild.
   JOBS="\
 garage-meta:/var/lib/garage/meta \
 infisical-cfg:/opt/infisical \
 services-cfg:/opt/services \
-mailpit-data:/opt/mailpit/data \
 letsencrypt:/etc/letsencrypt"
   PROFILE_NOTES="Services VM (114) — Garage meta + Infisical/Garage .env files (critical), plus configs + certs"
 }

@@ -26,7 +26,6 @@ configMapGenerator:
       - dashboards/pod-resources.json
       - dashboards/garage.json
       - dashboards/infisical.json
-      - dashboards/mailpit.json
       - dashboards/services-nginx.json
     options:
       disableNameSuffixHash: true
