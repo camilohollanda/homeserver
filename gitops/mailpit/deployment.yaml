@@ -1,0 +1,171 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mailpit
+  namespace: mailpit
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: mailpit
+  template:
+    metadata:
+      labels:
+        app: mailpit
+    spec:
+      containers:
+        - name: mailpit
+          image: axllent/mailpit:v1.31.0
+          ports:
+            - name: http
+              containerPort: 8025
+              protocol: TCP
+            - name: smtp
+              containerPort: 1025
+              protocol: TCP
+          env:
+            - name: MP_MAX_MESSAGES
+              value: "500"
+            - name: MP_DATABASE
+              value: /data/mailpit.db
+            - name: MP_UI_AUTH
+              valueFrom:
+                secretKeyRef:
+                  name: mailpit-secrets
+                  key: MAILPIT_BASIC_USER
+            - name: MAILPIT_BASIC_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: mailpit-secrets
+                  key: MAILPIT_BASIC_PASS
+            - name: MP_SMTP_TLS_CERT
+              value: /tls/tls.crt
+            - name: MP_SMTP_TLS_KEY
+              value: /tls/tls.key
+            - name: MP_SMTP_REQUIRE_STARTTLS
+              value: "true"
+          command:
+            - /bin/sh
+            - -ec
+          args:
+            - |
+              export MP_UI_AUTH="${MP_UI_AUTH}:${MAILPIT_BASIC_PASS}"
+              export MP_SMTP_AUTH="${MP_UI_AUTH}"
+              unset MAILPIT_BASIC_PASS
+
+              # Mailpit loads the SMTP certificate only at process startup.
+              # Watch the projected Secret and restart this container when
+              # cert-manager rotates either file; no cluster-wide Reloader is
+              # needed and no other workload is affected.
+              /mailpit &
+              mailpit_pid=$!
+              (
+                cert_checksum="$(sha256sum /tls/tls.crt /tls/tls.key)"
+                while kill -0 "$mailpit_pid" 2>/dev/null; do
+                  sleep 300
+                  new_checksum="$(sha256sum /tls/tls.crt /tls/tls.key)"
+                  if [ "$new_checksum" != "$cert_checksum" ]; then
+                    kill -TERM "$mailpit_pid"
+                    exit 0
+                  fi
+                done
+              ) &
+              watcher_pid=$!
+
+              stop() {
+                kill -TERM "$mailpit_pid" "$watcher_pid" 2>/dev/null || true
+                wait "$mailpit_pid" 2>/dev/null || true
+                wait "$watcher_pid" 2>/dev/null || true
+              }
+              trap 'stop; exit 0' TERM INT
+
+              set +e
+              wait "$mailpit_pid"
+              status=$?
+              set -e
+              kill "$watcher_pid" 2>/dev/null || true
+              wait "$watcher_pid" 2>/dev/null || true
+              exit "$status"
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: tls
+              mountPath: /tls
+              readOnly: true
+          readinessProbe:
+            exec:
+              command: ["/mailpit", "readyz"]
+            initialDelaySeconds: 2
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          livenessProbe:
+            exec:
+              command: ["/mailpit", "readyz"]
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: mailpit-data
+        - name: tls
+          secret:
+            secretName: mailpit-tls
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mailpit
+  namespace: mailpit
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8025
+      targetPort: http
+      protocol: TCP
+    - name: smtp
+      port: 1025
+      targetPort: smtp
+      protocol: TCP
+  selector:
+    app: mailpit
+---
+# SMTP is raw TCP, so it cannot be exposed by an HTTP Ingress. K3s ServiceLB
+# binds these ports on the node (192.168.20.11) and forwards them unchanged to
+# Mailpit, where STARTTLS and authentication are enforced.
+apiVersion: v1
+kind: Service
+metadata:
+  name: mailpit-smtp
+  namespace: mailpit
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  ports:
+    - name: smtp-alt
+      port: 2525
+      targetPort: smtp
+      protocol: TCP
+    - name: smtp-submission
+      port: 587
+      targetPort: smtp
+      protocol: TCP
+  selector:
+    app: mailpit

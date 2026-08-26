@@ -72,6 +72,7 @@ After setup, these services will be available with valid HTTPS. Only the k3s one
 | Bugsink | https://bugsink.internal.prakash.com.br | cert-manager (`bugsink-tls`) |
 | Grafana | https://grafana.internal.prakash.com.br | cert-manager (`grafana-tls`) |
 | ArgoCD | https://argocd.internal.prakash.com.br | cert-manager (`argocd-tls`) |
+| Mailpit | https://mailpit.internal.prakash.com.br | cert-manager (`mailpit-tls`) |
 | Infisical | https://infisical.internal.prakash.com.br | certbot on VM 114 |
 
 ## Adding More Internal Services

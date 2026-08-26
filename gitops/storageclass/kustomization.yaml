@@ -6,5 +6,6 @@ resources:
   - werify-staging-data-pv.yaml
   - werify-production-data-pv.yaml
   - bugsink-data-pv.yaml
+  - mailpit-data-pv.yaml
   - loki-storage-pv.yaml
   - victoria-metrics-pv.yaml

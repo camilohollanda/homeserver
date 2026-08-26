@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mailpit-data
+  namespace: mailpit
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path-static
+  volumeName: mailpit-data
+  resources:
+    requests:
+      storage: 1Gi

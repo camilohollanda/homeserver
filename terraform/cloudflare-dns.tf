@@ -15,6 +15,7 @@ locals {
   tunnel_cname_target = "${cloudflare_zero_trust_tunnel_cloudflared.homeserver.id}.cfargotunnel.com"
 
   services_vm_ip    = "192.168.20.22" # vmid 114
+  k3s_vm_ip         = "192.168.20.11" # vmid 112
   postgres_vm_ip    = "192.168.20.21" # vmid 113 (PG 17)
   postgres_18_vm_ip = "192.168.20.23" # vmid 118 (PG 18)
   ai_vm_ip          = "192.168.20.30" # vmid 115
@@ -37,9 +38,11 @@ locals {
     # services VM (vmid 114) — multi-tenant docker host behind shared nginx
     garage    = { name = "garage.internal.prakash.com.br", ip = local.services_vm_ip }
     garage_ui = { name = "garage-ui.internal.prakash.com.br", ip = local.services_vm_ip }
-    mailpit   = { name = "mailpit.internal.prakash.com.br", ip = local.services_vm_ip }
     infisical = { name = "infisical.internal.prakash.com.br", ip = local.services_vm_ip }
     gha_cache = { name = "gha-cache.internal.prakash.com.br", ip = local.services_vm_ip }
+
+    # k3s-apps (vmid 112) — HTTP via ingress-nginx, SMTP via K3s ServiceLB
+    mailpit = { name = "mailpit.internal.prakash.com.br", ip = local.k3s_vm_ip }
 
     # dedicated VMs
     #

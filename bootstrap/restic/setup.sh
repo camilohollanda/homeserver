@@ -26,7 +26,7 @@
 #
 # Optional knobs:
 #   RESTIC_SSH            - default: deployer@192.168.20.22 (services VM)
-#   JOBS                  - default: services-data:/opt/garage/meta,/opt/mailpit/data,/opt/infisical/data
+#   JOBS                  - default: services-data:/opt/garage/meta,/opt/infisical/data
 #   RESTIC_HOST_PREFIX    - default: derived on the VM from `hostname -s`
 #   RESTIC_KEEP_DAILY     - default: 7
 #   RESTIC_KEEP_WEEKLY    - default: 4
@@ -53,7 +53,7 @@ wait_ssh() {
 }
 
 RESTIC_SSH="${RESTIC_SSH:-deployer@192.168.20.22}"
-export JOBS="${JOBS:-services-data:/opt/garage/meta,/opt/mailpit/data,/opt/infisical/data}"
+export JOBS="${JOBS:-services-data:/opt/garage/meta,/opt/infisical/data}"
 export RESTIC_HOST_PREFIX="${RESTIC_HOST_PREFIX:-}"
 export RESTIC_KEEP_DAILY="${RESTIC_KEEP_DAILY:-7}"
 export RESTIC_KEEP_WEEKLY="${RESTIC_KEEP_WEEKLY:-4}"

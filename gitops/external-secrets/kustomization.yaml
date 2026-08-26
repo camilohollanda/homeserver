@@ -18,5 +18,6 @@ resources:
   - werify-cluster-secret-store.yaml
   - werify-connector-cluster-secret-store.yaml
   - bugsink-cluster-secret-store.yaml
+  - mailpit-cluster-secret-store.yaml
   - iddh-members-cluster-secret-store.yaml
   - umami-cluster-secret-store.yaml
