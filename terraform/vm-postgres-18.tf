@@ -1,8 +1,7 @@
-# PostgreSQL 18 host — target of the blue/green upgrade.
-# Mirrors vm-postgres.tf (VM 113) with a single deliberate difference:
-#   - prevent_destroy = false: during phase A this VM holds nothing, and
-#     iterating on it has to stay cheap. Flip to true at cutover, when it becomes
-#     the production database. This is the ONLY field the cutover touches.
+# PostgreSQL 18 host — active production database after the blue/green upgrade.
+# It carries the same destroy protection as VM 113 did while it hosted
+# production. Keep prevent_destroy enabled unless a future migration has moved
+# every database elsewhere and the replacement has been verified.
 #
 # startup.order = 1, same as 113: databases boot in the first group. Duplicate
 # orders are the norm here (k3s and postgres on 1, ai and gh-runners on 3), and
@@ -90,9 +89,8 @@ resource "proxmox_virtual_environment_vm" "db_postgres_18" {
   }
 
   lifecycle {
-    # Phase A: the VM is disposable while it holds no real data.
-    # At cutover, flip to true (113 uses true for the same reason).
-    prevent_destroy = false
+    # This VM contains the active production databases.
+    prevent_destroy = true
 
     # - disk: ignore manually-attached data disk (scsi1) managed outside Terraform
     # - initialization: cloud-init only runs on first boot; YAML edits don't
