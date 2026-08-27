@@ -67,10 +67,15 @@ sudo ~/bootstrap/bootstrap.sh
 PostgreSQL is automatically installed via cloud-init when the VM is created.
 The VM is accessible at `pg.local` via mDNS (Avahi).
 
+> **Correction — 2026-08-27.** That described VM 113 (192.168.20.21), destroyed
+> after the PG 17 → 18 upgrade. The database host is now VM 118
+> (192.168.20.23), it runs no Avahi — so `pg.local` resolves to nothing — and
+> PostgreSQL is installed by `bootstrap/postgres/install.sh`, not by cloud-init.
+
 To provision databases for applications:
 
 ```bash
-ssh deployer@pg.local
+ssh deployer@pg18.internal.prakash.com.br
 /opt/bootstrap/pg-provision.sh myapp
 ```
 

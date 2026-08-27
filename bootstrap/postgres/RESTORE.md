@@ -135,7 +135,7 @@ physical restore.
 
 | Prefix | Cluster |
 |---|---|
-| `s3://homeserver-pg-walg/wal-g` | VM 113, PostgreSQL 17 |
+| `s3://homeserver-pg-walg/wal-g` | VM 113, PostgreSQL 17 (host decommissioned 2026-08-27; the prefix still holds its final backups until retention ages them out — nothing writes to it any more) |
 | `s3://homeserver-pg-walg/wal-g-18` | VM 118, PostgreSQL 18 |
 
 Both are encrypted with the same `WALG_LIBSODIUM_KEY` (stored in Infisical under

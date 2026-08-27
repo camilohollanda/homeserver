@@ -84,7 +84,10 @@ resource "proxmox_virtual_environment_vm" "services" {
     down_delay = 60
   }
 
-  depends_on = [proxmox_virtual_environment_vm.db_postgres]
+  # Infisical lives here and its database lives there. Was VM 113 until that
+  # host was decommissioned on 2026-08-27; Infisical's own DATABASE_URL (in
+  # /opt/infisical/.env, not in Infisical) now names pg18.
+  depends_on = [proxmox_virtual_environment_vm.db_postgres_18]
 
   lifecycle {
     # Cloud-init only runs on first boot; YAML edits shouldn't force VM replacement.

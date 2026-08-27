@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Provisions wal-g on a postgres VM. Defaults to the PG 18 box (vmid 118, .23);
-# the PG 17 production box (113, .21) already has its own wal-g and must not be
-# re-run against, since install.sh restarts the cluster.
+# Provisions wal-g on a postgres VM. Defaults to the PG 18 box (vmid 118, .23),
+# which is now the only one — VM 113 (.21, PG 17) was decommissioned 2026-08-27.
+# Still parameterised rather than hardcoded: install.sh restarts the cluster, so
+# pointing it at a live database is destructive and should stay a deliberate act.
 # Runs from your local machine — SSHes into the VM for all remote operations.
 #
 # Usage:

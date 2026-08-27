@@ -61,7 +61,7 @@ else
   echo "==> Provisioning Infisical database on postgres VM..."
   echo "    (requires POSTGRES_SSH and the postgres VM to be running)"
   echo "    (set SKIP_DB_SETUP=1 to bypass when the db is already provisioned)"
-  POSTGRES_SSH="${POSTGRES_SSH:-deployer@192.168.20.21}"
+  POSTGRES_SSH="${POSTGRES_SSH:-deployer@192.168.20.23}"  # VM 118 (PG 18); was .21 until VM 113 was decommissioned 2026-08-27
   # Extract the password from postgres://user:password@host:port/db using
   # portable bash parameter expansion (avoids GNU-only `grep -P`).
   _pw_enc="${INFISICAL_DB_URI#*://*:}"

@@ -4,8 +4,8 @@ output "k3s_vm_ip" {
 }
 
 output "db_vm_ip" {
-  description = "IP address for the Postgres node"
-  value       = split("/", local.db_vm.ip_cidr)[0]
+  description = "IP address for the Postgres node (VM 118, PG 18 — the only one since VM 113 was decommissioned)"
+  value       = split("/", local.db_vm_18.ip_cidr)[0]
 }
 
 output "services_vm_ip" {

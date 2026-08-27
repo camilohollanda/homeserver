@@ -1,13 +1,14 @@
-# PostgreSQL 18 host — active production database after the blue/green upgrade.
-# It carries the same destroy protection as VM 113 did while it hosted
-# production. Keep prevent_destroy enabled unless a future migration has moved
-# every database elsewhere and the replacement has been verified.
+# PostgreSQL 18 host — the production database, and since VM 113 (PG 17) was
+# decommissioned on 2026-08-27, the only one. It carries the same destroy
+# protection 113 did while it hosted production. Keep prevent_destroy enabled
+# unless a future migration has moved every database elsewhere and the
+# replacement has been verified.
 #
-# startup.order = 1, same as 113: databases boot in the first group. Duplicate
+# startup.order = 1, as 113 had: databases boot in the first group. Duplicate
 # orders are the norm here (k3s and postgres on 1, ai and gh-runners on 3), and
 # order 2 belongs to services, which hosts Infisical — a consumer of this very
 # database. Putting the database in the consumer's group would invert the boot
-# dependency after cutover.
+# dependency.
 resource "proxmox_virtual_environment_vm" "db_postgres_18" {
   name        = local.db_vm_18.name
   node_name   = var.pm_node
@@ -35,10 +36,10 @@ resource "proxmox_virtual_environment_vm" "db_postgres_18" {
 
   scsi_hardware = "virtio-scsi-single"
 
-  # local-lvm (SSD) — same reasoning as VM 113: DB workloads benefit
-  # significantly from SSD. Caveat: the pool sits at ~79% and is thin, so the
-  # 80 GB provisioned here (20 OS + 60 data) leaves it overcommitted until 113
-  # goes away. Actual usage starts around 3 GB.
+  # local-lvm (SSD) — same reasoning VM 113 used: DB workloads benefit
+  # significantly from SSD. The overcommit caveat that applied while 113 was
+  # still provisioned is gone with it; the thin pool sits at ~71% as of
+  # 2026-08-27, with 80 GB provisioned here (20 OS + 60 data).
   disk {
     datastore_id = "local-lvm"
     file_format  = "raw"

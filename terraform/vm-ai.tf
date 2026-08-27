@@ -24,7 +24,8 @@ resource "proxmox_virtual_environment_vm" "ai_gpu" {
   machine = "q35"
 
   # Disable Secure Boot - required for NVIDIA drivers (unsigned kernel modules)
-  # local-lvm (SSD) — matches scsi0; the efi disk was migrated outside Terraform.
+  # Stays on local-lvm: it is 4 MB of firmware variables, read once at boot, so
+  # it did not follow scsi0 to tank-vm.
   efi_disk {
     datastore_id      = "local-lvm"
     pre_enrolled_keys = false
@@ -33,15 +34,25 @@ resource "proxmox_virtual_environment_vm" "ai_gpu" {
 
   scsi_hardware = "virtio-scsi-single"
 
-  # local-lvm (SSD) — not var.storage (tank-vm HDD). Disk was migrated
-  # outside Terraform to put model loads on faster media.
   disk {
-    datastore_id = "local-lvm"
+    # var.tank_storage (HDD) — not var.storage (local-lvm SSD). Moved off
+    # local-lvm outside Terraform, reversing the earlier "models on faster
+    # media" call: the SSD thin pool was the scarce resource and this is the
+    # largest OS disk that did not need it. Model loads come off spinning disk
+    # now, which costs a slower first load; once a model is resident in the
+    # M4000's VRAM the disk is out of the path entirely.
+    #
+    # ssd=false for the same reason as the media VM: `tank` is one 3.6TB 7200rpm
+    # drive. The host still carries ssd=1 here — the flag survived the storage
+    # move — so this is the one disk attribute where config and host disagree
+    # until the next apply. Every other tank-vm disk on the host (114 scsi1,
+    # 116 scsi0) is already ssd=0.
+    datastore_id = var.tank_storage
     file_format  = "raw"
     interface    = "scsi0"
     size         = local.ai_vm.disk_size
     discard      = "on"
-    ssd          = true
+    ssd          = false
     iothread     = true
   }
 

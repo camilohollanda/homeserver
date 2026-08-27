@@ -16,7 +16,6 @@ locals {
 
   services_vm_ip    = "192.168.20.22" # vmid 114
   k3s_vm_ip         = "192.168.20.11" # vmid 112
-  postgres_vm_ip    = "192.168.20.21" # vmid 113 (PG 17)
   postgres_18_vm_ip = "192.168.20.23" # vmid 118 (PG 18)
   ai_vm_ip          = "192.168.20.30" # vmid 115
   media_vm_ip       = "192.168.20.40" # vmid 116
@@ -56,11 +55,19 @@ locals {
 
     # dedicated VMs
     #
-    # `pg` must NOT be repointed at 118 to perform the upgrade cutover — six of
-    # the nine live connection strings resolve through it, so moving it migrates
-    # every app at once. Apps move to `pg18` one at a time instead, by
-    # repointing their own DATABASE_URL.
-    pg   = { name = "pg.internal.prakash.com.br", ip = local.postgres_vm_ip }
+    # `pg` and `pg18` are two names for VM 118. During the PG 17 -> 18 cutover
+    # `pg` deliberately stayed on VM 113 (192.168.20.21) — six of the nine live
+    # connection strings resolved through it, so repointing it would have
+    # migrated every app at once; apps moved to `pg18` one at a time instead, by
+    # repointing their own DATABASE_URL. With 113 gone (2026-08-27) `pg` pointed
+    # at a dead address, so it now follows 118.
+    #
+    # Keep BOTH until the DATABASE_URLs are normalised back onto `pg`: every
+    # live connection string (10 k8s secret keys plus Infisical's own, in
+    # /opt/infisical/.env on VM 114) still names `pg18`, so dropping that record
+    # is an immediate outage. Removing `pg18` is the last step of
+    # bootstrap/postgres/CUTOVER.md, after the sweep — not before.
+    pg   = { name = "pg.internal.prakash.com.br", ip = local.postgres_18_vm_ip }
     pg18 = { name = "pg18.internal.prakash.com.br", ip = local.postgres_18_vm_ip }
     ai   = { name = "ai.internal.prakash.com.br", ip = local.ai_vm_ip }
 

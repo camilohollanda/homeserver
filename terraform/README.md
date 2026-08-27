@@ -7,6 +7,15 @@ This directory contains Terraform configuration to provision VMs on Proxmox:
 - **ai-gpu** (192.168.20.30) - Whisper + Ollama services
 - **media-server** (192.168.20.40) - Jellyfin + qBittorrent + Radarr + Sonarr stack
 
+> **Correction — 2026-08-27.** The list above is the layout as it stood before
+> the PostgreSQL 17 -> 18 upgrade. `db-postgres` (VM 113, 192.168.20.21) no
+> longer exists: it was the blue side of the blue/green upgrade and was
+> destroyed once every database had moved. The database host is now
+> **db-postgres-18** (VM 118, 192.168.20.23), defined in `vm-postgres-18.tf`.
+> The list is also incomplete — **gh-runners** (VM 117, 192.168.20.50) has been
+> here since May 2026. See the VM inventory in the repo-root `AGENTS.md` for the
+> current set.
+
 ## Prerequisites
 
 - Terraform >= 1.6.0
@@ -109,6 +118,15 @@ openssl rand -base64 24
 Update these values in `terraform.tfvars`.
 
 ### 2. Setup PostgreSQL Database
+
+> **Correction — 2026-08-27.** This walkthrough describes VM 113
+> (192.168.20.21), which no longer exists, and a script
+> (`infisical-db-setup.sh`) that has since been replaced. PostgreSQL is now
+> installed and configured by `bootstrap/postgres/install.sh`, and app databases
+> are created with `bootstrap/postgres/pg-provision.sh` — neither of which needs
+> the manual `postgresql.conf` / `pg_hba.conf` editing shown below. Kept for the
+> record of how the host used to be brought up; see `bootstrap/postgres/README.md`
+> for the current procedure.
 
 After the VMs are created, SSH into the db-postgres VM and run:
 
@@ -337,3 +355,13 @@ Why this matters:
   cloned before the rewrite still has the historical blobs locally — if
   that's a concern, rotate the secrets (Proxmox token, CF token, Infisical
   encryption key, etc.) and have them re-clone.
+
+## Change history
+
+| Date | Change | Status |
+|------|--------|--------|
+| 2026-08-27 | `ai-gpu` (VM 115) `scsi0` moved from `local-lvm` to `tank-vm`; the 4 MB EFI disk stayed on `local-lvm`. Done on the host first, then reflected in `vm-ai.tf`. | Applied on the host; the datastore change matches (no diff) |
+| 2026-08-27 | `ai-gpu` `scsi0` set to `ssd = false` in `vm-ai.tf`. `tank` is one 3.6TB 7200rpm drive (`ROTA=1`); the `ssd=1` flag survived the move off `local-lvm` and was never true on `tank-vm`. Every other tank-vm disk on the host (114 `scsi1`, 116 `scsi0`) is already `ssd=0`, and `vm-media.tf` documents the same reasoning. | Config changed, **not yet applied** — `terraform plan` shows an in-place `ssd = true -> false` on `ai_gpu`. The guest keeps seeing a non-rotational device until VM 115 is stopped and started |
+| 2026-08-27 | VM 113 (`db-postgres`, PG 17, 192.168.20.21) destroyed. `vm-postgres.tf` and `cloud-init/postgres.yaml` removed; `local.db_vm` dropped; `output.db_vm_ip` and the `services` VM's `depends_on` repointed at VM 118. | VM already gone and dropped from state on refresh; the only pending action is deleting the orphaned `postgres-cloud-init.yaml` snippet on the host, on the next `terraform apply` |
+| 2026-08-27 | `pg.internal.prakash.com.br` repointed from 192.168.20.21 to 192.168.20.23 in `cloudflare-dns.tf`. `pg18` is deliberately kept alongside it — all live `DATABASE_URL`s still name `pg18`. | Config changed, **not yet applied** — the record still resolves to the dead .21 until `terraform apply` runs |
+| 2026-08-27 | Normalise every `DATABASE_URL` from `pg18.internal` onto `pg.internal`, then drop the `pg18` record (`bootstrap/postgres/CUTOVER.md`, steps 4 and 3). | Not started |

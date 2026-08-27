@@ -18,7 +18,7 @@ bootstrap/
 │   ├── cloudflared-install.sh
 │   ├── cloudflared-config.sh
 │   └── ARGOCD-DOMAIN.md
-├── postgres/               # db-postgres VM (192.168.20.21) - pg.local
+├── postgres/               # db-postgres-18 VM (192.168.20.23) - pg18.internal.prakash.com.br
 │   └── pg-provision.sh     # Provision databases for apps (PostgreSQL installed via cloud-init)
 ├── infisical/              # infisical VM (192.168.20.22)
 │   └── db-setup.sh         # Run on postgres VM to create Infisical DB
@@ -65,15 +65,22 @@ This installs everything in the correct order:
 - ArgoCD Image Updater
 - Cloudflare Tunnel
 
-#### PostgreSQL (db-postgres VM)
+#### PostgreSQL (db-postgres-18 VM)
 
 PostgreSQL is automatically installed and configured via cloud-init when the VM is created.
 The VM is accessible at `pg.local` via mDNS (Avahi).
 
+> **Correction — 2026-08-27.** Both sentences describe VM 113, which no longer
+> exists. PostgreSQL is *not* installed by cloud-init — the cloud-init snippet
+> only does minimal OS prep, and the cluster is built by
+> `bootstrap/postgres/install.sh`. And there is no mDNS name: VM 118 does not
+> run Avahi, so `pg.local` resolves to nothing. Use
+> `pg18.internal.prakash.com.br` (or the IP, 192.168.20.23).
+
 #### Provision App Database (run on postgres VM)
 
 ```bash
-ssh deployer@192.168.20.21
+ssh deployer@192.168.20.23
 /opt/bootstrap/pg-provision.sh myapp              # Creates myapp_staging DB
 /opt/bootstrap/pg-provision.sh myapp --env prod   # Creates myapp_prod DB
 ```
@@ -88,7 +95,7 @@ This script:
 #### Infisical Database (run on postgres VM)
 
 ```bash
-ssh deployer@192.168.20.21
+ssh deployer@192.168.20.23
 /opt/bootstrap/db-setup.sh infisical infisical 'your-secure-password'
 ```
 
@@ -196,10 +203,10 @@ https://192.168.20.11:30443
 ┌─────────────────────────────────────────────────────────────────┐
 │                         VMs                                      │
 ├─────────────────┬─────────────────┬─────────────────────────────┤
-│   k3s-apps      │   db-postgres   │   infisical   │ whisper-gpu │
-│  192.168.20.11  │  192.168.20.21  │ 192.168.20.22 │ .20.30      │
+│   k3s-apps      │ db-postgres-18  │   infisical   │ whisper-gpu │
+│  192.168.20.11  │  192.168.20.23  │ 192.168.20.22 │ .20.30      │
 ├─────────────────┼─────────────────┼───────────────┼─────────────┤
-│ K3s cluster     │ PostgreSQL 17→18│ Secrets mgmt  │ ML/GPU      │
+│ K3s cluster     │ PostgreSQL 18   │ Secrets mgmt  │ ML/GPU      │
 │ ArgoCD          │ Databases for:  │ (Docker)      │ Whisper API │
 │ ingress-nginx   │ - Infisical     │               │             │
 │ External Secrets│ - Apps          │               │             │

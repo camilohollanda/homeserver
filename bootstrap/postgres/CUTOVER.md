@@ -1,5 +1,17 @@
 # Cutover: moving apps from PostgreSQL 17 to 18
 
+> **Done — 2026-08-27.** Every app is on VM 118, VM 113 has been destroyed, and
+> `migrate-app.sh` has been deleted along with it — it needed a live source
+> cluster on `.21`, so every run would have failed at the preflight. Recover it
+> from git if it is ever wanted again:
+> `git show 3b3052d:bootstrap/postgres/migrate-app.sh`.
+>
+> **Two items are still open**, both in the checklist at the end of this file:
+> the `pg.internal` repoint is written but not applied, and the `DATABASE_URL`s
+> have not been normalised off `pg18` yet. Everything else here is the record of
+> how the migration was carried out — the command blocks below invoke a script
+> that no longer exists.
+
 The 8 databases are independent — nothing in Postgres queries across them — so
 the migration is **per application**, not one switch. Each app moves on its own
 schedule, its own blast radius is one app, and the database it leaves behind
@@ -23,7 +35,7 @@ Increasing stakes. Do not start at the top of the list.
 | 6 | werify | production | `werify` | largest, and the connector rides with it |
 | 7 | infisical | — | `infisical` | **last, and by hand** — see below |
 
-`migrate-app.sh` covers every row except infisical.
+`migrate-app.sh` covered every row except infisical.
 
 ### Infisical is last, and is not scriptable
 
@@ -173,3 +185,19 @@ SELECT datname, usename, application_name, client_addr,
    with no version in the name.
 5. Set `prevent_destroy = true` on VM 118 in `terraform/vm-postgres-18.tf`.
 6. Only then destroy VM 113, freeing 80 GB on the `local-lvm` thin pool.
+
+### Status of that checklist — 2026-08-27
+
+Note that steps 3 and 6 ran out of order: VM 113 was destroyed before the DNS
+repoint landed, which left `pg.internal` resolving to a dead address for as long
+as the gap lasted. Nothing depended on it — all 11 connection strings name
+`pg18` — so the exposure was nil, but the ordering above is the safe one.
+
+| # | Step | Status |
+|---|------|--------|
+| 1 | Confirm nothing connects to 113 | Done — all 10 k8s secret keys and Infisical's own `DATABASE_URL` name `pg18` |
+| 2 | Final wal-g backup of 113 | Assumed done before the destroy; the `wal-g` prefix is frozen and ages out on its own |
+| 3 | Repoint `pg.internal` at `.23`; drop `pg18` | **Repoint written to `cloudflare-dns.tf`, not yet applied.** `pg18` deliberately NOT dropped — see step 4 |
+| 4 | Normalise `DATABASE_URL`s onto `pg.internal` | **Not started.** Must happen before `pg18` can be dropped, or every app loses its database at once |
+| 5 | `prevent_destroy = true` on VM 118 | Done — already set in `terraform/vm-postgres-18.tf` |
+| 6 | Destroy VM 113 | Done — gone from Proxmox and dropped from Terraform state on refresh |

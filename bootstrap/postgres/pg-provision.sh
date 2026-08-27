@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Runs on the postgres VM as root.
-# Remote: REMOTE_HOST=deployer@192.168.20.21 ./pg-provision.sh <app_name> [--env staging|prod]
+# Remote: REMOTE_HOST=deployer@192.168.20.23 ./pg-provision.sh <app_name> [--env staging|prod]
 #
 # This script is idempotent — safe to run multiple times.
 if [[ -n "${REMOTE_HOST:-}" ]]; then
@@ -16,7 +16,7 @@ if [[ "$EUID" -ne 0 ]]; then
 fi
 
 # Configuration
-POSTGRES_HOST="${POSTGRES_HOST:-192.168.20.21}"
+POSTGRES_HOST="${POSTGRES_HOST:-192.168.20.23}"  # VM 118 (PG 18); was .21 until VM 113 was decommissioned 2026-08-27
 POSTGRES_PORT="${POSTGRES_PORT:-5432}"
 INFISICAL_API_URL="${INFISICAL_API_URL:-https://infisical.internal.prakash.com.br}"
 # Workspace ID of the `homeserver-1jj1` project. The CLI's --projectId takes the

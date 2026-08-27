@@ -7,7 +7,7 @@
 # Systems checked:
 #   1. restic / services VM  (192.168.20.22) — daily timers, one per tag
 #   2. restic / k3s VM       (192.168.20.11) — daily timers, one per tag
-#   3. wal-g  / db-postgres  (192.168.20.21) — daily base backup + WAL stream
+#   3. wal-g  / db-postgres-18 (192.168.20.23) — daily base backup + WAL stream
 #   4. garage-replica / services VM (192.168.20.22) — daily rclone sync to R2
 #
 # Usage:
@@ -33,7 +33,9 @@ fi
 # ---------------------------------------------------------------------------
 SERVICES_SSH="deployer@192.168.20.22"
 K3S_SSH="deployer@192.168.20.11"
-PG_SSH="deployer@192.168.20.21"
+# VM 118 (PG 18). Was 192.168.20.21 (VM 113, PG 17) until that host was
+# decommissioned on 2026-08-27 — this check was SSHing into a dead VM.
+PG_SSH="deployer@192.168.20.23"
 
 # ---------------------------------------------------------------------------
 # Output helpers
@@ -177,7 +179,7 @@ REMOTE
 # within MAX_AGE_HOURS, wal-verify integrity returns OK.
 # ---------------------------------------------------------------------------
 check_walg() {
-  hdr "wal-g — db-postgres (${PG_SSH})"
+  hdr "wal-g — db-postgres-18 (${PG_SSH})"
 
   local output rc=0
   output="$(ssh -o BatchMode=yes -o ConnectTimeout=10 "$PG_SSH" \

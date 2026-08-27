@@ -6,10 +6,11 @@
 #
 # Remote: REMOTE_HOST=deployer@192.168.20.23 WALG_PREFIX=wal-g-18 ./install.sh
 #
-# The target is deliberately NOT hardcoded to the production VM: 113 (.21) still
-# runs PG 17 and its own wal-g, and pointing this script at it would restart the
-# cluster. The blue/green target is 118 (.23) — see
-# docs/superpowers/specs/2026-08-06-pg18-blue-green-design.md.
+# The target is deliberately NOT hardcoded: this script restarts the cluster, so
+# running it against a live database is destructive. That mattered during the
+# blue/green upgrade, when 113 (.21, PG 17) was production and 118 (.23) was the
+# target; 113 was decommissioned on 2026-08-27 and 118 is now the only database
+# VM, but the argument for keeping the target explicit is unchanged.
 #
 # Required env vars:
 #   S3_ACCESS_KEY_ID      - Access key for the bucket (R2 API token or B2 keyID)

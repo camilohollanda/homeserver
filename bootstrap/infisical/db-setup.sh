@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Runs on the postgres VM as root.
-# Remote: REMOTE_HOST=deployer@192.168.20.21 ./db-setup.sh
+# Remote: REMOTE_HOST=deployer@192.168.20.23 ./db-setup.sh
 #
 # Required env vars:
 #   DB_NAME     - Database name (default: infisical)

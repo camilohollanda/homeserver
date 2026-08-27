@@ -13,23 +13,16 @@ locals {
     tags      = "k3s,apps"
   }
 
-  db_vm = {
-    name      = "db-postgres"
-    vmid      = 113
-    ip_cidr   = "192.168.20.21/24"
-    cores     = 4
-    memory_mb = 8192
-    disk_size = 20 # OS disk only - data disk (60GB) managed manually in Proxmox
-    tags      = "db,postgres"
-  }
-
-  # PostgreSQL 18 — target of the blue/green upgrade.
-  # Runs alongside db_vm (113) for the duration of the migration. This address is
-  # permanent and the two VMs keep their own: the cutover moves one app at a time
-  # by repointing its DATABASE_URL, so both clusters must stay addressable
-  # throughout. (A single DNS flip was considered and dropped — it is atomic and
-  # global, which rules out migrating one database at a time and makes rollback
-  # wait on TTL expiry.)
+  # PostgreSQL 18 — the only database host. It was the green side of the
+  # blue/green upgrade from VM 113 (db-postgres, PG 17, 192.168.20.21), which was
+  # decommissioned on 2026-08-27 once every app had moved.
+  #
+  # It keeps .23 rather than inheriting .21: the cutover moved one app at a time
+  # by repointing its own DATABASE_URL, so both clusters had to stay addressable
+  # under their own addresses throughout. (A single DNS flip was considered and
+  # dropped — atomic and global, it rules out migrating one database at a time
+  # and makes rollback wait on TTL expiry.) Nothing points at .21 any more; see
+  # the `pg` record in cloudflare-dns.tf.
   db_vm_18 = {
     name      = "db-postgres-18"
     vmid      = 118

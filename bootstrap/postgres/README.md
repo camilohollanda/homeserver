@@ -3,6 +3,14 @@
 Cloud-init only preps the OS. PostgreSQL itself is installed by
 `bootstrap/postgres/setup.sh`, run from your machine.
 
+> **Migration complete — 2026-08-27.** There is now one database VM: **118**
+> (`.23`, PG 18), which every command in this README assumes. VM 113 (`.21`,
+> PG 17) was destroyed once all 11 connection strings had moved. The paragraphs
+> below describe the two-VM period and are kept for the record.
+>
+> <details>
+> <summary>How it read during the migration</summary>
+>
 > **Two VMs during the PG 18 migration.** 113 (`.21`, PG 17) is production; 118
 > (`.23`, PG 18) is the blue/green target. The commands in this README assume
 > **118** — running them against 113 restarts the production database.
@@ -16,12 +24,16 @@ Cloud-init only preps the OS. PostgreSQL itself is installed by
 >
 > After migrating an app, set `ALTER DATABASE <db> CONNECTION LIMIT 0` on 113 so
 > a stale config cannot silently write to the abandoned copy.
+>
+> </details>
 
 ## Architecture
 
 - **OS Disk**: 20GB on SSD (local-lvm) - managed by Terraform
 - **Data Disk**: 60GB on SSD (local-lvm) - managed manually in Proxmox for persistence
-- **Hostname**: `pg18` on VM 118 (113 uses `pg`, reachable as `pg.local` via Avahi)
+- **Hostname**: `pg18` on VM 118. No mDNS — reach it at
+  `pg18.internal.prakash.com.br` or 192.168.20.23. (VM 113 used `pg` and
+  answered to `pg.local` via Avahi; it was decommissioned 2026-08-27.)
 
 ## Data Disk Setup
 
@@ -176,6 +188,12 @@ gunzip -c /tmp/pg_backup_*.sql.gz | sudo -u postgres psql
 ```
 
 ## Avahi/mDNS Setup
+
+> **Correction — 2026-08-27.** This was done on VM 113 only. VM 118 does **not**
+> run Avahi and is not discoverable over mDNS — `pg.local` and `pg18.local`
+> both resolve to nothing. Use DNS (`pg18.internal.prakash.com.br`, managed in
+> `terraform/cloudflare-dns.tf`). The steps below are kept in case a future host
+> wants mDNS again.
 
 To make the VM discoverable as `pg.local`:
 

@@ -13,14 +13,21 @@ A new piece of infra usually lives in exactly one of these, not multiple.
 | vmid | name            | IP             | role                                                            |
 |------|-----------------|----------------|-----------------------------------------------------------------|
 | 112  | k3s-apps        | 192.168.20.11  | K3s single-node cluster (apps, ingress-nginx, Argo CD, ESO).    |
-| 113  | db-postgres     | 192.168.20.21  | PostgreSQL 17 (mDNS: `pg.local`). Source of the blue/green upgrade. |
 | 114  | infisical *     | 192.168.20.22  | **Services VM** — see below.                                    |
-| 115  | ai-gpu          | 192.168.20.30  | Whisper + Ollama. GPU passthrough.                              |
+| 115  | ai-gpu          | 192.168.20.30  | Whisper + Ollama. GPU passthrough. OS disk on `tank-vm` (HDD).   |
 | 116  | media-server    | 192.168.20.40  | Jellyfin / *arr stack (local nginx proxy, no TLS).              |
 | 117  | gh-runners      | 192.168.20.50  | Self-hosted GitHub Actions runners.                             |
-| 118  | db-postgres-18  | 192.168.20.23  | PostgreSQL 18 — upgrade target. Apps move over one DATABASE_URL at a time. |
+| 118  | db-postgres-18  | 192.168.20.23  | PostgreSQL 18 — the only database host. `pg18.internal.prakash.com.br`. |
 
 \* Terraform still calls VM 114 `infisical` for legacy reasons; in practice it's a multi-tenant **services VM** hosting Infisical, Garage, Mailpit, … behind a shared nginx.
+
+**Decommissioned:** VM 113 (`db-postgres`, 192.168.20.21, PostgreSQL 17, mDNS
+`pg.local`) was the blue side of the PG 17 → 18 upgrade and was destroyed on
+2026-08-27, once all 11 connection strings had moved to 118. Nothing answers on
+`.21` or `pg.local` any more — **there is no mDNS name for the database now**;
+118 does not run Avahi. Reach it by DNS: `pg18.internal.prakash.com.br`, and
+`pg.internal.prakash.com.br` once `terraform apply` lands the repoint. VM 119
+(`forgejo`, 192.168.20.24) is likewise gone.
 
 ## Services VM (114) — the pattern to copy
 
