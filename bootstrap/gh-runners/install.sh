@@ -493,6 +493,27 @@ exec ./run.sh --jitconfig "$JIT"
 RUN
 chmod 755 /usr/local/sbin/gh-runner-run-instance
 
+cat > /usr/local/sbin/gh-runner-clean-workspace <<'CLEANWORK'
+#!/usr/bin/env bash
+# A JIT runner handles exactly one job. Remove that job's workspace before the
+# next registration is minted so checkouts, build outputs and RUNNER_TEMP do
+# not accumulate across otherwise-ephemeral runner processes.
+set -euo pipefail
+INSTANCE_NAME="${1:?instance name required}"
+WORK_DIR="/opt/runners/${INSTANCE_NAME}/_work"
+
+[[ -d "/opt/runners/${INSTANCE_NAME}" ]] || {
+  echo "missing instance dir: /opt/runners/${INSTANCE_NAME}" >&2
+  exit 1
+}
+
+if [[ -d "$WORK_DIR" ]]; then
+  find "$WORK_DIR" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+fi
+install -d -m 0755 -o runner -g runner "$WORK_DIR"
+CLEANWORK
+chmod 755 /usr/local/sbin/gh-runner-clean-workspace
+
 # ---------------------------------------------------------------------------
 # Persisted env + private key
 # ---------------------------------------------------------------------------
@@ -550,6 +571,9 @@ Environment=RUNNER_TOOL_CACHE=/opt/runner-tool-cache
 # workflow-side opt-in.
 EnvironmentFile=/etc/gh-runners/env
 EnvironmentFile=/etc/gh-runners/instances/%i.env
+# Run as root (the `+` prefix) because Docker jobs can leave root-owned files
+# in _work. The previous JIT process has exited before systemd reaches this.
+ExecStartPre=+/usr/local/sbin/gh-runner-clean-workspace %i
 ExecStart=/usr/local/sbin/gh-runner-run-instance %i
 Restart=always
 RestartSec=10
@@ -593,13 +617,18 @@ log() { echo "[docker-prune] $*"; }
 #    container older than REAP_AGE_H hours is an orphaned compose stack from a
 #    job that never ran `docker compose down`; its anonymous volume stays
 #    pinned (and invisible to volume-prune) until the container is gone.
-#    Skip buildx's persistent BuildKit builders — buildx reuses them across
-#    jobs and recreates on demand, so reaping them just throws away warm cache.
+#    BuildKit containers are treated the same way: an active build is younger
+#    than the age gate, while a leaked builder from an interrupted job must not
+#    pin its named state volume forever.
 REAP_AGE_H="${REAP_AGE_H:-12}"
 now="$(date +%s)"
 for cid in $(docker ps -aq); do
   name="$(docker inspect -f '{{.Name}}' "$cid" 2>/dev/null | sed 's#^/##')"
-  case "$name" in buildx_buildkit_*) continue ;; esac
+  # Long-lived sidecars on this shared Docker host opt out explicitly. The
+  # Forgejo act_runner uses this label; without it the age-based CI cleanup
+  # would delete its healthy daemon after 12 hours.
+  keep="$(docker inspect -f '{{index .Config.Labels "homeserver.keep"}}' "$cid" 2>/dev/null)"
+  [ "$keep" = "true" ] && continue
   created="$(docker inspect -f '{{.Created}}' "$cid" 2>/dev/null)"
   created_epoch="$(date -d "$created" +%s 2>/dev/null || echo 0)"
   [ "$created_epoch" -gt 0 ] || continue
@@ -610,9 +639,9 @@ for cid in $(docker ps -aq); do
 done
 
 # 2. Stopped containers, unused images, build cache. `until=24h` IS valid and
-#    correct on these (keeps the last day warm for cache hits). buildx's own
-#    cache lives inside the builder containers, invisible to `docker builder
-#    prune`, so prune it explicitly too.
+#    correct on these (keeps the last day warm for cache hits). `buildx prune`
+#    only sees the selected builder; the targeted named-volume pass below is
+#    what catches state left by job-scoped builders whose DOCKER_CONFIG is gone.
 docker container prune -f --filter until=24h || true
 docker image prune -af --filter until=24h || true
 docker builder prune -af --filter until=24h || true
@@ -621,6 +650,22 @@ docker buildx prune -af --filter until=24h 2>/dev/null || true
 # 3. Detached anonymous volumes — NO `until` (engine rejects it). This is the
 #    step the old broken command never reached.
 docker volume prune -f || true
+
+# 4. setup-buildx names its BuildKit state volumes. Plain `volume prune` keeps
+#    named volumes, so job-scoped builders used to leak gigabytes forever after
+#    their temporary DOCKER_CONFIG disappeared. Remove only unattached BuildKit
+#    state older than the race-safety window; other named volumes are untouched.
+BUILDX_VOLUME_AGE_H="${BUILDX_VOLUME_AGE_H:-2}"
+for volume in $(docker volume ls --format '{{.Name}}' | grep -E '^buildx_buildkit_.*_state$' || true); do
+  [[ -z "$(docker ps -aq --filter "volume=${volume}")" ]] || continue
+  created="$(docker volume inspect -f '{{.CreatedAt}}' "$volume" 2>/dev/null)"
+  created_epoch="$(date -d "$created" +%s 2>/dev/null || echo 0)"
+  [[ "$created_epoch" -gt 0 ]] || continue
+  if (( (now - created_epoch) / 3600 >= BUILDX_VOLUME_AGE_H )); then
+    log "removing detached BuildKit state volume ${volume}"
+    docker volume rm "$volume" >/dev/null 2>&1 || true
+  fi
+done
 
 log "done; root fs now $(df -h / | awk 'NR==2 {print $5" used, "$4" free"}')"
 PRUNE
@@ -650,27 +695,27 @@ Persistent=true
 WantedBy=timers.target
 PRUNETIMER
 
-# High-water safety net: a single runaway job can leak volumes faster than the
-# daily timer fires (35G in the incident), so check every 30 min and prune
-# early if the root fs crosses 80%. Cheap no-op when there's nothing to do.
+# High-water safety net: a single image build wrote the last 10G in under 30
+# minutes during the 2026-08-26 incident. Check every five minutes and prune at
+# 70%, leaving enough headroom for one in-flight build. Cheap no-op otherwise.
 cat > /etc/systemd/system/docker-prune-highwater.service <<'HWSVC'
 [Unit]
-Description=Trigger Docker prune when gh-runners root fs exceeds 80%
+Description=Trigger Docker prune when gh-runners root fs reaches 70%
 After=docker.service
 Requires=docker.service
 
 [Service]
 Type=oneshot
-ExecStart=/bin/sh -c 'u=$(df --output=pcent / | tr -dc 0-9); [ "$u" -ge 80 ] && systemctl start docker-prune.service || true'
+ExecStart=/bin/sh -c 'u=$(df --output=pcent / | tr -dc 0-9); [ "$u" -ge 70 ] && systemctl start docker-prune.service || true'
 HWSVC
 
 cat > /etc/systemd/system/docker-prune-highwater.timer <<'HWTIMER'
 [Unit]
-Description=Check gh-runners disk high-water every 30 min
+Description=Check gh-runners disk high-water every 5 min
 
 [Timer]
-OnBootSec=10min
-OnUnitActiveSec=30min
+OnBootSec=5min
+OnUnitActiveSec=5min
 
 [Install]
 WantedBy=timers.target

@@ -22,11 +22,13 @@
 # Optional knobs:
 #   GHA_CACHE_DOMAIN       - default: gha-cache.internal.prakash.com.br
 #   GHA_CACHE_SSH          - default: deployer@192.168.20.22
-#   GHA_CACHE_VERSION      - default: 9.4.7
+#   GHA_CACHE_VERSION      - default: 9.7.0
 #   GHA_CACHE_PORT         - default: 3000 (loopback, fronted by shared nginx)
 #   GHA_CACHE_S3_ENDPOINT  - default: https://garage.internal.prakash.com.br
 #   GHA_CACHE_S3_REGION    - default: garage
+#   GHA_CACHE_S3_SOCKET_TIMEOUT_MS - default: 30000
 #   GHA_CACHE_CLEANUP_DAYS - default: 14
+#   GHA_CACHE_MAX_SIZE_BYTES - default: 214748364800 (200 GiB)
 #   SKIP_GARAGE=1          - Skip auto-provisioning the Garage bucket+key
 #                            (use when bringing your own S3 backend)
 set -euo pipefail
@@ -51,12 +53,14 @@ wait_ssh() {
 }
 GHA_CACHE_SSH="${GHA_CACHE_SSH:-deployer@192.168.20.22}"
 export GHA_CACHE_DOMAIN="${GHA_CACHE_DOMAIN:-gha-cache.internal.prakash.com.br}"
-export GHA_CACHE_VERSION="${GHA_CACHE_VERSION:-9.4.7}"
+export GHA_CACHE_VERSION="${GHA_CACHE_VERSION:-9.7.0}"
 export GHA_CACHE_PORT="${GHA_CACHE_PORT:-3000}"
 export GHA_CACHE_S3_ENDPOINT="${GHA_CACHE_S3_ENDPOINT:-https://garage.internal.prakash.com.br}"
 export GHA_CACHE_S3_REGION="${GHA_CACHE_S3_REGION:-garage}"
+export GHA_CACHE_S3_SOCKET_TIMEOUT_MS="${GHA_CACHE_S3_SOCKET_TIMEOUT_MS:-30000}"
 export GHA_CACHE_S3_BUCKET="${GHA_CACHE_S3_BUCKET:-gha-cache}"
 export GHA_CACHE_CLEANUP_DAYS="${GHA_CACHE_CLEANUP_DAYS:-14}"
+export GHA_CACHE_MAX_SIZE_BYTES="${GHA_CACHE_MAX_SIZE_BYTES:-214748364800}"
 export GHA_CACHE_MGMT_API_KEY="${GHA_CACHE_MGMT_API_KEY:-$(openssl rand -base64 32 | tr -d '=+/' | cut -c1-32)}"
 GHA_CACHE_S3_KEY_NAME="${GHA_CACHE_S3_KEY_NAME:-gha-cache-key}"
 
@@ -145,6 +149,7 @@ echo ""
 echo "  URL:               https://${GHA_CACHE_DOMAIN}/"
 echo "  Storage:           s3://${GHA_CACHE_S3_BUCKET} @ ${GHA_CACHE_S3_ENDPOINT}"
 echo "  Retention:         ${GHA_CACHE_CLEANUP_DAYS} days"
+echo "  Capacity cap:      ${GHA_CACHE_MAX_SIZE_BYTES} bytes"
 echo "  Management API:    https://${GHA_CACHE_DOMAIN}/management-api/_docs"
 echo ""
 echo "  Next: re-run bootstrap/gh-runners/setup.sh with"

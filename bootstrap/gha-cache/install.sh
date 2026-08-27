@@ -15,11 +15,13 @@
 #   GHA_CACHE_S3_SECRET   - Garage secret access key
 #
 # Optional env vars:
-#   GHA_CACHE_VERSION         - image tag (default: 9.4.7)
+#   GHA_CACHE_VERSION         - image tag (default: 9.7.0)
 #   GHA_CACHE_PORT            - loopback port (default: 3000)
 #   GHA_CACHE_S3_ENDPOINT     - S3 endpoint URL (default: https://garage.internal.prakash.com.br)
 #   GHA_CACHE_S3_REGION       - S3 region label (default: garage)
+#   GHA_CACHE_S3_SOCKET_TIMEOUT_MS - S3 inactivity timeout (default: 30000)
 #   GHA_CACHE_CLEANUP_DAYS    - cache TTL in days, 0 disables (default: 14)
+#   GHA_CACHE_MAX_SIZE_BYTES  - hard cache payload cap (default: 200 GiB)
 #   GHA_CACHE_MGMT_API_KEY    - random string to enable /management-api (default: unset → disabled)
 if [[ -n "${REMOTE_HOST:-}" ]]; then
   { printf 'export %s=%q\n' \
@@ -33,7 +35,9 @@ if [[ -n "${REMOTE_HOST:-}" ]]; then
       GHA_CACHE_PORT         "${GHA_CACHE_PORT:-}" \
       GHA_CACHE_S3_ENDPOINT  "${GHA_CACHE_S3_ENDPOINT:-}" \
       GHA_CACHE_S3_REGION    "${GHA_CACHE_S3_REGION:-}" \
+      GHA_CACHE_S3_SOCKET_TIMEOUT_MS "${GHA_CACHE_S3_SOCKET_TIMEOUT_MS:-}" \
       GHA_CACHE_CLEANUP_DAYS "${GHA_CACHE_CLEANUP_DAYS:-}" \
+      GHA_CACHE_MAX_SIZE_BYTES "${GHA_CACHE_MAX_SIZE_BYTES:-}" \
       GHA_CACHE_MGMT_API_KEY "${GHA_CACHE_MGMT_API_KEY:-}"
     cat "$0"
   } | ssh "$REMOTE_HOST" "sudo bash -s"
@@ -53,11 +57,13 @@ fi
 : "${GHA_CACHE_S3_KEY_ID:?must be set}"
 : "${GHA_CACHE_S3_SECRET:?must be set}"
 
-GHA_CACHE_VERSION="${GHA_CACHE_VERSION:-9.4.7}"
+GHA_CACHE_VERSION="${GHA_CACHE_VERSION:-9.7.0}"
 GHA_CACHE_PORT="${GHA_CACHE_PORT:-3000}"
 GHA_CACHE_S3_ENDPOINT="${GHA_CACHE_S3_ENDPOINT:-https://garage.internal.prakash.com.br}"
 GHA_CACHE_S3_REGION="${GHA_CACHE_S3_REGION:-garage}"
+GHA_CACHE_S3_SOCKET_TIMEOUT_MS="${GHA_CACHE_S3_SOCKET_TIMEOUT_MS:-30000}"
 GHA_CACHE_CLEANUP_DAYS="${GHA_CACHE_CLEANUP_DAYS:-14}"
+GHA_CACHE_MAX_SIZE_BYTES="${GHA_CACHE_MAX_SIZE_BYTES:-214748364800}"
 GHA_CACHE_MGMT_API_KEY="${GHA_CACHE_MGMT_API_KEY:-}"
 
 # ---------------------------------------------------------------------------
@@ -115,9 +121,11 @@ GHA_CACHE_S3_BUCKET=${GHA_CACHE_S3_BUCKET}
 GHA_CACHE_S3_ENDPOINT=${GHA_CACHE_S3_ENDPOINT}
 GHA_CACHE_S3_HOST=${GHA_CACHE_S3_HOST}
 GHA_CACHE_S3_REGION=${GHA_CACHE_S3_REGION}
+GHA_CACHE_S3_SOCKET_TIMEOUT_MS=${GHA_CACHE_S3_SOCKET_TIMEOUT_MS}
 GHA_CACHE_S3_KEY_ID=${GHA_CACHE_S3_KEY_ID}
 GHA_CACHE_S3_SECRET=${GHA_CACHE_S3_SECRET}
 GHA_CACHE_CLEANUP_DAYS=${GHA_CACHE_CLEANUP_DAYS}
+GHA_CACHE_MAX_SIZE_BYTES=${GHA_CACHE_MAX_SIZE_BYTES}
 GHA_CACHE_MGMT_API_KEY=${GHA_CACHE_MGMT_API_KEY}
 ENV
 chmod 600 /opt/gha-cache/.env
@@ -146,6 +154,7 @@ services:
       STORAGE_S3_BUCKET: ${GHA_CACHE_S3_BUCKET}
       AWS_ENDPOINT_URL: ${GHA_CACHE_S3_ENDPOINT}
       AWS_REGION: ${GHA_CACHE_S3_REGION}
+      STORAGE_S3_SOCKET_TIMEOUT_MS: ${GHA_CACHE_S3_SOCKET_TIMEOUT_MS}
       AWS_ACCESS_KEY_ID: ${GHA_CACHE_S3_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${GHA_CACHE_S3_SECRET}
       # AWS SDK v3 (>=3.729) added default CRC32 checksum validation on every
@@ -159,6 +168,7 @@ services:
       DB_DRIVER: sqlite
       DB_SQLITE_PATH: /data/cache-server.db
       CACHE_CLEANUP_OLDER_THAN_DAYS: ${GHA_CACHE_CLEANUP_DAYS}
+      CACHE_MAX_SIZE_BYTES: ${GHA_CACHE_MAX_SIZE_BYTES}
       MANAGEMENT_API_KEY: ${GHA_CACHE_MGMT_API_KEY}
     volumes:
       - /opt/gha-cache/data:/data
@@ -256,6 +266,7 @@ echo "✓ gha-cache is running."
 echo "  URL:            https://${GHA_CACHE_DOMAIN}/"
 echo "  Storage:        s3://${GHA_CACHE_S3_BUCKET} on ${GHA_CACHE_S3_ENDPOINT}"
 echo "  Retention:      ${GHA_CACHE_CLEANUP_DAYS} days"
+echo "  Capacity cap:   ${GHA_CACHE_MAX_SIZE_BYTES} bytes"
 if [[ -n "$GHA_CACHE_MGMT_API_KEY" ]]; then
   echo "  Management API: https://${GHA_CACHE_DOMAIN}/management-api/_docs"
 fi
