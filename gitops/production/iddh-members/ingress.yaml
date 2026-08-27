@@ -3,10 +3,55 @@ kind: Ingress
 metadata:
   name: iddh-members
   namespace: iddh-members-production
+# One Phoenix deployment serves every host under iddh.com.br; the app decides
+# what to render from the request host (members repo, docs/host-topology.md):
+#
+#   membros.iddh.com.br  the members app
+#   iddh.com.br          the institutional site
+#   www.iddh.com.br      301 -> apex
+#   *.iddh.com.br        event vanity subdomains (simposio26.iddh.com.br), and
+#                        blog.iddh.com.br, which the app 301s to iddh.com.br/blog
+#
+# membros. keeps its own rule even though the wildcard would match it:
+# ingress-nginx prefers an exact host, and payment webhooks registered against
+# that hostname must keep resolving regardless of what the wildcard does.
+#
+# No `tls:` block on purpose — TLS terminates at the Cloudflare edge and
+# cloudflared forwards plain HTTP to ingress-nginx. See AGENTS.md, "Domains & TLS".
 spec:
   ingressClassName: nginx
   rules:
   - host: membros.iddh.com.br
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: iddh-members
+            port:
+              number: 4000
+  - host: iddh.com.br
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: iddh-members
+            port:
+              number: 4000
+  - host: www.iddh.com.br
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: iddh-members
+            port:
+              number: 4000
+  - host: "*.iddh.com.br"
     http:
       paths:
       - path: /
