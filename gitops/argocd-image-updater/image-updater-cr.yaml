@@ -14,12 +14,14 @@ spec:
     - namePattern: "iddh-members-production"
       images:
         - alias: members
-          # iddh-members CI mirrors werify: pushes immutable `main-<shortsha>`
-          # tags. Track those so the deploy notification carries the commit.
-          imageName: ghcr.io/iddh-com-br/members
+          # Mirrors werify-production: CI moves :main only after a successful build, so digest
+          # tracking makes that environment tag the explicit promotion pointer and moving it back
+          # to an existing main-<shortsha> artifact performs a rollback without rebuilding.
+          # Unlike newest-build, this never infers deploy order from the image's cache-sensitive
+          # internal creation timestamp.
+          imageName: ghcr.io/iddh-com-br/members:main
           commonUpdateSettings:
-            updateStrategy: newest-build
-            allowTags: "regexp:^main-[0-9a-f]{7,}$"
+            updateStrategy: digest
     - namePattern: "werify-production"
       images:
         - alias: werify
@@ -42,11 +44,11 @@ spec:
     - namePattern: "iddh-members-staging"
       images:
         - alias: iddh-members
-          # Mirror: track immutable `staging-<shortsha>` tags.
-          imageName: ghcr.io/iddh-com-br/members
+          # Mirror of iddh-members-production: CI (or the manual "Deploy members app" workflow)
+          # moves :staging to the desired immutable artifact; the digest change rolls it.
+          imageName: ghcr.io/iddh-com-br/members:staging
           commonUpdateSettings:
-            updateStrategy: newest-build
-            allowTags: "regexp:^staging-[0-9a-f]{7,}$"
+            updateStrategy: digest
     - namePattern: "werify-connector-production"
       images:
         - alias: connector
