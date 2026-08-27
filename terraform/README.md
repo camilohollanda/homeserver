@@ -208,6 +208,70 @@ SERVFAIL for ~30 min** while resolvers holding the cached "this zone is
 insecure" proof drain. Genuine breakage looks different: deterministic
 SERVFAIL everywhere, `ad` never appearing.
 
+### Importing the iddh.com.br apex — one record imported, three still to delete
+
+`iddh.com.br` and `www.iddh.com.br` predate Terraform: both were created by
+hand and still point at Hostinger, where the legacy WordPress site runs. They
+are in `local.public_tunnel_records` ahead of the cutover (members repo,
+`docs/host-topology.md`) and were brought into state with:
+
+```bash
+# zone id = cloudflare_zone_ids.iddh_com_br
+terraform import 'cloudflare_dns_record.public_tunnel["iddh_www"]'  '97aee423b42fbbeaebd6d2ad331d06ca/98da5f2be4fc4b77af2847af9ef0f2a5'
+terraform import 'cloudflare_dns_record.public_tunnel["iddh_apex"]' '97aee423b42fbbeaebd6d2ad331d06ca/da50dc780ecd209150db96aebfc194eb'
+```
+
+`www` is clean — one CNAME in, one CNAME out, so the plan is an in-place
+`content` change.
+
+**The apex is not.** It is served by *four* records, not one:
+
+| id | type | content |
+|---|---|---|
+| `da50dc780ecd209150db96aebfc194eb` | A | `147.79.79.77` — **imported** |
+| `2fa05c8a161dea56e41d2eea604002f1` | A | `147.79.72.227` |
+| `0b3347e160ef7f8e6dc81caee70e5fdc` | AAAA | `2a02:4780:4d:e625:aca6:2684:3cba:3376` |
+| `592f241e7d6955b71028a516d38bc048` | AAAA | `2a02:4780:4a:3425:b12:ca8a:c25c:37e2` |
+
+`cloudflare_dns_record.public_tunnel["iddh_apex"]` is a single resource, so
+only the first could be imported. The other three are invisible to Terraform,
+and **`terraform apply` will fail while they exist**: the plan replaces the
+imported A record with a CNAME, and Cloudflare refuses a CNAME that coexists
+with other records at the same name. Delete them immediately before the apply:
+
+```bash
+ZONE=97aee423b42fbbeaebd6d2ad331d06ca
+for REC in 2fa05c8a161dea56e41d2eea604002f1 \
+           0b3347e160ef7f8e6dc81caee70e5fdc \
+           592f241e7d6955b71028a516d38bc048; do
+  curl -sS -X DELETE -H "Authorization: Bearer $TF_VAR_cloudflare_api_token" \
+    "https://api.cloudflare.com/client/v4/zones/$ZONE/dns_records/$REC"
+done
+```
+
+This is the point of no return for the apex: between the deletion and the
+apply, `iddh.com.br` resolves to a single Hostinger IP, and after the apply it
+resolves to the tunnel. Do not run it before the app is ready to serve the apex
+(the ingress rules and the tunnel routes are the safe half of this change — they
+can land days earlier and change nothing on their own).
+
+The expected plan, scoped so it does not refresh Proxmox:
+
+```bash
+terraform plan -target='cloudflare_dns_record.public_tunnel' \
+               -target='cloudflare_zero_trust_tunnel_cloudflared_config.homeserver'
+# iddh_apex     must be replaced  (type A -> CNAME forces replacement)
+# iddh_www      updated in-place  (content -> <tunnel>.cfargotunnel.com)
+# iddh_wildcard created
+# tunnel config updated in-place  (3 new ingress hostnames)
+```
+
+MX, SPF and the Google verification TXT records at the apex are untouched —
+mail stays on Hostinger, and a wildcard CNAME does not shadow them. Before the
+wildcard lands, check the zone for any other subdomain that must keep resolving
+to Hostinger (`webmail`, `autodiscover`, `cpanel`): explicit records win over a
+wildcard, so the fix is to make sure they exist explicitly.
+
 ### Token model — two tokens, different scopes
 
 Cloudflare access is split across two tokens. The split is intentional —

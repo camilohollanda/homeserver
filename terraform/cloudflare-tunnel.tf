@@ -28,6 +28,17 @@ locals {
     { hostname = "*.prakash.com.br", service = local.ingress_nginx_origin },
     { hostname = "prakash.com.br", service = local.ingress_nginx_origin },
     { hostname = "membros.iddh.com.br", service = local.ingress_nginx_origin },
+
+    # iddh.com.br moves off Hostinger and onto the app (see the members repo,
+    # docs/host-topology.md). One Phoenix deployment serves all of these:
+    # the apex is the institutional site, membros. the members app, and the
+    # wildcard covers the event vanity subdomains (simposio26.iddh.com.br),
+    # which have never resolved in production. The explicit membros. entry
+    # stays ABOVE the wildcard — cloudflared matches in order.
+    { hostname = "iddh.com.br", service = local.ingress_nginx_origin },
+    { hostname = "www.iddh.com.br", service = local.ingress_nginx_origin },
+    { hostname = "*.iddh.com.br", service = local.ingress_nginx_origin },
+
     { service = "http_status:404" },
   ]
 }
