@@ -22,10 +22,17 @@ spec:
     spec:
       containers:
       - name: bugsink
-        # Personal fork built from camilohollanda/bugsink:homeserver-build, which
-        # carries the /envelope/ + /store/ JsonResponse fix (PR bugsink/bugsink#396).
-        # Revert to bugsink/bugsink:latest once #396 merges and is released.
-        image: ghcr.io/camilohollanda/bugsink:homeserver-build-c527a07
+        # Official image. The fork existed to carry PR bugsink/bugsink#396 (the
+        # /envelope/ + /store/ JsonResponse fix) before it was upstream; #396
+        # merged on 2026-06-04 and shipped in 2.3.0, so the fork has nothing left
+        # to add. Its build workflow also tracked the fork's main rather than the
+        # commit it was tagged from, which is how a tag named after a June commit
+        # ended up serving code from 2026-05-13 -- older than #396 itself.
+        #
+        # Pinned, not :latest. ArgoCD syncs this path with selfHeal, so a floating
+        # tag would make what runs depend on when a pod last restarted instead of
+        # on what is in git.
+        image: bugsink/bugsink:2.5.0
         ports:
         - containerPort: 8000
           name: http
