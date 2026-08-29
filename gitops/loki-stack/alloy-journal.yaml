@@ -1,0 +1,134 @@
+# Node log collection (systemd journal): kubelet/containerd via k3s.service,
+# plus kernel messages — the OOM killer, segfaults, disk errors.
+#
+# Why this is not another promtail scrape job: the official grafana/promtail
+# image is built with `-tags=netgo` only, so the journal reader is compiled
+# out and a `journal:` scrape config makes promtail exit at startup. The
+# grafana/alloy image is built with `promtail_journal_enabled` (verified on
+# both amd64 and arm64), so journal collection lives here while pod logs stay
+# on promtail. Both push to the same Loki.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alloy-journal-config
+  namespace: loki
+data:
+  config.alloy: |
+    // Journal fields arrive as __journal_<field>, lowercased, with the
+    // field's own leading underscore kept — so _SYSTEMD_UNIT becomes
+    // __journal__systemd_unit.
+    loki.relabel "journal" {
+      forward_to = []
+
+      rule {
+        source_labels = ["__journal__systemd_unit"]
+        target_label  = "unit"
+      }
+
+      rule {
+        source_labels = ["__journal__transport"]
+        target_label  = "transport"
+      }
+
+      rule {
+        source_labels = ["__journal_priority_keyword"]
+        target_label  = "level"
+      }
+
+      rule {
+        source_labels = ["__journal__hostname"]
+        target_label  = "node"
+      }
+    }
+
+    loki.source.journal "node" {
+      path          = "/var/log/journal"
+      // On a first start (or after the cursor is lost) this bounds the
+      // backfill; steady state resumes from the cursor in --storage.path.
+      max_age       = "12h"
+      relabel_rules = loki.relabel.journal.rules
+      forward_to    = [loki.write.default.receiver]
+
+      labels = {
+        job = "systemd-journal",
+      }
+    }
+
+    loki.write "default" {
+      endpoint {
+        url = "http://loki:3100/loki/api/v1/push"
+      }
+    }
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: alloy-journal
+  namespace: loki
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  selector:
+    matchLabels:
+      app: alloy-journal
+  template:
+    metadata:
+      labels:
+        app: alloy-journal
+    spec:
+      containers:
+        - name: alloy
+          image: grafana/alloy:v1.19.2
+          args:
+            - run
+            - /etc/alloy/config.alloy
+            - --storage.path=/var/lib/alloy/data
+            - --server.http.listen-addr=0.0.0.0:12345
+          ports:
+            - containerPort: 12345
+              name: http
+          volumeMounts:
+            - name: config
+              mountPath: /etc/alloy
+            - name: journal
+              mountPath: /var/log/journal
+              readOnly: true
+            # sd-journal resolves the per-machine journal directory through
+            # this file; without it the reader finds no journal to open.
+            - name: machine-id
+              mountPath: /etc/machine-id
+              readOnly: true
+            - name: data
+              mountPath: /var/lib/alloy/data
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+      volumes:
+        - name: config
+          configMap:
+            name: alloy-journal-config
+        - name: journal
+          hostPath:
+            path: /var/log/journal
+            type: Directory
+        - name: machine-id
+          hostPath:
+            path: /etc/machine-id
+            type: File
+        # Persists the journal cursor across restarts, so a restarted pod
+        # resumes instead of re-ingesting up to max_age of duplicates.
+        - name: data
+          hostPath:
+            path: /var/lib/alloy-journal
+            type: DirectoryOrCreate
+        - name: tmp
+          emptyDir: {}
