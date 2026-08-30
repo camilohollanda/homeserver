@@ -47,12 +47,19 @@ spec:
         - name: alerting
           mountPath: /etc/grafana/provisioning/alerting
           readOnly: true
+        # 512Mi was set in January and stopped being enough somewhere around
+        # Grafana 13. The working set peaked at 504Mi on 2026-08-26 and 492Mi on
+        # 2026-08-30 against that ceiling, OOMKilling the pod five times in the
+        # eight days to 2026-08-30. 1Gi is roughly twice the observed peak.
+        # Note this drifts on its own: the image is `latest` with pullPolicy
+        # Always, so every restart adopts whatever Grafana has published and the
+        # baseline creeps up with no commit here to point at.
         resources:
           requests:
-            memory: "256Mi"
+            memory: "512Mi"
             cpu: "100m"
           limits:
-            memory: "512Mi"
+            memory: "1Gi"
             cpu: "500m"
       volumes:
       - name: storage
