@@ -17,7 +17,15 @@ spec:
     spec:
       containers:
       - name: grafana
-        image: grafana/grafana:latest
+        # Pinned, like every other third-party image here. On `latest` this
+        # deployment silently adopted whatever Grafana had published on each
+        # restart, which is how the memory limit below went from comfortable in
+        # January to OOMKilling the pod five times in eight days without a
+        # commit in this repo to point at. `latest` also defaulted the pull
+        # policy to Always -- a pinned tag defaults to IfNotPresent, stated here
+        # rather than left implied.
+        image: grafana/grafana:13.2.0
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 3000
           name: http
