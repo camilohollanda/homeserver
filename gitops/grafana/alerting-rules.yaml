@@ -1,0 +1,319 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-alerting-rules
+  namespace: grafana
+data:
+  rules.yaml: |
+    apiVersion: 1
+
+    # One threshold per concern, not a warning and a critical tier for the same
+    # thing. Without an Alertmanager there is no inhibition, so a second tier
+    # would just page twice for one problem.
+    groups:
+      - orgId: 1
+        name: infra-memory-disk
+        folder: Provisioned
+        interval: 1m
+        rules:
+
+          # -- Host filesystems ---------------------------------------------
+          # efivarfs is excluded because /sys/firmware/efi/efivars sits at 60%
+          # permanently and means nothing. /tank* is excluded because df on a
+          # ZFS dataset reports that dataset's usage rather than the pool's --
+          # the pool is watched by the next rule, the only way that works.
+          - uid: infra-host-disk
+            title: Host filesystem nearly full
+            condition: B
+            for: 15m
+            labels: {severity: warning, apprise_type: warning}
+            annotations:
+              summary: '{{ $labels.host }} {{ $labels.mountpoint }} is {{ printf "%.0f" $values.B.Value }}% full'
+            noDataState: NoData
+            execErrState: Error
+            data:
+              - refId: A
+                relativeTimeRange: {from: 600, to: 0}
+                datasourceUid: victoria-metrics
+                model:
+                  refId: A
+                  editorMode: code
+                  instant: true
+                  expr: >-
+                    100 * (1 - node_filesystem_avail_bytes{fstype!~"tmpfs|devtmpfs|overlay|squashfs|efivarfs",mountpoint!~"/tank.*"}
+                    / node_filesystem_size_bytes{fstype!~"tmpfs|devtmpfs|overlay|squashfs|efivarfs",mountpoint!~"/tank.*"})
+              - refId: B
+                datasourceUid: __expr__
+                model:
+                  refId: B
+                  type: threshold
+                  expression: A
+                  conditions:
+                    - evaluator: {type: gt, params: [85]}
+
+          # -- ZFS pool ------------------------------------------------------
+          # Absolute bytes, never a percentage: `df /tank` reports ~1% used
+          # while the pool holds hundreds of gigabytes, because the VM zvols are
+          # sibling datasets. `avail` is the pool's real free space; `used` is
+          # not. 500Gi is the size of the largest current zvol
+          # (tank/vm-114-disk-0, 508G) -- below that, restoring that VM no
+          # longer fits.
+          - uid: infra-zfs-pool
+            title: ZFS pool low on free space
+            condition: B
+            for: 15m
+            labels: {severity: warning, apprise_type: warning}
+            annotations:
+              summary: 'tank has {{ humanize1024 $values.B.Value }}B free'
+            noDataState: NoData
+            execErrState: Error
+            data:
+              - refId: A
+                relativeTimeRange: {from: 600, to: 0}
+                datasourceUid: victoria-metrics
+                model:
+                  refId: A
+                  editorMode: code
+                  instant: true
+                  expr: 'node_filesystem_avail_bytes{host="proxmox",mountpoint="/tank"}'
+              - refId: B
+                datasourceUid: __expr__
+                model:
+                  refId: B
+                  type: threshold
+                  expression: A
+                  conditions:
+                    - evaluator: {type: lt, params: [536870912000]}
+
+          # -- Guest memory --------------------------------------------------
+          # proxmox is excluded here and covered by the next rule instead.
+          - uid: infra-host-mem
+            title: Host memory nearly exhausted
+            condition: B
+            for: 15m
+            labels: {severity: warning, apprise_type: warning}
+            annotations:
+              summary: '{{ $labels.host }} is using {{ printf "%.0f" $values.B.Value }}% of its memory'
+            noDataState: NoData
+            execErrState: Error
+            data:
+              - refId: A
+                relativeTimeRange: {from: 600, to: 0}
+                datasourceUid: victoria-metrics
+                model:
+                  refId: A
+                  editorMode: code
+                  instant: true
+                  expr: >-
+                    100 * (1 - node_memory_MemAvailable_bytes{host!="proxmox"}
+                    / node_memory_MemTotal_bytes{host!="proxmox"})
+              - refId: B
+                datasourceUid: __expr__
+                model:
+                  refId: B
+                  type: threshold
+                  expression: A
+                  conditions:
+                    - evaluator: {type: gt, params: [90]}
+
+          # -- Hypervisor memory ---------------------------------------------
+          # The ARC is not counted as reclaimable in MemAvailable on this host:
+          # measured 26.6 GB available of 135.0 GB with 13.3 GB in ARC. Adding
+          # it back moves the host from a permanent 80% to 70%. Without this
+          # correction the rule crosses 90% as soon as the ARC grows -- an alert
+          # that fires on its own and teaches you to ignore it. The ARC shrinks
+          # under memory pressure, so counting it as available is correct.
+          - uid: infra-proxmox-mem
+            title: Hypervisor memory nearly exhausted
+            condition: B
+            for: 15m
+            labels: {severity: warning, apprise_type: warning}
+            annotations:
+              summary: 'proxmox is using {{ printf "%.0f" $values.B.Value }}% of its memory, ARC excluded'
+            noDataState: NoData
+            execErrState: Error
+            data:
+              - refId: A
+                relativeTimeRange: {from: 600, to: 0}
+                datasourceUid: victoria-metrics
+                model:
+                  refId: A
+                  editorMode: code
+                  instant: true
+                  expr: >-
+                    100 * (1 - (node_memory_MemAvailable_bytes{host="proxmox"} + node_zfs_arc_size)
+                    / node_memory_MemTotal_bytes{host="proxmox"})
+              - refId: B
+                datasourceUid: __expr__
+                model:
+                  refId: B
+                  type: threshold
+                  expression: A
+                  conditions:
+                    - evaluator: {type: gt, params: [90]}
+
+          # -- Containers ----------------------------------------------------
+          # The `> 0` on the denominator is load-bearing:
+          # container_spec_memory_limit_bytes is 0 for a container with no
+          # limit, the division yields +Inf, and +Inf passes any threshold.
+          # Without it every unlimited pod alerts forever.
+          #
+          # This complements pod-notify rather than duplicating it: pod-notify
+          # fires after the OOM kill, reading restartCount and
+          # lastState.terminated.reason. This fires before it.
+          - uid: infra-pod-mem
+            title: Container approaching its memory limit
+            condition: B
+            for: 10m
+            labels: {severity: warning, apprise_type: warning}
+            annotations:
+              summary: '{{ $labels.namespace }}/{{ $labels.pod }} is at {{ printf "%.0f" $values.B.Value }}% of its memory limit'
+            noDataState: NoData
+            execErrState: Error
+            data:
+              - refId: A
+                relativeTimeRange: {from: 600, to: 0}
+                datasourceUid: victoria-metrics
+                model:
+                  refId: A
+                  editorMode: code
+                  instant: true
+                  expr: >-
+                    100 * container_memory_working_set_bytes{container!=""}
+                    / (container_spec_memory_limit_bytes{container!=""} > 0)
+              - refId: B
+                datasourceUid: __expr__
+                model:
+                  refId: B
+                  type: threshold
+                  expression: A
+                  conditions:
+                    - evaluator: {type: gt, params: [90]}
+
+          # -- PersistentVolumeClaims ----------------------------------------
+          # Already in the TSDB from the kubelet job -- this only ever needed a
+          # rule. Watches the victoria-metrics PVC too, which is the store these
+          # alerts are evaluated against.
+          - uid: infra-pvc-full
+            title: PVC nearly full
+            condition: B
+            for: 15m
+            labels: {severity: warning, apprise_type: warning}
+            annotations:
+              summary: '{{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} is {{ printf "%.0f" $values.B.Value }}% full'
+            noDataState: NoData
+            execErrState: Error
+            data:
+              - refId: A
+                relativeTimeRange: {from: 600, to: 0}
+                datasourceUid: victoria-metrics
+                model:
+                  refId: A
+                  editorMode: code
+                  instant: true
+                  expr: >-
+                    100 * (1 - kubelet_volume_stats_available_bytes
+                    / kubelet_volume_stats_capacity_bytes)
+              - refId: B
+                datasourceUid: __expr__
+                model:
+                  refId: B
+                  type: threshold
+                  expression: A
+                  conditions:
+                    - evaluator: {type: gt, params: [85]}
+
+          # -- LVM thin pool -------------------------------------------------
+          # node_exporter has no LVM collector and a thin pool has no mounted
+          # filesystem, so the host-filesystem rule cannot see pve/data -- the
+          # pool backing the disks of VMs 112, 117 and 118. The metric comes
+          # from the textfile collector in bootstrap/node-exporter/.
+          - uid: infra-thinpool-data
+            title: LVM thin pool nearly full
+            condition: B
+            for: 15m
+            labels: {severity: warning, apprise_type: warning}
+            annotations:
+              summary: 'thin pool {{ $labels.vg }}/{{ $labels.lv }} is {{ printf "%.0f" $values.B.Value }}% full'
+            noDataState: NoData
+            execErrState: Error
+            data:
+              - refId: A
+                relativeTimeRange: {from: 600, to: 0}
+                datasourceUid: victoria-metrics
+                model:
+                  refId: A
+                  editorMode: code
+                  instant: true
+                  expr: 'node_lvm_thinpool_data_percent'
+              - refId: B
+                datasourceUid: __expr__
+                model:
+                  refId: B
+                  type: threshold
+                  expression: A
+                  conditions:
+                    - evaluator: {type: gt, params: [85]}
+
+          # Metadata exhaustion is a separate road to the same wreck: the pool
+          # stops accepting writes even with data space free, so it gets its own
+          # threshold rather than being folded into the rule above.
+          - uid: infra-thinpool-meta
+            title: LVM thin pool metadata nearly full
+            condition: B
+            for: 15m
+            labels: {severity: warning, apprise_type: warning}
+            annotations:
+              summary: 'thin pool {{ $labels.vg }}/{{ $labels.lv }} metadata is {{ printf "%.0f" $values.B.Value }}% full'
+            noDataState: NoData
+            execErrState: Error
+            data:
+              - refId: A
+                relativeTimeRange: {from: 600, to: 0}
+                datasourceUid: victoria-metrics
+                model:
+                  refId: A
+                  editorMode: code
+                  instant: true
+                  expr: 'node_lvm_thinpool_meta_percent'
+              - refId: B
+                datasourceUid: __expr__
+                model:
+                  refId: B
+                  type: threshold
+                  expression: A
+                  conditions:
+                    - evaluator: {type: gt, params: [80]}
+
+          # -- The monitoring itself -----------------------------------------
+          # Without this a dead exporter presents as "no alerts", which is
+          # indistinguishable from "everything is fine". It is the only rule
+          # here that detects a failure of the monitoring itself -- and it only
+          # covers targets already listed in the scrape config, so adding a VM
+          # means adding it there too.
+          - uid: infra-node-exporter-down
+            title: node_exporter not responding
+            condition: B
+            for: 10m
+            labels: {severity: warning, apprise_type: failure}
+            annotations:
+              summary: 'node_exporter on {{ $labels.host }} has been unreachable for 10 minutes'
+            noDataState: Alerting
+            execErrState: Error
+            data:
+              - refId: A
+                relativeTimeRange: {from: 600, to: 0}
+                datasourceUid: victoria-metrics
+                model:
+                  refId: A
+                  editorMode: code
+                  instant: true
+                  expr: 'up{job="node-exporter"}'
+              - refId: B
+                datasourceUid: __expr__
+                model:
+                  refId: B
+                  type: threshold
+                  expression: A
+                  conditions:
+                    - evaluator: {type: lt, params: [1]}

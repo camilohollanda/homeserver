@@ -44,6 +44,9 @@ spec:
         - name: dashboards
           mountPath: /var/lib/grafana/dashboards
           readOnly: true
+        - name: alerting
+          mountPath: /etc/grafana/provisioning/alerting
+          readOnly: true
         resources:
           requests:
             memory: "256Mi"
@@ -64,6 +67,16 @@ spec:
       - name: dashboards
         configMap:
           name: grafana-dashboards
+      # Contact point and rules are separate ConfigMaps -- they have different
+      # lifecycles and the contact point is verifiable on its own -- but Grafana
+      # expects one provisioning directory, so they are projected together.
+      - name: alerting
+        projected:
+          sources:
+            - configMap:
+                name: grafana-alerting-contactpoints
+            - configMap:
+                name: grafana-alerting-rules
 ---
 apiVersion: v1
 kind: Service
