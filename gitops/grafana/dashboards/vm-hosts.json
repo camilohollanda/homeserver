@@ -395,6 +395,10 @@
                   "tooltip": false,
                   "viz": true
                 }
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
               }
             ]
           }
@@ -562,6 +566,10 @@
                   "tooltip": false,
                   "viz": true
                 }
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
               }
             ]
           }
@@ -605,9 +613,21 @@
           "instant": false,
           "refId": "B",
           "legendFormat": "{{host}} {{mountpoint}} (bytes)"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoria-metrics"
+          },
+          "editorMode": "code",
+          "expr": "node_filesystem_size_bytes{host=~\"$host\",fstype!~\"tmpfs|devtmpfs|overlay|squashfs|efivarfs|fuse.*\",mountpoint!~\"/boot.*|/tank.*|/etc/pve|/var/lib/lxcfs\"} - node_filesystem_avail_bytes{host=~\"$host\",fstype!~\"tmpfs|devtmpfs|overlay|squashfs|efivarfs|fuse.*\",mountpoint!~\"/boot.*|/tank.*|/etc/pve|/var/lib/lxcfs\"}",
+          "range": true,
+          "instant": false,
+          "refId": "B",
+          "legendFormat": "{{host}} {{mountpoint}} (bytes)"
         }
       ],
-      "description": "/tank* is excluded: df on a ZFS dataset reports that dataset's usage, not the pool's, so it would read ~1% forever. The pool has its own panel below. The FUSE views (/etc/pve, /var/lib/lxcfs) and /boot/efi are excluded too, matching the table below -- they are not storage anybody can fill. The FUSE views (/etc/pve, /var/lib/lxcfs) and /boot/efi are excluded too, matching the table below -- they are not storage anybody can fill."
+      "description": "/tank* is excluded: df on a ZFS dataset reports that dataset's usage, not the pool's, so it would read ~1% forever. The pool has its own panel below. The FUSE views (/etc/pve, /var/lib/lxcfs) and /boot/efi are excluded too, matching the table below -- they are not storage anybody can fill. The FUSE views (/etc/pve, /var/lib/lxcfs) and /boot/efi are excluded too, matching the table below -- they are not storage anybody can fill. The FUSE views (/etc/pve, /var/lib/lxcfs) and /boot/efi are excluded too, matching the table below -- they are not storage anybody can fill."
     },
     {
       "id": 3,

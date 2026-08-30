@@ -720,6 +720,10 @@
                   "tooltip": false,
                   "viz": true
                 }
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
               }
             ]
           }
@@ -841,6 +845,10 @@
                   "tooltip": false,
                   "viz": true
                 }
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
               }
             ]
           }
