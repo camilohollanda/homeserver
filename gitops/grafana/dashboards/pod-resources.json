@@ -661,7 +661,7 @@
         "type": "prometheus",
         "uid": "victoria-metrics"
       },
-      "description": "Percentage of the container limit, so a 40 MiB pod and a 1 GiB pod sit on the same axis. The dashed line at 100% is the OOMKill.",
+      "description": "Percentage of the container limit, so a 40 MiB pod and a 1 GiB pod sit on the same axis. The dashed line at 100% is the OOMKill. Hover for the working set in bytes.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -702,7 +702,28 @@
             }
           ]
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/\\(bytes\\)$/"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": true
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 9,
@@ -739,6 +760,18 @@
           "instant": false,
           "refId": "A",
           "legendFormat": "{{namespace}}/{{pod}}"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoria-metrics"
+          },
+          "editorMode": "code",
+          "expr": "sum by (namespace, pod) (container_memory_working_set_bytes{namespace=~\"$namespace\", pod=~\"$pod\", container!=\"\", container!=\"POD\"}) and topk(10, 100 * sum by (namespace, pod) (container_memory_working_set_bytes{namespace=~\"$namespace\", pod=~\"$pod\", container!=\"\", container!=\"POD\"}) / sum by (namespace, pod) (container_spec_memory_limit_bytes{namespace=~\"$namespace\", pod=~\"$pod\", container!=\"\", container!=\"POD\"} > 0))",
+          "range": true,
+          "instant": false,
+          "refId": "B",
+          "legendFormat": "{{namespace}}/{{pod}} (bytes)"
         }
       ],
       "title": "Memory \u2014 top 10 by % of limit",
@@ -749,7 +782,7 @@
         "type": "prometheus",
         "uid": "victoria-metrics"
       },
-      "description": "Percentage of the CFS quota. Sustained 100% means the pod is being throttled, not that the node is busy.",
+      "description": "Percentage of the CFS quota. Sustained 100% means the pod is being throttled, not that the node is busy. Hover for the figure in cores.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -790,7 +823,28 @@
             }
           ]
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/\\(cores\\)$/"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": true
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 9,
@@ -827,6 +881,18 @@
           "instant": false,
           "refId": "A",
           "legendFormat": "{{namespace}}/{{pod}}"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoria-metrics"
+          },
+          "editorMode": "code",
+          "expr": "sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace=~\"$namespace\", pod=~\"$pod\", container!=\"\", container!=\"POD\"}[2m])) and topk(10, 100 * sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace=~\"$namespace\", pod=~\"$pod\", container!=\"\", container!=\"POD\"}[2m])) / sum by (namespace, pod) (container_spec_cpu_quota{namespace=~\"$namespace\", pod=~\"$pod\", container!=\"\", container!=\"POD\"} / container_spec_cpu_period{namespace=~\"$namespace\", pod=~\"$pod\", container!=\"\", container!=\"POD\"} > 0))",
+          "range": true,
+          "instant": false,
+          "refId": "B",
+          "legendFormat": "{{namespace}}/{{pod}} (cores)"
         }
       ],
       "title": "CPU \u2014 top 10 by % of quota",

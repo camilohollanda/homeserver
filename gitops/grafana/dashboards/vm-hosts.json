@@ -377,7 +377,28 @@
             ]
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/\\(bytes\\)$/"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": true
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "legend": {
@@ -406,6 +427,18 @@
           "instant": false,
           "refId": "A",
           "legendFormat": "{{host}}"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoria-metrics"
+          },
+          "editorMode": "code",
+          "expr": "node_memory_MemTotal_bytes{host=~\"$host\"} - node_memory_MemAvailable_bytes{host=~\"$host\"} - (node_zfs_arc_size{host=~\"$host\"} or 0 * node_memory_MemAvailable_bytes{host=~\"$host\"})",
+          "range": true,
+          "instant": false,
+          "refId": "B",
+          "legendFormat": "{{host}} (bytes)"
         }
       ],
       "description": "MemAvailable-based, with the ZFS ARC added back. The ARC is not counted as reclaimable on the hypervisor, which parked proxmox at a permanent 80% while 13.5 GB sat in cache that shrinks the moment anything needs it. This now matches infra-proxmox-mem exactly, so the dashed line at 90% is the alert threshold rather than a decoration. Hosts without ZFS are unaffected."
@@ -511,7 +544,28 @@
           },
           "max": 100
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/\\(bytes\\)$/"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": true
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "legend": {
@@ -539,9 +593,21 @@
           "legendFormat": "{{host}} {{mountpoint}}",
           "range": true,
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoria-metrics"
+          },
+          "editorMode": "code",
+          "expr": "node_filesystem_size_bytes{host=~\"$host\",fstype!~\"tmpfs|devtmpfs|overlay|squashfs|efivarfs|fuse.*\",mountpoint!~\"/boot.*|/tank.*|/etc/pve|/var/lib/lxcfs\"} - node_filesystem_avail_bytes{host=~\"$host\",fstype!~\"tmpfs|devtmpfs|overlay|squashfs|efivarfs|fuse.*\",mountpoint!~\"/boot.*|/tank.*|/etc/pve|/var/lib/lxcfs\"}",
+          "range": true,
+          "instant": false,
+          "refId": "B",
+          "legendFormat": "{{host}} {{mountpoint}} (bytes)"
         }
       ],
-      "description": "/tank* is excluded: df on a ZFS dataset reports that dataset's usage, not the pool's, so it would read ~1% forever. The pool has its own panel below. The FUSE views (/etc/pve, /var/lib/lxcfs) and /boot/efi are excluded too, matching the table below -- they are not storage anybody can fill."
+      "description": "/tank* is excluded: df on a ZFS dataset reports that dataset's usage, not the pool's, so it would read ~1% forever. The pool has its own panel below. The FUSE views (/etc/pve, /var/lib/lxcfs) and /boot/efi are excluded too, matching the table below -- they are not storage anybody can fill. The FUSE views (/etc/pve, /var/lib/lxcfs) and /boot/efi are excluded too, matching the table below -- they are not storage anybody can fill."
     },
     {
       "id": 3,
