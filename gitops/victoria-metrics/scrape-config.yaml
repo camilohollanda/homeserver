@@ -72,3 +72,20 @@ data:
             labels: {host: media}
           - targets: ['192.168.20.50:9100']
             labels: {host: gh-runners}
+
+      # postgres_exporter on the database VM. One job, one target: this is the
+      # only database host, and the exporter runs without
+      # --auto-discover-databases, so a single connection reports the whole
+      # cluster through pg_stat_database. The `host` label matches the
+      # node-exporter one so a Postgres graph and its host graph share a key.
+      - job_name: postgres-exporter
+        static_configs:
+          - targets: ['192.168.20.23:9187']
+            labels: {host: pg18}
+        # No metric_relabel_configs. Most of what this exporter publishes is
+        # pg_settings_*, ~700 gauges mirroring postgresql.conf, and dropping
+        # all but max_connections would need a negative lookahead that RE2 does
+        # not have -- so it would take a rename plus a blanket drop. For 0.7% of
+        # the 96k series already stored, that is not a trade worth making, and
+        # an invalid relabel rule takes down every job in this file, not just
+        # this one.

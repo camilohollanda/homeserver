@@ -72,10 +72,18 @@ All env vars defaulting to "auto-generated random" use `openssl rand -base64 32 
 
 Three collectors feed two stores, and nothing else is deployed:
 
-- **Metrics → VictoriaMetrics** (`vmsingle`, 30d retention, in k3s). Three
-  scrape jobs: kubelet and cAdvisor through the apiserver proxy for pods, and
-  `node-exporter` by static target over the LAN for hosts. Pull, not push —
-  pods here reach the LAN directly, so there is no vmagent and no NodePort.
+- **Metrics → VictoriaMetrics** (`vmsingle`, 30d retention, in k3s). Four
+  scrape jobs: kubelet and cAdvisor through the apiserver proxy for pods,
+  `node-exporter` by static target over the LAN for hosts, and
+  `postgres-exporter` on VM 118. Pull, not push — pods here reach the LAN
+  directly, so there is no vmagent and no NodePort.
+  `bootstrap/postgres-exporter/` installs the last of these: a `pg_monitor`
+  role, capped at five connections because every app on that host shares one
+  `max_connections`, connecting over loopback so neither `pg_hba.conf` nor a
+  reload is needed. It runs **without** `--auto-discover-databases` on purpose;
+  `pg_stat_database` is cluster-wide, so one connection already reports all
+  eight databases, while auto-discovery would open one per database against
+  that same shared budget.
 - **Logs → Loki.** Promtail as a DaemonSet in k3s, plus promtail on the
   services VM pushing to the Loki NodePort. The `host` label is deliberately
   shared with the metrics side, so a graph and its logs use one key.
