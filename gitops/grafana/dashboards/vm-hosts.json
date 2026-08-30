@@ -1,0 +1,283 @@
+{
+  "uid": "vm-hosts",
+  "title": "Host memory and disk",
+  "description": "The VMs and the hypervisor, from node_exporter. Pods and PVCs live in the 'Pod resources' dashboard.",
+  "tags": [
+    "infra"
+  ],
+  "schemaVersion": 42,
+  "version": 1,
+  "editable": true,
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "refresh": "1m",
+  "templating": {
+    "list": [
+      {
+        "name": "host",
+        "label": "host",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "victoria-metrics"
+        },
+        "definition": "label_values(node_memory_MemTotal_bytes, host)",
+        "query": {
+          "query": "label_values(node_memory_MemTotal_bytes, host)",
+          "refId": "A"
+        },
+        "includeAll": true,
+        "multi": true,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "refresh": 1,
+        "sort": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Memory used",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoria-metrics"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "custom": {
+            "fillOpacity": 8,
+            "showPoints": "never"
+          },
+          "max": 100
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "last",
+            "max"
+          ],
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoria-metrics"
+          },
+          "editorMode": "code",
+          "expr": "100 * (1 - node_memory_MemAvailable_bytes{host=~\"$host\"} / node_memory_MemTotal_bytes{host=~\"$host\"})",
+          "legendFormat": "{{host}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "description": "MemAvailable-based. The hypervisor reads high here because the ZFS ARC is not counted as reclaimable -- the alert rule adds node_zfs_arc_size back, this panel deliberately does not, so the raw number stays visible."
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Filesystem used",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoria-metrics"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "custom": {
+            "fillOpacity": 8,
+            "showPoints": "never"
+          },
+          "max": 100
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "last",
+            "max"
+          ],
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoria-metrics"
+          },
+          "editorMode": "code",
+          "expr": "100 * (1 - node_filesystem_avail_bytes{host=~\"$host\",fstype!~\"tmpfs|devtmpfs|overlay|squashfs|efivarfs\",mountpoint!~\"/tank.*\"} / node_filesystem_size_bytes{host=~\"$host\",fstype!~\"tmpfs|devtmpfs|overlay|squashfs|efivarfs\",mountpoint!~\"/tank.*\"})",
+          "legendFormat": "{{host}} {{mountpoint}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "description": "/tank* is excluded: df on a ZFS dataset reports that dataset's usage, not the pool's, so it would read ~1% forever. The pool has its own panel below."
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "ZFS pool free space",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoria-metrics"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0,
+          "custom": {
+            "fillOpacity": 8,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "last",
+            "max"
+          ],
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoria-metrics"
+          },
+          "editorMode": "code",
+          "expr": "node_filesystem_avail_bytes{host=\"proxmox\",mountpoint=\"/tank\"}",
+          "legendFormat": "tank free",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "description": "Free bytes, not a percentage -- see the panel above for why. Alert fires below 500Gi."
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "LVM thin pool used",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoria-metrics"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 27
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "custom": {
+            "fillOpacity": 8,
+            "showPoints": "never"
+          },
+          "max": 100
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "last",
+            "max"
+          ],
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoria-metrics"
+          },
+          "editorMode": "code",
+          "expr": "node_lvm_thinpool_data_percent",
+          "legendFormat": "{{vg}}/{{lv}} data",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoria-metrics"
+          },
+          "editorMode": "code",
+          "expr": "node_lvm_thinpool_meta_percent",
+          "legendFormat": "{{vg}}/{{lv}} metadata",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "description": "pve/data backs the disks of VMs 112, 117 and 118. It has no mounted filesystem, so it comes from the textfile collector in bootstrap/node-exporter/, not from the filesystem collector. Metadata exhaustion stops writes just as data exhaustion does."
+    }
+  ]
+}
