@@ -26,14 +26,7 @@ configMapGenerator:
       - dashboards/iddh-members-production.json
       - dashboards/iddh-members-staging.json
       - dashboards/pod-resources.json
-      # Layout candidates for the pod-resources rewrite -- all five are
-      # provisioned side by side so the layouts can be compared against live
-      # data. Delete the losers (and this block) once one is picked.
-      - dashboards/pod-resources-a-triage.json
-      - dashboards/pod-resources-b-namespaces.json
-      - dashboards/pod-resources-c-layered.json
-      - dashboards/pod-resources-d-fleet.json
-      - dashboards/pod-resources-d-detail.json
+      - dashboards/pod-resources-detail.json
       - dashboards/vm-hosts.json
       - dashboards/garage.json
       - dashboards/infisical.json
