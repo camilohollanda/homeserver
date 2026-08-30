@@ -7,6 +7,10 @@ data:
   rules.yaml: |
     apiVersion: 1
 
+    # Annotations read $values.A.Value, the query result -- not $values.B.Value,
+    # which is the threshold expression's own output and is always 0 or 1, and
+    # nil while the rule is Normal. humanize1024 errors outright on nil.
+    #
     # One threshold per concern, not a warning and a critical tier for the same
     # thing. Without an Alertmanager there is no inhibition, so a second tier
     # would just page twice for one problem.
@@ -28,7 +32,7 @@ data:
             for: 15m
             labels: {severity: warning, apprise_type: warning}
             annotations:
-              summary: '{{ $labels.host }} {{ $labels.mountpoint }} is {{ printf "%.0f" $values.B.Value }}% full'
+              summary: '{{ $labels.host }} {{ $labels.mountpoint }} is {{ printf "%.0f" $values.A.Value }}% full'
             noDataState: NoData
             execErrState: Error
             data:
@@ -64,7 +68,7 @@ data:
             for: 15m
             labels: {severity: warning, apprise_type: warning}
             annotations:
-              summary: 'tank has {{ humanize1024 $values.B.Value }}B free'
+              summary: 'tank has {{ humanize1024 $values.A.Value }}B free'
             noDataState: NoData
             execErrState: Error
             data:
@@ -93,7 +97,7 @@ data:
             for: 15m
             labels: {severity: warning, apprise_type: warning}
             annotations:
-              summary: '{{ $labels.host }} is using {{ printf "%.0f" $values.B.Value }}% of its memory'
+              summary: '{{ $labels.host }} is using {{ printf "%.0f" $values.A.Value }}% of its memory'
             noDataState: NoData
             execErrState: Error
             data:
@@ -129,7 +133,7 @@ data:
             for: 15m
             labels: {severity: warning, apprise_type: warning}
             annotations:
-              summary: 'proxmox is using {{ printf "%.0f" $values.B.Value }}% of its memory, ARC excluded'
+              summary: 'proxmox is using {{ printf "%.0f" $values.A.Value }}% of its memory, ARC excluded'
             noDataState: NoData
             execErrState: Error
             data:
@@ -167,7 +171,7 @@ data:
             for: 10m
             labels: {severity: warning, apprise_type: warning}
             annotations:
-              summary: '{{ $labels.namespace }}/{{ $labels.pod }} is at {{ printf "%.0f" $values.B.Value }}% of its memory limit'
+              summary: '{{ $labels.namespace }}/{{ $labels.pod }} is at {{ printf "%.0f" $values.A.Value }}% of its memory limit'
             noDataState: NoData
             execErrState: Error
             data:
@@ -200,7 +204,7 @@ data:
             for: 15m
             labels: {severity: warning, apprise_type: warning}
             annotations:
-              summary: '{{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} is {{ printf "%.0f" $values.B.Value }}% full'
+              summary: '{{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} is {{ printf "%.0f" $values.A.Value }}% full'
             noDataState: NoData
             execErrState: Error
             data:
@@ -234,7 +238,7 @@ data:
             for: 15m
             labels: {severity: warning, apprise_type: warning}
             annotations:
-              summary: 'thin pool {{ $labels.vg }}/{{ $labels.lv }} is {{ printf "%.0f" $values.B.Value }}% full'
+              summary: 'thin pool {{ $labels.vg }}/{{ $labels.lv }} is {{ printf "%.0f" $values.A.Value }}% full'
             noDataState: NoData
             execErrState: Error
             data:
@@ -264,7 +268,7 @@ data:
             for: 15m
             labels: {severity: warning, apprise_type: warning}
             annotations:
-              summary: 'thin pool {{ $labels.vg }}/{{ $labels.lv }} metadata is {{ printf "%.0f" $values.B.Value }}% full'
+              summary: 'thin pool {{ $labels.vg }}/{{ $labels.lv }} metadata is {{ printf "%.0f" $values.A.Value }}% full'
             noDataState: NoData
             execErrState: Error
             data:
