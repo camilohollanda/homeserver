@@ -391,32 +391,14 @@
               {
                 "id": "custom.hideFrom",
                 "value": {
-                  "legend": false,
+                  "legend": true,
                   "tooltip": false,
-                  "viz": false
+                  "viz": true
                 }
               },
               {
                 "id": "custom.axisPlacement",
-                "value": "right"
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 1
-              },
-              {
-                "id": "custom.fillOpacity",
-                "value": 0
-              },
-              {
-                "id": "custom.lineStyle",
-                "value": {
-                  "dash": [
-                    4,
-                    6
-                  ],
-                  "fill": "dash"
-                }
+                "value": "hidden"
               }
             ]
           }
@@ -580,32 +562,14 @@
               {
                 "id": "custom.hideFrom",
                 "value": {
-                  "legend": false,
+                  "legend": true,
                   "tooltip": false,
-                  "viz": false
+                  "viz": true
                 }
               },
               {
                 "id": "custom.axisPlacement",
-                "value": "right"
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 1
-              },
-              {
-                "id": "custom.fillOpacity",
-                "value": 0
-              },
-              {
-                "id": "custom.lineStyle",
-                "value": {
-                  "dash": [
-                    4,
-                    6
-                  ],
-                  "fill": "dash"
-                }
+                "value": "hidden"
               }
             ]
           }

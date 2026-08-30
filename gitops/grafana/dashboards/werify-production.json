@@ -323,7 +323,7 @@
         "type": "prometheus",
         "uid": "victoria-metrics"
       },
-      "description": "The percentage is drawn; the byte figure is a column in the legend rather than a second line. A second axis in Grafana has to be anchored to a drawn series -- hiding the series leaves the axis present but blank -- so the choice is a duplicated line or a number somewhere else. Here it is a number.",
+      "description": "Both services on one axis. Percentages, not bytes, because their limits differ by roughly five times: the connector at 500 MB is in trouble where the app at 500 MB is idle. Hover for bytes.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -373,7 +373,7 @@
               {
                 "id": "custom.hideFrom",
                 "value": {
-                  "legend": false,
+                  "legend": true,
                   "tooltip": false,
                   "viz": true
                 }
@@ -381,24 +381,6 @@
               {
                 "id": "custom.axisPlacement",
                 "value": "hidden"
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 1
-              },
-              {
-                "id": "custom.fillOpacity",
-                "value": 0
-              },
-              {
-                "id": "custom.lineStyle",
-                "value": {
-                  "dash": [
-                    4,
-                    6
-                  ],
-                  "fill": "dash"
-                }
               }
             ]
           }
@@ -413,11 +395,8 @@
       "id": 20,
       "options": {
         "legend": {
-          "calcs": [
-            "last",
-            "max"
-          ],
-          "displayMode": "table",
+          "calcs": [],
+          "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
         },
@@ -477,7 +456,7 @@
           "legendFormat": "connector (bytes)"
         }
       ],
-      "title": "Memory \u2014 % of limit (valor na legenda)",
+      "title": "Memory \u2014 % of limit",
       "type": "timeseries"
     },
     {
@@ -641,32 +620,14 @@
               {
                 "id": "custom.hideFrom",
                 "value": {
-                  "legend": false,
+                  "legend": true,
                   "tooltip": false,
-                  "viz": false
+                  "viz": true
                 }
               },
               {
                 "id": "custom.axisPlacement",
-                "value": "right"
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 1
-              },
-              {
-                "id": "custom.fillOpacity",
-                "value": 0
-              },
-              {
-                "id": "custom.lineStyle",
-                "value": {
-                  "dash": [
-                    4,
-                    6
-                  ],
-                  "fill": "dash"
-                }
+                "value": "hidden"
               }
             ]
           }
