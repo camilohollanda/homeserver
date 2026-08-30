@@ -56,6 +56,19 @@ spec:
             # wedged connector won't drain the recycle command either).
             - name: WHATSAPP_SIDECAR_HEARTBEAT_FILE
               value: /run/whatsapp-connector/heartbeat
+            # The Go runtime cannot see a cgroup limit on its own: with GOGC at its default 100 it
+            # targets ~2x the live heap before collecting, so at ~500Mi live it aimed for ~1Gi
+            # against a 768Mi ceiling and the kernel killed it first — the exact mechanism of the
+            # 2026-08-29 04:40 OOM. GOMEMLIMIT is a SOFT limit: approaching it makes the runtime
+            # collect harder instead of growing, trading a kill for CPU. It is a guard rail, not a
+            # cure — the cure is that memory scales with connected numbers (~4-5Mi per whatsmeow
+            # client), which is what the limit below is sized for. See the werify repo's
+            # docs/whatsapp-connector-memory.md.
+            #
+            # Held ~336Mi under limits.memory on purpose: GOMEMLIMIT bounds the Go heap, while the
+            # cgroup also counts goroutine stacks, socket buffers and kernel memory.
+            - name: GOMEMLIMIT
+              value: "1200MiB"
           envFrom:
             # The connector's OWN secret (external-secret.yaml → Infisical /WerifyConnector/), not
             # the app's `secrets`. Carries SIDECAR_DATABASE_URL, WHATSAPP_SIDECAR_ALLOWLIST (=all in
@@ -88,12 +101,18 @@ spec:
               mountPath: /run/whatsapp-connector
           resources:
             requests:
-              memory: "256Mi"
+              # The measured floor is ~500Mi at 79 connected numbers (2026-08-30), so the old 256Mi
+              # request sat below actual usage and exposed the pod to eviction under node pressure.
+              memory: "512Mi"
               cpu: "100m"
             limits:
-              # No Typst / PDF rendering here (that's the app) — just whatsmeow sockets, JSON, and
-              # bounded in-memory caches during a history backfill. Far lighter than the app's 4Gi.
-              memory: "768Mi"
+              # No Typst / PDF rendering here (that's the app) — just whatsmeow sockets and JSON.
+              # Sized off the measurement rather than the guess it replaces: memory tracks the
+              # number of connected numbers at ~4-5Mi per whatsmeow client over a ~70Mi base, and
+              # the base went from 3 numbers to 125 in ten days. At 768Mi that left room for ~30
+              # more; 1.5Gi restores about a year of that growth rate. GOMEMLIMIT above keeps the
+              # Go heap ~336Mi below this, leaving the difference for stacks, sockets and kernel.
+              memory: "1536Mi"
               cpu: "1"
       volumes:
         - name: heartbeat
