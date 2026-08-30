@@ -17,7 +17,8 @@
 # Optional env vars:
 #   GHA_CACHE_VERSION         - image tag (default: 9.7.0)
 #   GHA_CACHE_PORT            - loopback port (default: 3000)
-#   GHA_CACHE_S3_ENDPOINT     - S3 endpoint URL (default: https://garage.internal.prakash.com.br)
+#   GHA_CACHE_S3_ENDPOINT     - S3 endpoint URL (default: http://127.0.0.1:3900,
+#                               Garage's own loopback listener on this same VM)
 #   GHA_CACHE_S3_REGION       - S3 region label (default: garage)
 #   GHA_CACHE_S3_SOCKET_TIMEOUT_MS - S3 inactivity timeout (default: 30000)
 #   GHA_CACHE_CLEANUP_DAYS    - cache TTL in days, 0 disables (default: 14)
@@ -59,7 +60,11 @@ fi
 
 GHA_CACHE_VERSION="${GHA_CACHE_VERSION:-9.7.0}"
 GHA_CACHE_PORT="${GHA_CACHE_PORT:-3000}"
-GHA_CACHE_S3_ENDPOINT="${GHA_CACHE_S3_ENDPOINT:-https://garage.internal.prakash.com.br}"
+# Garage runs on this same VM with network_mode: host, so it binds
+# 127.0.0.1:3900 in the host's own namespace. Talking to it there skips a TLS
+# terminate and an nginx proxy hop. Override with a URL only if Garage ever
+# stops being co-located.
+GHA_CACHE_S3_ENDPOINT="${GHA_CACHE_S3_ENDPOINT:-http://127.0.0.1:3900}"
 GHA_CACHE_S3_REGION="${GHA_CACHE_S3_REGION:-garage}"
 GHA_CACHE_S3_SOCKET_TIMEOUT_MS="${GHA_CACHE_S3_SOCKET_TIMEOUT_MS:-30000}"
 GHA_CACHE_CLEANUP_DAYS="${GHA_CACHE_CLEANUP_DAYS:-14}"
@@ -106,20 +111,12 @@ echo ""
 echo "==> Writing gha-cache configuration..."
 mkdir -p /opt/gha-cache/data
 
-# Derive the bare hostname from the S3 endpoint URL for extra_hosts below.
-# Garage runs on this same VM; without this pinning, every cache op does a
-# public-DNS round-trip (we observed intermittent EAI_AGAIN failures).
-GHA_CACHE_S3_HOST="${GHA_CACHE_S3_ENDPOINT#*://}"
-GHA_CACHE_S3_HOST="${GHA_CACHE_S3_HOST%%/*}"
-GHA_CACHE_S3_HOST="${GHA_CACHE_S3_HOST%%:*}"
-
 cat > /opt/gha-cache/.env <<ENV
 GHA_CACHE_VERSION=${GHA_CACHE_VERSION}
 GHA_CACHE_PORT=${GHA_CACHE_PORT}
 GHA_CACHE_DOMAIN=${GHA_CACHE_DOMAIN}
 GHA_CACHE_S3_BUCKET=${GHA_CACHE_S3_BUCKET}
 GHA_CACHE_S3_ENDPOINT=${GHA_CACHE_S3_ENDPOINT}
-GHA_CACHE_S3_HOST=${GHA_CACHE_S3_HOST}
 GHA_CACHE_S3_REGION=${GHA_CACHE_S3_REGION}
 GHA_CACHE_S3_SOCKET_TIMEOUT_MS=${GHA_CACHE_S3_SOCKET_TIMEOUT_MS}
 GHA_CACHE_S3_KEY_ID=${GHA_CACHE_S3_KEY_ID}
@@ -133,22 +130,35 @@ chmod 600 /opt/gha-cache/.env
 # Cache server binds loopback only; shared nginx fronts it with TLS.
 # Runners authenticate to GitHub-issued tokens, which the server validates
 # against api.github.com — so the public URL must match API_BASE_URL exactly.
+#
+# network_mode: host puts this container in the host's network namespace,
+# alongside garage, garage-ui and nginx, which all already run that way. Two
+# hops disappear as a result:
+#
+#   - the S3 leg. Garage binds 127.0.0.1:3900, unreachable from a bridged
+#     container, so cache writes used to go out to the bridge gateway, hit
+#     nginx on :443, terminate TLS and come back down to 127.0.0.1:3900. That
+#     encrypted and decrypted every cached byte for a trip that never left the
+#     host — 514 GB in / 664 GB out on the container's counters as of
+#     2026-08-29 — and capped merges at the garage vhost's proxy_read_timeout.
+#     The extra_hosts pin to host-gateway existed only to find that detour.
+#   - the inbound leg's docker-proxy. `ports: 127.0.0.1:3000:3000` put a
+#     userspace copy between nginx and the app; host networking removes it.
+#
+# NITRO_HOST/NITRO_PORT are how the Nitro node-cluster bundle picks its
+# listener; they reproduce exactly the loopback-only bind that the published
+# port used to provide. Without them host networking would expose :3000 on
+# every interface.
 cat > /opt/gha-cache/docker-compose.yml <<'COMPOSE'
 services:
   gha-cache:
     image: ghcr.io/falcondev-oss/github-actions-cache-server:${GHA_CACHE_VERSION}
     container_name: gha-cache
     restart: unless-stopped
-    # Pin Garage's FQDN to the Docker bridge gateway (= the host's interface
-    # on this bridge). The shared services nginx runs on host networking and
-    # answers on every host interface, so TLS + SNI still work — we just skip
-    # an external DNS round-trip on every cache request. Fixes intermittent
-    # EAI_AGAIN failures that were breaking downloads (and merges).
-    extra_hosts:
-      - "${GHA_CACHE_S3_HOST}:host-gateway"
-    ports:
-      - "127.0.0.1:${GHA_CACHE_PORT}:3000"
+    network_mode: host
     environment:
+      NITRO_HOST: 127.0.0.1
+      NITRO_PORT: ${GHA_CACHE_PORT}
       API_BASE_URL: "https://${GHA_CACHE_DOMAIN}"
       STORAGE_DRIVER: s3
       STORAGE_S3_BUCKET: ${GHA_CACHE_S3_BUCKET}
@@ -244,13 +254,16 @@ else
   systemctl start gha-cache
 fi
 
-# Wait for the cache server to respond locally. The root path returns 404
-# (no route), so we probe a known route — /healthcheck — which the nitro
-# server exposes for liveness.
+# Wait for the cache server to respond locally. The liveness route is /health;
+# /healthcheck does not exist and 404s even on a healthy server (verified
+# against 9.7.0 on 2026-08-29). The old probe asked for /healthcheck and
+# accepted 404, so it passed on the 404 rather than on health — which would
+# have reported success for a server that was up but serving nothing. Probe
+# the real route and accept only 200.
 echo -n "  Waiting for cache server"
 for _ in $(seq 1 30); do
-  code="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${GHA_CACHE_PORT}/healthcheck" || true)"
-  if [[ "$code" =~ ^(200|204|404)$ ]]; then
+  code="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${GHA_CACHE_PORT}/health" || true)"
+  if [[ "$code" == "200" ]]; then
     echo " ✓"
     break
   fi
