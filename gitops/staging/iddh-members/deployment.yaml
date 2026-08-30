@@ -54,11 +54,17 @@ spec:
             name: secrets
 
         resources:
+          # Staging and production run the same binary and their memory floor is
+          # the runtime, not the traffic: both idle around 390-400 MiB. Keep the
+          # two identical so staging cannot die of a ceiling production does not
+          # have -- production has been seen at 586 MiB, above staging's whole
+          # former 512Mi limit. The request tracks that floor; at 128/256Mi it
+          # told the scheduler a 400 MiB pod fits anywhere.
           requests:
-            memory: "128Mi"
-            cpu: "50m"
-          limits:
             memory: "512Mi"
+            cpu: "100m"
+          limits:
+            memory: "1Gi"
             cpu: "500m"
         # A deploy races the ingress: EndpointSlice removal and SIGTERM are
         # concurrent and unordered, so when SIGTERM makes Phoenix drain its
