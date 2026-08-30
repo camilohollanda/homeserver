@@ -84,12 +84,20 @@ spec:
           mountPath: /etc/loki
         - name: storage
           mountPath: /loki
+        # The 512Mi ceiling dates to January 2026 and ran out. Across the 30
+        # days to 2026-08-30 the daily peak working set walked 442 -> 508 MiB and
+        # max_usage_bytes sat at exactly 512.0 MiB, so the cgroup had already been
+        # pushed to the limit; nothing was OOM-killed only because RSS is ~300 MiB
+        # and the rest is reclaimable page cache. This is baseline single-binary
+        # cost -- Go heap, ingester head chunks, the 100 MiB embedded results
+        # cache above -- not index growth: the whole PV is 3 GB, of which the
+        # TSDB index is under 2 MB.
         resources:
           requests:
-            memory: "256Mi"
+            memory: "512Mi"
             cpu: "100m"
           limits:
-            memory: "512Mi"
+            memory: "1Gi"
             cpu: "500m"
       volumes:
       - name: config
