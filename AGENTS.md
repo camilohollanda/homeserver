@@ -108,6 +108,22 @@ Four things here are not obvious and each one costs real debugging time:
   that is not in its config returns 424 and is silently dropped. The tag list
   lives in Infisical, not in this repo, so check there before inventing one.
 
+**Reloader watches ConfigMaps, never Secrets** (`--resources-to-ignore=secrets`
+in `gitops/reloader/`). A secret rotation in Infisical must not restart a pod
+on its own, so ESO keeps syncing and the pods keep their current env until
+somebody runs `kubectl rollout restart` on purpose. That guarantee is
+structural rather than a maintained exclusion list: werify and iddh-members,
+production and staging alike, mount no ConfigMap at all — they read config from
+`envFrom: secretRef` — so Reloader has nothing to act on there regardless of
+the `reloader.stakater.com/auto` annotations they carry.
+
+The practical consequence when editing this repo: **a change to a ConfigMap
+reloads the workload, a change to a Secret does not.** Editing
+`gitops/apprise/`'s config, which is a Secret, needs a manual restart. Note too
+that `gitops/reloader/` is in the root `gitops/kustomization.yaml` rather than
+behind an Argo CD Application, so changing it means `kubectl apply -k gitops/`
+by hand — Argo will not pick it up.
+
 ## Domains & TLS
 
 Three distinct paths — don't conflate them:
