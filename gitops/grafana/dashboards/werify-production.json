@@ -323,7 +323,7 @@
         "type": "prometheus",
         "uid": "victoria-metrics"
       },
-      "description": "EXPERIMENT: the byte companion is hidden from the plot but still asks for the right axis. If the right axis is present and scaled in MiB, a second axis does not need a second line and every other panel can drop theirs.",
+      "description": "The percentage is drawn; the byte figure is a column in the legend rather than a second line. A second axis in Grafana has to be anchored to a drawn series -- hiding the series leaves the axis present but blank -- so the choice is a duplicated line or a number somewhere else. Here it is a number.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -380,7 +380,7 @@
               },
               {
                 "id": "custom.axisPlacement",
-                "value": "right"
+                "value": "hidden"
               },
               {
                 "id": "custom.lineWidth",
@@ -413,8 +413,11 @@
       "id": 20,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "last",
+            "max"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -474,7 +477,7 @@
           "legendFormat": "connector (bytes)"
         }
       ],
-      "title": "Memory \u2014 % of limit (eixo direito sem linha)",
+      "title": "Memory \u2014 % of limit (valor na legenda)",
       "type": "timeseries"
     },
     {
