@@ -15,59 +15,216 @@
       }
     ]
   },
+  "description": "IDDH Members in staging: resources and logs on one page. No PVC panel because the app mounts no volume, and no database panel because nothing exports Postgres metrics yet -- its data lives on pg18.",
   "editable": true,
   "fiscalYearStartMonth": 0,
-  "graphTooltip": 0,
+  "graphTooltip": 1,
   "id": 0,
   "links": [],
   "panels": [
     {
       "datasource": {
-        "type": "loki",
-        "uid": "P8E80F9AEF21F6940"
+        "type": "prometheus",
+        "uid": "victoria-metrics"
       },
+      "description": "Working set against the container limit. Both environments were levelled to 1 GiB on 2026-08-30; staging previously ran on half of production's limit and sat at 84%.",
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "#EAB839",
+                "value": 70
+              },
+              {
+                "color": "orange",
+                "value": 85
+              },
+              {
+                "color": "red",
+                "value": 95
+              }
+            ]
+          },
+          "unit": "percent",
+          "decimals": 0
+        },
         "overrides": []
       },
       "gridPos": {
-        "h": 6,
-        "w": 24,
+        "h": 4,
+        "w": 6,
         "x": 0,
         "y": 0
       },
-      "id": 1,
+      "id": 10,
       "options": {
-        "calculate": false,
-        "cellGap": 1,
-        "color": {
-          "exponent": 0.5,
-          "fill": "dark-blue",
-          "mode": "scheme",
-          "reverse": false,
-          "scale": "exponential",
-          "scheme": "Blues",
-          "steps": 64
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
         },
-        "filterValues": {
-          "le": 1e-9
-        },
-        "legend": {
-          "show": true
-        },
-        "rowsFrame": {
-          "layout": "auto"
-        },
-        "showValue": "never",
-        "tooltip": {
-          "mode": "single",
-          "showColorScale": false,
-          "yHistogram": false
-        },
-        "yAxis": {
-          "axisPlacement": "left",
-          "reverse": false
+        "textMode": "auto"
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoria-metrics"
+          },
+          "editorMode": "code",
+          "expr": "100 * (sum(container_memory_working_set_bytes{namespace=\"iddh-members-staging\", container!=\"\", container!=\"POD\"})) / (sum(container_spec_memory_limit_bytes{namespace=\"iddh-members-staging\", container!=\"\", container!=\"POD\"} > 0))",
+          "range": false,
+          "instant": true,
+          "refId": "A"
         }
+      ],
+      "title": "Memory % of limit",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoria-metrics"
+      },
+      "description": "Cores used against the CFS quota. Sustained 100% is throttling.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "#EAB839",
+                "value": 70
+              },
+              {
+                "color": "orange",
+                "value": 85
+              },
+              {
+                "color": "red",
+                "value": 95
+              }
+            ]
+          },
+          "unit": "percent",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "id": 11,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoria-metrics"
+          },
+          "editorMode": "code",
+          "expr": "100 * (sum(rate(container_cpu_usage_seconds_total{namespace=\"iddh-members-staging\", container!=\"\", container!=\"POD\"}[2m]))) / (sum(container_spec_cpu_quota{namespace=\"iddh-members-staging\", container!=\"\", container!=\"POD\"} / container_spec_cpu_period{namespace=\"iddh-members-staging\", container!=\"\", container!=\"POD\"} > 0))",
+          "range": false,
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "title": "CPU % of quota",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "P8E80F9AEF21F6940"
+      },
+      "description": "Log lines at error level over the selected window. Blank means none were written, not that logging broke.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short",
+          "decimals": 0,
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "id": 12,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
       },
       "pluginVersion": "12.3.1",
       "targets": [
@@ -77,30 +234,503 @@
             "uid": "P8E80F9AEF21F6940"
           },
           "editorMode": "code",
-          "expr": "sum by (level) (count_over_time({namespace=\"iddh-members-staging\", app=\"iddh-members\"} [$__auto]))",
-          "queryType": "range",
+          "expr": "sum(count_over_time({namespace=\"iddh-members-staging\", app=\"iddh-members\", level=~\"(?i)error\"}[$__range]))",
+          "queryType": "instant",
           "refId": "A"
         }
       ],
-      "title": "Log volume by level",
-      "type": "heatmap"
+      "title": "Errors in range",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoria-metrics"
+      },
+      "description": "Container start times that changed during the window: an OOMKill, a CrashLoopBackOff, or a deploy.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "#EAB839",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "id": 13,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoria-metrics"
+          },
+          "editorMode": "code",
+          "expr": "sum(changes(container_start_time_seconds{namespace=\"iddh-members-staging\", container!=\"\", container!=\"POD\"}[$__range])) or vector(0)",
+          "range": false,
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Restarts in range",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoria-metrics"
+      },
+      "description": "Percentage of the container limit, with the working set in bytes on hover. The dashed line at 100% is the OOMKill.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "mappings": [],
+          "unit": "percent",
+          "max": 100,
+          "min": 0,
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 100
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/\\(bytes\\)$/"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": true
+                }
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 6,
+        "x": 0,
+        "y": 4
+      },
+      "id": 20,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoria-metrics"
+          },
+          "editorMode": "code",
+          "expr": "100 * (sum(container_memory_working_set_bytes{namespace=\"iddh-members-staging\", container!=\"\", container!=\"POD\"})) / (sum(container_spec_memory_limit_bytes{namespace=\"iddh-members-staging\", container!=\"\", container!=\"POD\"} > 0))",
+          "range": true,
+          "instant": false,
+          "refId": "A",
+          "legendFormat": "memory"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoria-metrics"
+          },
+          "editorMode": "code",
+          "expr": "sum(container_memory_working_set_bytes{namespace=\"iddh-members-staging\", container!=\"\", container!=\"POD\"})",
+          "range": true,
+          "instant": false,
+          "refId": "B",
+          "legendFormat": "memory (bytes)"
+        }
+      ],
+      "title": "Memory \u2014 % of limit",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoria-metrics"
+      },
+      "description": "Percentage of the CFS quota. Sustained 100% means this pod is being throttled, not that the node is busy.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "mappings": [],
+          "unit": "percent",
+          "max": 100,
+          "min": 0,
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 100
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 6,
+        "x": 6,
+        "y": 4
+      },
+      "id": 21,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoria-metrics"
+          },
+          "editorMode": "code",
+          "expr": "100 * (sum(rate(container_cpu_usage_seconds_total{namespace=\"iddh-members-staging\", container!=\"\", container!=\"POD\"}[2m]))) / (sum(container_spec_cpu_quota{namespace=\"iddh-members-staging\", container!=\"\", container!=\"POD\"} / container_spec_cpu_period{namespace=\"iddh-members-staging\", container!=\"\", container!=\"POD\"} > 0))",
+          "range": true,
+          "instant": false,
+          "refId": "A",
+          "legendFormat": "cpu"
+        }
+      ],
+      "title": "CPU \u2014 % of quota",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoria-metrics"
+      },
+      "description": "Bytes per second, receive positive and transmit negative so the two directions do not overlap. This sits where werify has its disk panel: iddh-members mounts no volume, and for a stateless app the traffic is the equivalent story.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "mappings": [],
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 6,
+        "x": 12,
+        "y": 4
+      },
+      "id": 22,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoria-metrics"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(container_network_receive_bytes_total{namespace=\"iddh-members-staging\"}[5m]))",
+          "range": true,
+          "instant": false,
+          "refId": "A",
+          "legendFormat": "rx"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoria-metrics"
+          },
+          "editorMode": "code",
+          "expr": "- (sum(rate(container_network_transmit_bytes_total{namespace=\"iddh-members-staging\"}[5m])))",
+          "range": true,
+          "instant": false,
+          "refId": "B",
+          "legendFormat": "tx"
+        }
+      ],
+      "title": "Network",
+      "type": "timeseries"
     },
     {
       "datasource": {
         "type": "loki",
         "uid": "P8E80F9AEF21F6940"
       },
+      "description": "Stacked bars by level. A burst of red is an incident. Levels are lowercased because the app emits both INFO and info, which would otherwise draw as two series.",
       "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "lineWidth": 0,
+            "showPoints": "never",
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            }
+          },
+          "mappings": [],
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "error"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "warning"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "orange",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "notice"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "yellow",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "info"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "blue",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "debug"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "purple",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
-        "h": 18,
+        "h": 9,
+        "w": 6,
+        "x": 18,
+        "y": 4
+      },
+      "id": 23,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "P8E80F9AEF21F6940"
+          },
+          "editorMode": "code",
+          "expr": "sum by (level) (count_over_time({namespace=\"iddh-members-staging\", app=\"iddh-members\"} | label_format level=`{{ lower .level }}` [$__auto]))",
+          "queryType": "range",
+          "refId": "A",
+          "legendFormat": "{{level}}"
+        }
+      ],
+      "title": "Log volume by level",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "P8E80F9AEF21F6940"
+      },
+      "description": "",
+      "gridPos": {
+        "h": 24,
         "w": 24,
         "x": 0,
-        "y": 6
+        "y": 13
       },
-      "id": 2,
+      "id": 30,
       "options": {
         "dedupStrategy": "none",
         "enableInfiniteScrolling": true,
@@ -114,16 +744,14 @@
         "syntaxHighlighting": true,
         "wrapLogMessage": true
       },
-      "pluginVersion": "12.3.1",
       "targets": [
         {
           "datasource": {
             "type": "loki",
             "uid": "P8E80F9AEF21F6940"
           },
-          "direction": "backward",
           "editorMode": "code",
-          "expr": "{namespace=\"iddh-members-staging\", app=\"iddh-members\"} | json | line_format `{{ if .message }}{{ .message }}{{ else }}{{ __line__ }}{{ end }}`\n",
+          "expr": "{namespace=\"iddh-members-staging\", app=\"iddh-members\"} | json | line_format `{{ if .message }}{{ .message }}{{ else }}{{ __line__ }}{{ end }}`",
           "queryType": "range",
           "refId": "A"
         }
@@ -147,7 +775,7 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "IDDH Members — staging",
+  "title": "IDDH Members \u2014 staging",
   "uid": "iddh-members-staging",
   "version": 1
 }
