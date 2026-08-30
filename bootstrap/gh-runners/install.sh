@@ -133,6 +133,29 @@ apt-get install -y --no-install-recommends \
   build-essential
 
 # ---------------------------------------------------------------------------
+# Chromium's runtime libraries, for werify's browser E2E suite.
+#
+# `playwright install` fetches the browser and not what it links against, so
+# without these every test dies in milliseconds on `browserType.launch` with
+# `libatk-1.0.so.0: cannot open shared object file`. `playwright install-deps`
+# cannot fix it from inside a job either: it shells out to `sudo sh -c
+# "apt-get ..."`, and the sudoers rule below is scoped to /usr/bin/apt-get, so
+# sudo prompts for a password there is no terminal to type into.
+#
+# The list is Playwright's own, for `debian13-x64` — its
+# `packages/playwright-core/src/server/registry/nativeDeps.ts`, at the version
+# werify pins (1.62.1). Trixie's t64 transition renamed several of them, which
+# is why this is copied rather than remembered. Verified with `--simulate` on
+# the VM before installing: all 21 resolve.
+# ---------------------------------------------------------------------------
+echo "==> Installing Chromium runtime libraries (browser E2E)..."
+apt-get install -y --no-install-recommends \
+  libasound2t64 libatk-bridge2.0-0t64 libatk1.0-0t64 libatspi2.0-0t64 \
+  libcairo2 libcups2t64 libdbus-1-3 libdrm2 libgbm1 libglib2.0-0t64 \
+  libnspr4 libnss3 libpango-1.0-0 libx11-6 libxcb1 libxcomposite1 \
+  libxdamage1 libxext6 libxfixes3 libxkbcommon0 libxrandr2
+
+# ---------------------------------------------------------------------------
 # Docker (engine + buildx + compose plugin)
 # ---------------------------------------------------------------------------
 if ! command -v docker >/dev/null; then
