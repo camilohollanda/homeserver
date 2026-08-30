@@ -20,3 +20,11 @@ spec:
       selfHeal: true
     syncOptions:
     - CreateNamespace=true
+    # The dashboards ConfigMap outgrew client-side apply on 2026-08-30, at
+    # ~279 KiB. `kubectl apply` stores a copy of the whole object in the
+    # last-applied-configuration annotation, and annotations are capped at
+    # 262,144 bytes, so every sync failed with "metadata.annotations: Too
+    # long" while the ConfigMap itself was still at 27% of its own 1 MiB
+    # limit. Server-side apply keeps the diff in managedFields instead of an
+    # annotation and has no such ceiling.
+    - ServerSideApply=true
