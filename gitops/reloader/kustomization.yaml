@@ -5,11 +5,34 @@ kind: Kustomization
 resources:
   - https://github.com/stakater/Reloader/deployments/kubernetes
 
-# SUSPENDED: a secret rotation in Infisical must not restart pods on its own.
-# ESO keeps syncing Infisical -> Secret; the pods just keep their current env
-# until someone runs `kubectl rollout restart deploy/<name> -n <ns>` on purpose.
-# The `reloader.stakater.com/auto: "true"` annotations were left in place, so
-# resuming is a one-line revert: set count back to 1 (or drop this block).
-replicas:
-  - name: reloader-reloader
-    count: 0
+# Reloader watches ConfigMaps only. A secret rotation in Infisical must never
+# restart a pod on its own -- that is why this was suspended entirely between
+# Jan and Aug 2026, at the cost of ConfigMap changes not reloading either.
+# Ignoring secrets keeps the guarantee and gets the reloads back.
+#
+# The guarantee is structural, not a list somebody has to maintain: the werify
+# and iddh-members workloads, in production and staging alike, mount no
+# ConfigMap at all -- they read their configuration from `envFrom: secretRef`,
+# fed by ESO from Infisical. So Reloader has nothing to act on there even
+# though they still carry `reloader.stakater.com/auto: "true"`, and it stays
+# that way if somebody adds that annotation to a new app by reflex.
+#
+# What this does reload: grafana (alerting rules, dashboards, datasources),
+# victoria-metrics (scrape config), loki, promtail, pod-notify, apprise-shim.
+# What it deliberately does not: apprise, whose config is a Secret. Changing
+# that one still needs `kubectl rollout restart deploy/apprise -n apprise`.
+#
+# reload-strategy=annotations rather than the default env-vars: every Argo CD
+# Application here runs with selfHeal, and an annotation on the pod template is
+# a cleaner thing for `ignoreDifferences` to exempt than an injected env var,
+# should Argo read Reloader's edit as drift.
+patches:
+  - target:
+      kind: Deployment
+      name: reloader-reloader
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/args
+        value:
+          - --resources-to-ignore=secrets
+          - --reload-strategy=annotations
