@@ -33,3 +33,13 @@ configMapGenerator:
       - dashboards/services-nginx.json
     options:
       disableNameSuffixHash: true
+      annotations:
+        # This ConfigMap passed 262,144 bytes on 2026-08-30 and can no longer
+        # be applied client-side: `kubectl apply` keeps a copy of the whole
+        # object in the last-applied-configuration annotation, and annotations
+        # are capped there. The ConfigMap itself is fine, at about a quarter of
+        # its own 1 MiB limit -- only the way it was applied was not. Scoped to
+        # this resource rather than set on the Application, because server-side
+        # apply makes the ExternalSecret's CRD-defaulted deletionPolicy read as
+        # permanent drift.
+        argocd.argoproj.io/sync-options: ServerSideApply=true
