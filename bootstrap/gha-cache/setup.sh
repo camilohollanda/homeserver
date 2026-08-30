@@ -24,7 +24,8 @@
 #   GHA_CACHE_SSH          - default: deployer@192.168.20.22
 #   GHA_CACHE_VERSION      - default: 9.7.0
 #   GHA_CACHE_PORT         - default: 3000 (loopback, fronted by shared nginx)
-#   GHA_CACHE_S3_ENDPOINT  - default: https://garage.internal.prakash.com.br
+#   GHA_CACHE_S3_ENDPOINT  - default: http://127.0.0.1:3900 (Garage's loopback
+#                            listener on the same VM)
 #   GHA_CACHE_S3_REGION    - default: garage
 #   GHA_CACHE_S3_SOCKET_TIMEOUT_MS - default: 30000
 #   GHA_CACHE_CLEANUP_DAYS - default: 14
@@ -55,7 +56,7 @@ GHA_CACHE_SSH="${GHA_CACHE_SSH:-deployer@192.168.20.22}"
 export GHA_CACHE_DOMAIN="${GHA_CACHE_DOMAIN:-gha-cache.internal.prakash.com.br}"
 export GHA_CACHE_VERSION="${GHA_CACHE_VERSION:-9.7.0}"
 export GHA_CACHE_PORT="${GHA_CACHE_PORT:-3000}"
-export GHA_CACHE_S3_ENDPOINT="${GHA_CACHE_S3_ENDPOINT:-https://garage.internal.prakash.com.br}"
+export GHA_CACHE_S3_ENDPOINT="${GHA_CACHE_S3_ENDPOINT:-http://127.0.0.1:3900}"
 export GHA_CACHE_S3_REGION="${GHA_CACHE_S3_REGION:-garage}"
 export GHA_CACHE_S3_SOCKET_TIMEOUT_MS="${GHA_CACHE_S3_SOCKET_TIMEOUT_MS:-30000}"
 export GHA_CACHE_S3_BUCKET="${GHA_CACHE_S3_BUCKET:-gha-cache}"
