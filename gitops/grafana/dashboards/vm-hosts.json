@@ -1,7 +1,7 @@
 {
   "uid": "vm-hosts",
   "title": "Host memory and disk",
-  "description": "The VMs and the hypervisor, from node_exporter. Pods and PVCs live in the 'Pod resources' dashboard.",
+  "description": "Host memory and disk across the seven node-exporter targets. Pressure sits beside capacity on purpose: a host can be at 40% memory and still be frozen.",
   "tags": [
     "infra"
   ],
@@ -46,6 +46,298 @@
   },
   "panels": [
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoria-metrics"
+      },
+      "description": "Worst host, ARC excluded, on the same expression the alert uses. Alerts at 90% held for 15 minutes.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "#EAB839",
+                "value": 80
+              },
+              {
+                "color": "red",
+                "value": 90
+              }
+            ]
+          },
+          "unit": "percent",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "id": 80,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoria-metrics"
+          },
+          "editorMode": "code",
+          "expr": "max(100 * (1 - (node_memory_MemAvailable_bytes{host=~\"$host\"} + (node_zfs_arc_size{host=~\"$host\"} or 0 * node_memory_MemAvailable_bytes{host=~\"$host\"})) / node_memory_MemTotal_bytes{host=~\"$host\"}))",
+          "range": false,
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Highest memory use",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoria-metrics"
+      },
+      "description": "Worst mounted filesystem across all hosts. /tank is excluded because df on a ZFS dataset reports the dataset, not the pool.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "#EAB839",
+                "value": 70
+              },
+              {
+                "color": "orange",
+                "value": 85
+              },
+              {
+                "color": "red",
+                "value": 95
+              }
+            ]
+          },
+          "unit": "percent",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "id": 81,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoria-metrics"
+          },
+          "editorMode": "code",
+          "expr": "max(100 * (1 - node_filesystem_avail_bytes{host=~\"$host\",fstype!~\"tmpfs|devtmpfs|overlay|squashfs|efivarfs|fuse.*\",mountpoint!~\"/boot.*|/tank.*|/etc/pve|/var/lib/lxcfs\"} / node_filesystem_size_bytes{host=~\"$host\",fstype!~\"tmpfs|devtmpfs|overlay|squashfs|efivarfs|fuse.*\",mountpoint!~\"/boot.*|/tank.*|/etc/pve|/var/lib/lxcfs\"}))",
+          "range": false,
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Highest filesystem use",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoria-metrics"
+      },
+      "description": "Fewest days to full across every filesystem, from the slope of the last six hours. The table at the bottom says which one.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 14
+              },
+              {
+                "color": "#EAB839",
+                "value": 30
+              },
+              {
+                "color": "green",
+                "value": 90
+              }
+            ]
+          },
+          "unit": "d",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "id": 82,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoria-metrics"
+          },
+          "editorMode": "code",
+          "expr": "min(((node_filesystem_avail_bytes{host=~\"$host\", fstype!~\"tmpfs|devtmpfs|overlay|squashfs|efivarfs|fuse.*\", mountpoint!~\"/boot.*|/tank.*|/etc/pve|/var/lib/lxcfs\"} / -deriv(node_filesystem_avail_bytes{host=~\"$host\", fstype!~\"tmpfs|devtmpfs|overlay|squashfs|efivarfs|fuse.*\", mountpoint!~\"/boot.*|/tank.*|/etc/pve|/var/lib/lxcfs\"}[24h]) / 86400) > 0) < 3650)",
+          "range": false,
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Soonest full",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoria-metrics"
+      },
+      "description": "Pools in any state other than online. tank is a single disk with no redundancy and replication_factor 1, so a state change here is not a degraded mirror to resilver -- it is the only local copy.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "none",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "id": 83,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoria-metrics"
+          },
+          "editorMode": "code",
+          "expr": "sum(node_zfs_zpool_state{state!=\"online\"}) or vector(0)",
+          "range": false,
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "title": "ZFS pools not online",
+      "type": "stat"
+    },
+    {
       "id": 1,
       "type": "timeseries",
       "title": "Memory used",
@@ -55,9 +347,9 @@
       },
       "gridPos": {
         "h": 9,
-        "w": 24,
+        "w": 12,
         "x": 0,
-        "y": 0
+        "y": 4
       },
       "fieldConfig": {
         "defaults": {
@@ -65,9 +357,25 @@
           "min": 0,
           "custom": {
             "fillOpacity": 8,
-            "showPoints": "never"
+            "showPoints": "never",
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
           },
-          "max": 100
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 90
+              }
+            ]
+          }
         },
         "overrides": []
       },
@@ -93,13 +401,91 @@
             "uid": "victoria-metrics"
           },
           "editorMode": "code",
-          "expr": "100 * (1 - node_memory_MemAvailable_bytes{host=~\"$host\"} / node_memory_MemTotal_bytes{host=~\"$host\"})",
-          "legendFormat": "{{host}}",
+          "expr": "100 * (1 - (node_memory_MemAvailable_bytes{host=~\"$host\"} + (node_zfs_arc_size{host=~\"$host\"} or 0 * node_memory_MemAvailable_bytes{host=~\"$host\"})) / node_memory_MemTotal_bytes{host=~\"$host\"})",
           "range": true,
-          "refId": "A"
+          "instant": false,
+          "refId": "A",
+          "legendFormat": "{{host}}"
         }
       ],
-      "description": "MemAvailable-based. The hypervisor reads high here because the ZFS ARC is not counted as reclaimable -- the alert rule adds node_zfs_arc_size back, this panel deliberately does not, so the raw number stays visible."
+      "description": "MemAvailable-based, with the ZFS ARC added back. The ARC is not counted as reclaimable on the hypervisor, which parked proxmox at a permanent 80% while 13.5 GB sat in cache that shrinks the moment anything needs it. This now matches infra-proxmox-mem exactly, so the dashed line at 90% is the alert threshold rather than a decoration. Hosts without ZFS are unaffected."
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoria-metrics"
+      },
+      "description": "Share of time tasks were stalled waiting on memory. 'some' means at least one task, 'full' means every task at once -- a host that has stopped rather than slowed. This is what the VM 114 freeze on 2026-08-29 looked like: ten minutes unresponsive with no OOM kill, so neither the memory percentage nor a restart count would have shown it. Anything sustained above zero here is real.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "mappings": [],
+          "unit": "percent",
+          "decimals": 3
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 4
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "calcs": [
+            "last",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoria-metrics"
+          },
+          "editorMode": "code",
+          "expr": "100 * rate(node_pressure_memory_waiting_seconds_total{host=~\"$host\"}[5m])",
+          "range": true,
+          "instant": false,
+          "refId": "A",
+          "legendFormat": "{{host}} some"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoria-metrics"
+          },
+          "editorMode": "code",
+          "expr": "100 * rate(node_pressure_memory_stalled_seconds_total{host=~\"$host\"}[5m])",
+          "range": true,
+          "instant": false,
+          "refId": "B",
+          "legendFormat": "{{host}} full"
+        }
+      ],
+      "title": "Memory pressure (PSI)",
+      "type": "timeseries"
     },
     {
       "id": 2,
@@ -111,9 +497,9 @@
       },
       "gridPos": {
         "h": 9,
-        "w": 24,
+        "w": 12,
         "x": 0,
-        "y": 9
+        "y": 13
       },
       "fieldConfig": {
         "defaults": {
@@ -149,13 +535,13 @@
             "uid": "victoria-metrics"
           },
           "editorMode": "code",
-          "expr": "100 * (1 - node_filesystem_avail_bytes{host=~\"$host\",fstype!~\"tmpfs|devtmpfs|overlay|squashfs|efivarfs\",mountpoint!~\"/tank.*\"} / node_filesystem_size_bytes{host=~\"$host\",fstype!~\"tmpfs|devtmpfs|overlay|squashfs|efivarfs\",mountpoint!~\"/tank.*\"})",
+          "expr": "100 * (1 - node_filesystem_avail_bytes{host=~\"$host\",fstype!~\"tmpfs|devtmpfs|overlay|squashfs|efivarfs|fuse.*\",mountpoint!~\"/boot.*|/tank.*|/etc/pve|/var/lib/lxcfs\"} / node_filesystem_size_bytes{host=~\"$host\",fstype!~\"tmpfs|devtmpfs|overlay|squashfs|efivarfs|fuse.*\",mountpoint!~\"/boot.*|/tank.*|/etc/pve|/var/lib/lxcfs\"})",
           "legendFormat": "{{host}} {{mountpoint}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "description": "/tank* is excluded: df on a ZFS dataset reports that dataset's usage, not the pool's, so it would read ~1% forever. The pool has its own panel below."
+      "description": "/tank* is excluded: df on a ZFS dataset reports that dataset's usage, not the pool's, so it would read ~1% forever. The pool has its own panel below. The FUSE views (/etc/pve, /var/lib/lxcfs) and /boot/efi are excluded too, matching the table below -- they are not storage anybody can fill."
     },
     {
       "id": 3,
@@ -167,9 +553,9 @@
       },
       "gridPos": {
         "h": 9,
-        "w": 24,
-        "x": 0,
-        "y": 18
+        "w": 12,
+        "x": 12,
+        "y": 13
       },
       "fieldConfig": {
         "defaults": {
@@ -222,9 +608,9 @@
       },
       "gridPos": {
         "h": 9,
-        "w": 24,
+        "w": 12,
         "x": 0,
-        "y": 27
+        "y": 22
       },
       "fieldConfig": {
         "defaults": {
@@ -284,7 +670,83 @@
         "type": "prometheus",
         "uid": "victoria-metrics"
       },
-      "description": "Days until each filesystem fills, from the slope of the last 6 hours. Sort ascending and read the top row. A negative or empty value means the filesystem is emptying or flat, which is the normal case -- the point of the panel is the row that is not. /tank is excluded because df on a ZFS dataset reports the dataset, not the pool.",
+      "description": "How much RAM the ARC holds on the hypervisor. It is here to make the correction in the memory panel legible rather than magic: this is the amount added back before proxmox is judged, and it is reclaimable.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "mappings": [],
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 22
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "calcs": [
+            "last",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoria-metrics"
+          },
+          "editorMode": "code",
+          "expr": "node_zfs_arc_size{host=~\"$host\"}",
+          "range": true,
+          "instant": false,
+          "refId": "A",
+          "legendFormat": "{{host}} ARC"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoria-metrics"
+          },
+          "editorMode": "code",
+          "expr": "node_zfs_arc_c_max{host=~\"$host\"}",
+          "range": true,
+          "instant": false,
+          "refId": "B",
+          "legendFormat": "{{host}} ARC max"
+        }
+      ],
+      "title": "ZFS ARC size",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoria-metrics"
+      },
+      "description": "Days until each filesystem fills, from the slope of the last 24 hours. Sort ascending and read the top row. A negative or empty value means the filesystem is emptying or flat, which is the normal case -- the point of the panel is the row that is not. /tank is excluded because df on a ZFS dataset reports the dataset, not the pool.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -468,7 +930,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 36
+        "y": 31
       },
       "id": 90,
       "options": {
@@ -521,7 +983,7 @@
             "uid": "victoria-metrics"
           },
           "editorMode": "code",
-          "expr": "sum by (fs) (label_join(((node_filesystem_avail_bytes{host=~\"$host\", fstype!~\"tmpfs|devtmpfs|overlay|squashfs|efivarfs|fuse.*\", mountpoint!~\"/boot.*|/tank.*|/etc/pve|/var/lib/lxcfs\"} / -deriv(node_filesystem_avail_bytes{host=~\"$host\", fstype!~\"tmpfs|devtmpfs|overlay|squashfs|efivarfs|fuse.*\", mountpoint!~\"/boot.*|/tank.*|/etc/pve|/var/lib/lxcfs\"}[6h]) / 86400) > 0) < 3650, \"fs\", \":\", \"host\", \"mountpoint\"))",
+          "expr": "sum by (fs) (label_join(((node_filesystem_avail_bytes{host=~\"$host\", fstype!~\"tmpfs|devtmpfs|overlay|squashfs|efivarfs|fuse.*\", mountpoint!~\"/boot.*|/tank.*|/etc/pve|/var/lib/lxcfs\"} / -deriv(node_filesystem_avail_bytes{host=~\"$host\", fstype!~\"tmpfs|devtmpfs|overlay|squashfs|efivarfs|fuse.*\", mountpoint!~\"/boot.*|/tank.*|/etc/pve|/var/lib/lxcfs\"}[24h]) / 86400) > 0) < 3650, \"fs\", \":\", \"host\", \"mountpoint\"))",
           "range": false,
           "instant": true,
           "refId": "C",
