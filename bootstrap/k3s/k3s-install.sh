@@ -11,6 +11,29 @@ if [[ "$EUID" -ne 0 ]]; then
   exit 1
 fi
 
+# Kubelet image garbage collection thresholds, written before the installer so a
+# fresh node comes up with them already in effect.
+#
+# The defaults (85/80) pinned this node's root filesystem between 63G and 67G of
+# its 79G. The images actually in use total ~3G; the rest was deploy history that
+# GC evicted just in time to stay under the 85% alert threshold, so the disk
+# always looked nearly full while never actually filling.
+#
+# Both of this VM's disks are thin volumes on the same oversubscribed local-lvm
+# pool (262G backing 460G of provisioned volumes, and the pve VG has no free
+# extents left to grow it), so that high-water mark is charged against the pool.
+#
+# 50/35 lets containerd sit between ~24G and ~36G instead. The floor is still ~8x
+# the working set, so GC never thrashes, and the lower ceiling returns the
+# difference to the thin pool once fstrim runs (scsi0 has discard=on).
+echo "Writing kubelet image GC thresholds..."
+mkdir -p /etc/rancher/k3s
+cat > /etc/rancher/k3s/config.yaml <<'CONFIG'
+kubelet-arg:
+  - image-gc-high-threshold=50
+  - image-gc-low-threshold=35
+CONFIG
+
 echo "Installing K3s with Traefik disabled..."
 
 curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--disable traefik" sh -
