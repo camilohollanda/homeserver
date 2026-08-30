@@ -278,6 +278,313 @@
         }
       ],
       "description": "pve/data backs the disks of VMs 112, 117 and 118. It has no mounted filesystem, so it comes from the textfile collector in bootstrap/node-exporter/, not from the filesystem collector. Metadata exhaustion stops writes just as data exhaustion does."
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoria-metrics"
+      },
+      "description": "Days until each filesystem fills, from the slope of the last 6 hours. Sort ascending and read the top row. A negative or empty value means the filesystem is emptying or flat, which is the normal case -- the point of the panel is the row that is not. /tank is excluded because df on a ZFS dataset reports the dataset, not the pool.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": true,
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Used"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "max",
+                "value": 100
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "#EAB839",
+                      "value": 70
+                    },
+                    {
+                      "color": "orange",
+                      "value": 85
+                    },
+                    {
+                      "color": "red",
+                      "value": 95
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "gauge",
+                  "mode": "gradient",
+                  "valueDisplayMode": "text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Free"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Days to full"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "noValue",
+                "value": "\u2014"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 14
+                    },
+                    {
+                      "color": "#EAB839",
+                      "value": 30
+                    },
+                    {
+                      "color": "text",
+                      "value": 90
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Inodes"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "text",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 80
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 36
+      },
+      "id": 90,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": false,
+            "displayName": "Days to full"
+          }
+        ]
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoria-metrics"
+          },
+          "editorMode": "code",
+          "expr": "sum by (host, mountpoint, fs) (label_join(100 * (1 - node_filesystem_avail_bytes{host=~\"$host\", fstype!~\"tmpfs|devtmpfs|overlay|squashfs|efivarfs|fuse.*\", mountpoint!~\"/boot.*|/tank.*|/etc/pve|/var/lib/lxcfs\"} / node_filesystem_size_bytes{host=~\"$host\", fstype!~\"tmpfs|devtmpfs|overlay|squashfs|efivarfs|fuse.*\", mountpoint!~\"/boot.*|/tank.*|/etc/pve|/var/lib/lxcfs\"}), \"fs\", \":\", \"host\", \"mountpoint\"))",
+          "range": false,
+          "instant": true,
+          "refId": "A",
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoria-metrics"
+          },
+          "editorMode": "code",
+          "expr": "sum by (fs) (label_join(node_filesystem_avail_bytes{host=~\"$host\", fstype!~\"tmpfs|devtmpfs|overlay|squashfs|efivarfs|fuse.*\", mountpoint!~\"/boot.*|/tank.*|/etc/pve|/var/lib/lxcfs\"}, \"fs\", \":\", \"host\", \"mountpoint\"))",
+          "range": false,
+          "instant": true,
+          "refId": "B",
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoria-metrics"
+          },
+          "editorMode": "code",
+          "expr": "sum by (fs) (label_join(((node_filesystem_avail_bytes{host=~\"$host\", fstype!~\"tmpfs|devtmpfs|overlay|squashfs|efivarfs|fuse.*\", mountpoint!~\"/boot.*|/tank.*|/etc/pve|/var/lib/lxcfs\"} / -deriv(node_filesystem_avail_bytes{host=~\"$host\", fstype!~\"tmpfs|devtmpfs|overlay|squashfs|efivarfs|fuse.*\", mountpoint!~\"/boot.*|/tank.*|/etc/pve|/var/lib/lxcfs\"}[6h]) / 86400) > 0) < 3650, \"fs\", \":\", \"host\", \"mountpoint\"))",
+          "range": false,
+          "instant": true,
+          "refId": "C",
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoria-metrics"
+          },
+          "editorMode": "code",
+          "expr": "sum by (fs) (label_join(100 * (1 - node_filesystem_files_free{host=~\"$host\", fstype!~\"tmpfs|devtmpfs|overlay|squashfs|efivarfs|fuse.*\", mountpoint!~\"/boot.*|/tank.*|/etc/pve|/var/lib/lxcfs\"} / node_filesystem_files{host=~\"$host\", fstype!~\"tmpfs|devtmpfs|overlay|squashfs|efivarfs|fuse.*\", mountpoint!~\"/boot.*|/tank.*|/etc/pve|/var/lib/lxcfs\"}), \"fs\", \":\", \"host\", \"mountpoint\"))",
+          "range": false,
+          "instant": true,
+          "refId": "D",
+          "format": "table"
+        }
+      ],
+      "title": "Time to full",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "exclude": {
+              "names": [
+                "Time"
+              ]
+            }
+          }
+        },
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "fs",
+            "mode": "outer"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "fs": true
+            },
+            "indexByName": {
+              "host": 0,
+              "mountpoint": 1,
+              "Value #A": 2,
+              "Value #B": 3,
+              "Value #C": 4,
+              "Value #D": 5
+            },
+            "renameByName": {
+              "host": "Host",
+              "mountpoint": "Mount",
+              "Value #A": "Used",
+              "Value #B": "Free",
+              "Value #C": "Days to full",
+              "Value #D": "Inodes"
+            }
+          }
+        }
+      ],
+      "type": "table"
     }
   ]
 }
