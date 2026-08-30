@@ -360,9 +360,9 @@
             "showPoints": "never",
             "thresholdsStyle": {
               "mode": "dashed"
-            }
+            },
+            "axisSoftMax": 100
           },
-          "max": 100,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -562,9 +562,9 @@
           "min": 0,
           "custom": {
             "fillOpacity": 8,
-            "showPoints": "never"
-          },
-          "max": 100
+            "showPoints": "never",
+            "axisSoftMax": 100
+          }
         },
         "overrides": [
           {
