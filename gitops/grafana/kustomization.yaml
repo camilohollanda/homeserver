@@ -35,6 +35,7 @@ configMapGenerator:
       - dashboards/pod-resources-d-fleet.json
       - dashboards/pod-resources-d-detail.json
       - dashboards/vm-hosts.json
+      - dashboards/disk-io.json
       - dashboards/garage.json
       - dashboards/infisical.json
       - dashboards/services-nginx.json
