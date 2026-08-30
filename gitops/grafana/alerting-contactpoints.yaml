@@ -21,6 +21,14 @@ data:
               # Apprise would deliver a notification with no text at all. This
               # emits exactly the fields Apprise reads.
               #
+              # The $$ on each variable is an escape, not a typo. Grafana runs
+              # environment-variable interpolation over provisioning files, and
+              # an unescaped $body is expanded to the empty string -- which
+              # produced `{{-  := "" -}}` in the live contact point and made
+              # every notification fail to render, silently. $$ yields a literal
+              # $. Alert rule annotations are exempt from this, which is why
+              # $values there needs no escaping.
+              #
               # The template deliberately uses only Go's built-in template
               # functions -- printf, index, range, if, eq. `printf "%q"` does
               # the JSON string escaping, so alert text containing a quote or a
@@ -36,16 +44,16 @@ data:
               # read better, but that config lives in Infisical, not this repo.
               payload:
                 template: |
-                  {{- $body := "" -}}
+                  {{- $$body := "" -}}
                   {{- range .Alerts -}}
-                  {{- $where := index .Labels "host" -}}
-                  {{- if not $where }}{{ $where = index .Labels "namespace" }}{{ end -}}
-                  {{- $body = printf "%s%s \u2014 %s\n%s\n\n" $body (index .Labels "alertname") $where (index .Annotations "summary") -}}
+                  {{- $$where := index .Labels "host" -}}
+                  {{- if not $$where }}{{ $$where = index .Labels "namespace" }}{{ end -}}
+                  {{- $$body = printf "%s%s \u2014 %s\n%s\n\n" $$body (index .Labels "alertname") $$where (index .Annotations "summary") -}}
                   {{- end -}}
-                  {{- $type := index .CommonLabels "apprise_type" -}}
-                  {{- if not $type }}{{ $type = "warning" }}{{ end -}}
-                  {{- if ne .Status "firing" }}{{ $type = "success" }}{{ end -}}
-                  {"title": {{ printf "%s: %s" .Status (index .CommonLabels "alertname") | printf "%q" }}, "body": {{ $body | printf "%q" }}, "tag": "grafana", "type": {{ $type | printf "%q" }}, "format": "markdown"}
+                  {{- $$type := index .CommonLabels "apprise_type" -}}
+                  {{- if not $$type }}{{ $$type = "warning" }}{{ end -}}
+                  {{- if ne .Status "firing" }}{{ $$type = "success" }}{{ end -}}
+                  {"title": {{ printf "%s: %s" .Status (index .CommonLabels "alertname") | printf "%q" }}, "body": {{ $$body | printf "%q" }}, "tag": "grafana", "type": {{ $$type | printf "%q" }}, "format": "markdown"}
 
     policies:
       - orgId: 1
