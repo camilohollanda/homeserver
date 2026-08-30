@@ -15,7 +15,7 @@
       }
     ]
   },
-  "description": "One pod at a time. Reached by clicking a pod name in the fleet dashboard.",
+  "description": "One pod at a time. Reached by clicking a pod name on Pod resources.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -720,8 +720,7 @@
   "schemaVersion": 42,
   "tags": [
     "pod",
-    "resources",
-    "layout-candidate"
+    "resources"
   ],
   "templating": {
     "list": [
@@ -783,7 +782,7 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Pod resources \u00b7 D \u2014 pod detail",
+  "title": "Pod resources \u2014 pod detail",
   "uid": "pod-resources-detail",
   "version": 1
 }
