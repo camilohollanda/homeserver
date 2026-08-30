@@ -323,7 +323,7 @@
         "type": "prometheus",
         "uid": "victoria-metrics"
       },
-      "description": "Both services on one axis. Percentages, not bytes, because their limits differ by roughly five times: the connector at 500 MB is in trouble where the app at 500 MB is idle. Hover for bytes.",
+      "description": "EXPERIMENT: the byte companion is hidden from the plot but still asks for the right axis. If the right axis is present and scaled in MiB, a second axis does not need a second line and every other panel can drop theirs.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -375,7 +375,7 @@
                 "value": {
                   "legend": false,
                   "tooltip": false,
-                  "viz": false
+                  "viz": true
                 }
               },
               {
@@ -474,7 +474,7 @@
           "legendFormat": "connector (bytes)"
         }
       ],
-      "title": "Memory \u2014 % of limit",
+      "title": "Memory \u2014 % of limit (eixo direito sem linha)",
       "type": "timeseries"
     },
     {
