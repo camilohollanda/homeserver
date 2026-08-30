@@ -15,7 +15,7 @@
       }
     ]
   },
-  "description": "Resources for both services on shared percentage axes, so the app and the connector are directly comparable despite very different limits. Logs stay split.",
+  "description": "Resources for both services on shared percentage axes, so the app and the connector are directly comparable despite very different limits. All four charts on one row; the logs get the height that buys.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -247,7 +247,7 @@
         "type": "prometheus",
         "uid": "victoria-metrics"
       },
-      "description": "The 100 GiB volume the app writes to. The connector does not mount it.",
+      "description": "Not the PVC: local-path-static has no quota, so this is /mnt/k8s-persistent on k3s-apps, shared with staging and with every other volume on that class.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -315,7 +315,7 @@
           "refId": "A"
         }
       ],
-      "title": "werify-data PVC used",
+      "title": "werify-data disk used",
       "type": "stat"
     },
     {
@@ -323,7 +323,7 @@
         "type": "prometheus",
         "uid": "victoria-metrics"
       },
-      "description": "Both services on one axis. Percentages, not bytes, because their limits differ by roughly five times: the connector at 500 MB is in trouble where the app at 500 MB is idle.",
+      "description": "Both services on one axis. Percentages, not bytes, because their limits differ by roughly five times: the connector at 500 MB is in trouble where the app at 500 MB is idle. Hover for bytes.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -373,7 +373,7 @@
               {
                 "id": "custom.hideFrom",
                 "value": {
-                  "legend": false,
+                  "legend": true,
                   "tooltip": false,
                   "viz": true
                 }
@@ -388,7 +388,7 @@
       },
       "gridPos": {
         "h": 9,
-        "w": 12,
+        "w": 6,
         "x": 0,
         "y": 4
       },
@@ -504,8 +504,8 @@
       },
       "gridPos": {
         "h": 9,
-        "w": 12,
-        "x": 12,
+        "w": 6,
+        "x": 6,
         "y": 4
       },
       "id": 201,
@@ -556,7 +556,7 @@
         "type": "prometheus",
         "uid": "victoria-metrics"
       },
-      "description": "Fill of the 100 GiB volume. Hover for bytes.",
+      "description": "Bytes used against the dashed capacity line. Read that line carefully: it is 210 GB, not the 100Gi the PVC requests. local-path-static is a static local volume with no quota, so the kubelet reports the filesystem under it -- /mnt/k8s-persistent on k3s-apps. production and staging share it, and so does every other PVC on this storage class, which means this number moves for reasons that have nothing to do with werify. Hover for the percentage.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -571,25 +571,56 @@
             "spanNulls": true
           },
           "mappings": [],
-          "unit": "percent",
-          "max": 100,
-          "min": 0
+          "unit": "bytes"
         },
         "overrides": [
           {
             "matcher": {
               "id": "byRegexp",
-              "options": "/\\(bytes\\)$/"
+              "options": "/capacity$/"
+            },
+            "properties": [
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    10,
+                    10
+                  ],
+                  "fill": "dash"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/\\(%\\)$/"
             },
             "properties": [
               {
                 "id": "unit",
-                "value": "bytes"
+                "value": "percent"
               },
               {
                 "id": "custom.hideFrom",
                 "value": {
-                  "legend": false,
+                  "legend": true,
                   "tooltip": false,
                   "viz": true
                 }
@@ -603,10 +634,10 @@
         ]
       },
       "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 13
+        "h": 9,
+        "w": 6,
+        "x": 12,
+        "y": 4
       },
       "id": 202,
       "options": {
@@ -629,11 +660,11 @@
             "uid": "victoria-metrics"
           },
           "editorMode": "code",
-          "expr": "100 * (1 - kubelet_volume_stats_available_bytes{namespace=\"werify-$env\"} / kubelet_volume_stats_capacity_bytes{namespace=\"werify-$env\"})",
+          "expr": "kubelet_volume_stats_capacity_bytes{namespace=\"werify-$env\"} - kubelet_volume_stats_available_bytes{namespace=\"werify-$env\"}",
           "range": true,
           "instant": false,
           "refId": "A",
-          "legendFormat": "{{persistentvolumeclaim}}"
+          "legendFormat": "{{persistentvolumeclaim}} used"
         },
         {
           "datasource": {
@@ -641,14 +672,26 @@
             "uid": "victoria-metrics"
           },
           "editorMode": "code",
-          "expr": "kubelet_volume_stats_capacity_bytes{namespace=\"werify-$env\"} - kubelet_volume_stats_available_bytes{namespace=\"werify-$env\"}",
+          "expr": "kubelet_volume_stats_capacity_bytes{namespace=\"werify-$env\"}",
           "range": true,
           "instant": false,
           "refId": "B",
-          "legendFormat": "{{persistentvolumeclaim}} (bytes)"
+          "legendFormat": "{{persistentvolumeclaim}} capacity"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoria-metrics"
+          },
+          "editorMode": "code",
+          "expr": "100 * (1 - kubelet_volume_stats_available_bytes{namespace=\"werify-$env\"} / kubelet_volume_stats_capacity_bytes{namespace=\"werify-$env\"})",
+          "range": true,
+          "instant": false,
+          "refId": "C",
+          "legendFormat": "{{persistentvolumeclaim}} (%)"
         }
       ],
-      "title": "werify-data PVC",
+      "title": "werify-data \u2014 disk",
       "type": "timeseries"
     },
     {
@@ -755,10 +798,10 @@
         ]
       },
       "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 13
+        "h": 9,
+        "w": 6,
+        "x": 18,
+        "y": 4
       },
       "id": 203,
       "options": {
@@ -796,10 +839,10 @@
       },
       "description": "",
       "gridPos": {
-        "h": 16,
+        "h": 24,
         "w": 12,
         "x": 0,
-        "y": 21
+        "y": 13
       },
       "id": 210,
       "options": {
@@ -837,10 +880,10 @@
       },
       "description": "",
       "gridPos": {
-        "h": 16,
+        "h": 24,
         "w": 12,
         "x": 12,
-        "y": 21
+        "y": 13
       },
       "id": 211,
       "options": {
