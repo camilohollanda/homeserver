@@ -1,0 +1,61 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-alerting-contactpoints
+  namespace: grafana
+data:
+  contactpoints.yaml: |
+    apiVersion: 1
+
+    contactPoints:
+      - orgId: 1
+        name: apprise
+        receivers:
+          - uid: apprise-homeserver
+            type: webhook
+            disableResolveMessage: false
+            settings:
+              url: http://apprise.apprise.svc.cluster.local/notify/homeserver
+              httpMethod: POST
+              # Grafana's stock webhook body carries `message`, not `body`, so
+              # Apprise would deliver a notification with no text at all. This
+              # emits exactly the fields Apprise reads.
+              #
+              # The template deliberately uses only Go's built-in template
+              # functions -- printf, index, range, if, eq. `printf "%q"` does
+              # the JSON string escaping, so alert text containing a quote or a
+              # newline cannot break the document. Grafana also ships gomplate
+              # helpers (coll.Dict, data.ToJSON) which would read better, but
+              # betting the delivery path on them buys nothing here.
+              #
+              # tag `grafana` is not decorative: Apprise routes by tag and has
+              # no catch-all, so an unknown tag is a silent 424 and the alert is
+              # simply never delivered. Every infra tag there points at the same
+              # "Homeserver" Pushover application, so this reads as "sent by
+              # Grafana" and delivers identically. A dedicated `infra` tag would
+              # read better, but that config lives in Infisical, not this repo.
+              payload:
+                template: |
+                  {{- $body := "" -}}
+                  {{- range .Alerts -}}
+                  {{- $where := index .Labels "host" -}}
+                  {{- if not $where }}{{ $where = index .Labels "namespace" }}{{ end -}}
+                  {{- $body = printf "%s%s \u2014 %s\n%s\n\n" $body (index .Labels "alertname") $where (index .Annotations "summary") -}}
+                  {{- end -}}
+                  {{- $type := index .CommonLabels "apprise_type" -}}
+                  {{- if not $type }}{{ $type = "warning" }}{{ end -}}
+                  {{- if ne .Status "firing" }}{{ $type = "success" }}{{ end -}}
+                  {"title": {{ printf "%s: %s" .Status (index .CommonLabels "alertname") | printf "%q" }}, "body": {{ $body | printf "%q" }}, "tag": "grafana", "type": {{ $type | printf "%q" }}, "format": "markdown"}
+
+    policies:
+      - orgId: 1
+        receiver: apprise
+        group_by: [alertname, host]
+        group_wait: 30s
+        group_interval: 5m
+        # Deliberate: the disk rule fires the moment this ships, because
+        # k3s-apps is already at 82%. Repeating twice a day, with silences
+        # available in the UI, is what separates "you fix it" from "you mute
+        # Pushover forever" -- and muting Pushover would also lose the Argo CD
+        # and pod-notify alerts that already route through it.
+        repeat_interval: 12h

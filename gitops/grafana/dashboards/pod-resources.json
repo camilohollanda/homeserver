@@ -174,6 +174,45 @@
       ],
       "title": "Container restarts",
       "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "victoria-metrics"},
+      "description": "PVC fill. Already in the TSDB from the kubelet job -- this only ever needed a panel. Includes the victoria-metrics PVC, which is the store this dashboard reads from.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "max": 100,
+          "min": 0,
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 30},
+      "id": 4,
+      "options": {
+        "legend": {"calcs": ["last", "max"], "displayMode": "table", "placement": "right", "showLegend": true},
+        "tooltip": {"mode": "multi"}
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "victoria-metrics"},
+          "editorMode": "code",
+          "expr": "100 * (1 - kubelet_volume_stats_available_bytes{namespace=~\"$namespace\"} / kubelet_volume_stats_capacity_bytes{namespace=~\"$namespace\"})",
+          "legendFormat": "{{namespace}}/{{persistentvolumeclaim}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "PVC usage",
+      "type": "timeseries"
     }
   ],
   "preload": false,
