@@ -68,6 +68,46 @@ DNS automation in `setup.sh` is shared boilerplate: `get_zone_id` (longest-suffi
 
 All env vars defaulting to "auto-generated random" use `openssl rand -base64 32 | tr -d '=+/' | cut -c1-32`.
 
+## Observability
+
+Three collectors feed two stores, and nothing else is deployed:
+
+- **Metrics → VictoriaMetrics** (`vmsingle`, 30d retention, in k3s). Three
+  scrape jobs: kubelet and cAdvisor through the apiserver proxy for pods, and
+  `node-exporter` by static target over the LAN for hosts. Pull, not push —
+  pods here reach the LAN directly, so there is no vmagent and no NodePort.
+- **Logs → Loki.** Promtail as a DaemonSet in k3s, plus promtail on the
+  services VM pushing to the Loki NodePort. The `host` label is deliberately
+  shared with the metrics side, so a graph and its logs use one key.
+- **Alerts → Grafana → Apprise → Pushover.** Rules live in
+  `gitops/grafana/alerting-rules.yaml`, the contact point and notification
+  policy in `gitops/grafana/alerting-contactpoints.yaml`, both provisioned from
+  files the same way dashboards are. There is no Alertmanager and no vmalert;
+  Grafana's silences are what keep a long-lived alert from being muted outright.
+
+**Every new VM needs `bootstrap/node-exporter/setup.sh`** — add its address to
+the target list there *and* to the `node-exporter` job in
+`gitops/victoria-metrics/scrape-config.yaml`. A host with no exporter is not
+quiet, it is unmonitored: the `infra-node-exporter-down` rule only covers
+targets that are already listed.
+
+Four things here are not obvious and each one costs real debugging time:
+
+- **The Proxmox host has no `sudo`** and logs in as root. The `REMOTE_HOST=`
+  trick in `bootstrap/node-exporter/install.sh` branches on `id -u` for that
+  reason; every other installer in this repo hardcodes `sudo bash -s` because
+  none of them target the hypervisor.
+- **`df` on a ZFS dataset reports that dataset's usage, not the pool's.**
+  `/tank` reads ~1% used while the pool holds hundreds of gigabytes, because
+  the VM zvols are sibling datasets. Alert on free bytes, never on a percentage.
+- **The disks of VMs 112, 117 and 118 are on the LVM thin pool `pve/data`,**
+  which has no mounted filesystem at all — the filesystem collector cannot see
+  it. It is exported by a textfile collector installed alongside node_exporter.
+  A full thin pool fails writes while the guests still believe they have space.
+- **Apprise routes by tag and has no catch-all.** A notification carrying a tag
+  that is not in its config returns 424 and is silently dropped. The tag list
+  lives in Infisical, not in this repo, so check there before inventing one.
+
 ## Domains & TLS
 
 Three distinct paths — don't conflate them:
