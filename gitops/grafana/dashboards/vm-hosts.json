@@ -393,12 +393,30 @@
                 "value": {
                   "legend": false,
                   "tooltip": false,
-                  "viz": true
+                  "viz": false
                 }
               },
               {
                 "id": "custom.axisPlacement",
-                "value": "hidden"
+                "value": "right"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    4,
+                    6
+                  ],
+                  "fill": "dash"
+                }
               }
             ]
           }
@@ -564,12 +582,30 @@
                 "value": {
                   "legend": false,
                   "tooltip": false,
-                  "viz": true
+                  "viz": false
                 }
               },
               {
                 "id": "custom.axisPlacement",
-                "value": "hidden"
+                "value": "right"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    4,
+                    6
+                  ],
+                  "fill": "dash"
+                }
               }
             ]
           }
