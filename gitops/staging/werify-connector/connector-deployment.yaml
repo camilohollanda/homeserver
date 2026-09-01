@@ -59,6 +59,14 @@ spec:
             # wedged connector won't drain the recycle command either).
             - name: WHATSAPP_SIDECAR_HEARTBEAT_FILE
               value: /run/whatsapp-connector/heartbeat
+            # Soft heap ceiling, so the runtime collects rather than letting the kernel kill the pod
+            # (it cannot see the cgroup limit by itself; GOGC=100 targets ~2x the live heap). Staging
+            # peaks around 190Mi because its allowlist keeps few clients live, so this is purely a
+            # guard rail and the 512Mi limit below is untouched — but staging is where a memory
+            # regression should surface first, so the knob exists in both environments. See the
+            # werify repo's docs/whatsapp-connector-memory.md.
+            - name: GOMEMLIMIT
+              value: "400MiB"
           envFrom:
             # The connector's OWN secret (external-secret.yaml → Infisical /WerifyConnector/), not
             # the app's `secrets`. Carries SIDECAR_DATABASE_URL, WHATSAPP_SIDECAR_ALLOWLIST,
