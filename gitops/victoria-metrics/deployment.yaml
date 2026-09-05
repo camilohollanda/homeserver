@@ -25,6 +25,7 @@ spec:
         args:
           - -storageDataPath=/storage
           - -promscrape.config=/etc/vmsingle/prometheus.yml
+          - -promscrape.configCheckInterval=30s
           # Retain ~30d; bump if /storage has room. Disk usage scales with
           # active series, not just retention — homelab scale stays small.
           - -retentionPeriod=30d

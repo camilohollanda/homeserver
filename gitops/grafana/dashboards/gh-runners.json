@@ -355,7 +355,7 @@
             "uid": "victoria-metrics"
           },
           "editorMode": "code",
-          "expr": "((gh_runner_metrics_collect_success{host=\"gh-runners\"} == bool 1) * ((time() - gh_runner_metrics_last_success_timestamp_seconds{host=\"gh-runners\"}) < bool 180)) or vector(0)",
+          "expr": "max((gh_runner_metrics_collect_success{host=\"gh-runners\"} == bool 1) * ((time() - gh_runner_metrics_last_success_timestamp_seconds{host=\"gh-runners\"}) < bool 180)) or vector(0)",
           "instant": true,
           "range": false,
           "refId": "A"
