@@ -44,6 +44,15 @@
 #                              When set, every runner binary is patched so it
 #                              doesn't overwrite this value at job start, and
 #                              the URL is injected into each instance's env.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -z "${GH_RUNNER_METRICS_SRC:-}" ]]; then
+  [[ -r "${SCRIPT_DIR}/metrics.sh" ]] || {
+    echo "Error: missing ${SCRIPT_DIR}/metrics.sh" >&2
+    exit 1
+  }
+  GH_RUNNER_METRICS_SRC="$(cat "${SCRIPT_DIR}/metrics.sh")"
+fi
+
 if [[ -n "${REMOTE_HOST:-}" ]]; then
   { printf 'export %s=%q\n' \
       GH_APP_CLIENT_ID         "${GH_APP_CLIENT_ID:-}" \
@@ -53,7 +62,8 @@ if [[ -n "${REMOTE_HOST:-}" ]]; then
       RUNNER_VERSION           "${RUNNER_VERSION:-}" \
       RUNNER_LABELS            "${RUNNER_LABELS:-}" \
       RUNNER_ERL_FLAGS         "${RUNNER_ERL_FLAGS-+S 4:4}" \
-      ACTIONS_RESULTS_URL      "${ACTIONS_RESULTS_URL:-}"
+      ACTIONS_RESULTS_URL      "${ACTIONS_RESULTS_URL:-}" \
+      GH_RUNNER_METRICS_SRC    "$GH_RUNNER_METRICS_SRC"
     cat "$0"
   } | ssh "$REMOTE_HOST" "sudo bash -s"
   exit $?
@@ -77,6 +87,9 @@ RUNNER_LABELS="${RUNNER_LABELS:-self-hosted,linux,homeserver}"
 # this var, so `:-` would silently override that opt-out on remote runs.
 RUNNER_ERL_FLAGS="${RUNNER_ERL_FLAGS-+S 4:4}"
 ACTIONS_RESULTS_URL="${ACTIONS_RESULTS_URL:-}"
+CADVISOR_VERSION="v0.60.5"
+CADVISOR_LISTEN_ADDRESS="192.168.20.50"
+CADVISOR_PORT="18080"
 
 # Cache-server URL must end with a slash per falcondev docs; tolerate either form.
 if [[ -n "$ACTIONS_RESULTS_URL" && "${ACTIONS_RESULTS_URL: -1}" != "/" ]]; then
@@ -174,6 +187,55 @@ if ! command -v docker >/dev/null; then
   apt-get update
   apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 fi
+
+# ---------------------------------------------------------------------------
+# cAdvisor — Docker CPU and memory for the runner dashboard
+# ---------------------------------------------------------------------------
+install -d -m 0755 /opt/cadvisor
+cat > /opt/cadvisor/docker-compose.yml <<EOF
+services:
+  cadvisor:
+    image: ghcr.io/google/cadvisor:${CADVISOR_VERSION}
+    container_name: cadvisor
+    privileged: true
+    restart: unless-stopped
+    labels:
+      homeserver.keep: "true"
+    command:
+      - --docker_only=true
+      - --store_container_labels=false
+    ports:
+      - "${CADVISOR_LISTEN_ADDRESS}:${CADVISOR_PORT}:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+    devices:
+      - /dev/kmsg:/dev/kmsg
+EOF
+
+cat > /etc/systemd/system/cadvisor.service <<'CADVISORSVC'
+[Unit]
+Description=cAdvisor container metrics
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/cadvisor
+ExecStart=/usr/bin/docker compose up -d --remove-orphans
+ExecStop=/usr/bin/docker compose down
+
+[Install]
+WantedBy=multi-user.target
+CADVISORSVC
+
+systemctl daemon-reload
+systemctl enable cadvisor.service
+systemctl restart cadvisor.service
 
 # ---------------------------------------------------------------------------
 # gh CLI (used by claude.yml's allowed Bash(gh ...) tools)
@@ -834,6 +896,46 @@ for envfile in "${ETC_DIR}"/instances/*.env; do
   fi
 done
 shopt -u nullglob
+
+# ---------------------------------------------------------------------------
+# Runner status metrics — GitHub API -> node_exporter textfile collector
+# ---------------------------------------------------------------------------
+install -m 0755 /dev/stdin /usr/local/sbin/gh-runner-metrics \
+  <<< "$GH_RUNNER_METRICS_SRC"
+install -d -m 0755 /var/lib/prometheus/node-exporter
+
+cat > /etc/systemd/system/gh-runner-metrics.service <<'METRICSSVC'
+[Unit]
+Description=Export GitHub Actions runner status metrics
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/gh-runners/env
+ExecStart=/usr/local/sbin/gh-runner-metrics
+METRICSSVC
+
+cat > /etc/systemd/system/gh-runner-metrics.timer <<'METRICSTIMER'
+[Unit]
+Description=Refresh GitHub Actions runner status metrics every minute
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+METRICSTIMER
+
+systemctl daemon-reload
+systemctl enable gh-runner-metrics.timer
+systemctl restart gh-runner-metrics.timer
+# Populate the first snapshot immediately, but do not make a transient GitHub
+# API failure abort an otherwise healthy runner installation.
+systemctl start gh-runner-metrics.service || \
+  echo "Warning: initial runner metrics collection failed; the timer will retry"
 
 echo ""
 echo "✓ GitHub Actions runners installed."

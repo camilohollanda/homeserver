@@ -151,6 +151,8 @@ Repository access.
 Operational:
 - Status: `systemctl status 'gh-runner@*'`
 - Logs:   `journalctl -u 'gh-runner@*' -f`
+- Metrics: `gh-runner-metrics.timer` publishes GitHub online/busy state through
+  node_exporter; `cadvisor.service` exports Docker CPU and memory on port 18080.
 - Resizing a pool: update `GH_ORGS` and re-run `setup.sh` (idempotent; orphan
   instances are disabled and cleaned up).
 

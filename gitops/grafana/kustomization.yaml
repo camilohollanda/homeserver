@@ -31,6 +31,7 @@ configMapGenerator:
       - dashboards/garage.json
       - dashboards/infisical.json
       - dashboards/services-nginx.json
+      - dashboards/gh-runners.json
     options:
       disableNameSuffixHash: true
       annotations:

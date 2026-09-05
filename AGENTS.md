@@ -70,13 +70,16 @@ All env vars defaulting to "auto-generated random" use `openssl rand -base64 32 
 
 ## Observability
 
-Three collectors feed two stores, and nothing else is deployed:
+The observability stack feeds two stores, and nothing else is deployed:
 
-- **Metrics → VictoriaMetrics** (`vmsingle`, 30d retention, in k3s). Four
+- **Metrics → VictoriaMetrics** (`vmsingle`, 30d retention, in k3s). Five
   scrape jobs: kubelet and cAdvisor through the apiserver proxy for pods,
   `node-exporter` by static target over the LAN for hosts, and
-  `postgres-exporter` on VM 118. Pull, not push — pods here reach the LAN
-  directly, so there is no vmagent and no NodePort.
+  `postgres-exporter` on VM 118, plus standalone cAdvisor on VM 117 for the
+  Docker containers created by CI jobs. Pull, not push — pods here reach the
+  LAN directly, so there is no vmagent and no NodePort. Runner online/busy
+  state comes from a GitHub API textfile collector exposed by node_exporter on
+  VM 117, so it does not need another scrape job.
   `bootstrap/postgres-exporter/` installs the last of these: a `pg_monitor`
   role, capped at five connections because every app on that host shares one
   `max_connections`, connecting over loopback so neither `pg_hba.conf` nor a

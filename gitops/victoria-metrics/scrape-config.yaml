@@ -51,6 +51,24 @@ data:
             target_label: __metrics_path__
             replacement: /api/v1/nodes/$1/proxy/metrics
 
+      # Standalone cAdvisor on the Docker-based GitHub Actions runner host.
+      # Keep only the two series used by its dashboard; CI container names
+      # churn constantly, so retaining cAdvisor's full metric set would create
+      # cardinality without adding a view we use.
+      - job_name: gh-runners-cadvisor
+        static_configs:
+          - targets: ['192.168.20.50:18080']
+            labels: {host: gh-runners}
+        metric_relabel_configs:
+          - source_labels: [__name__]
+            regex: 'container_(cpu_usage_seconds_total|memory_working_set_bytes)'
+            action: keep
+          # Container IDs and image digests churn for every CI job. The stable
+          # Docker name is enough for the dashboard; keep cpu when cAdvisor
+          # emits the CPU counter with that label.
+          - regex: 'id|image'
+            action: labeldrop
+
       # node_exporter on the VMs and on the hypervisor. Pull, not push: pods in
       # this cluster reach the LAN directly, so there is no need for a vmagent
       # per host or a NodePort. Promtail pushes only because Loki has no pull
