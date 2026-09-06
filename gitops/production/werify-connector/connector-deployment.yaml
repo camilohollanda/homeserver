@@ -65,10 +65,12 @@ spec:
             # client), which is what the limit below is sized for. See the werify repo's
             # docs/whatsapp-connector-memory.md.
             #
-            # Held ~336Mi under limits.memory on purpose: GOMEMLIMIT bounds the Go heap, while the
-            # cgroup also counts goroutine stacks, socket buffers and kernel memory.
+            # Held ~900Mi under limits.memory on purpose: GOMEMLIMIT bounds the Go heap, while the
+            # cgroup also counts goroutine stacks, socket buffers and kernel memory — measured at
+            # ~260Mi outside the Go-governed figure with 412 clients (2026-09-06), and that share
+            # grows with the number of sockets.
             - name: GOMEMLIMIT
-              value: "1200MiB"
+              value: "3200MiB"
           envFrom:
             # The connector's OWN secret (external-secret.yaml → Infisical /WerifyConnector/), not
             # the app's `secrets`. Carries SIDECAR_DATABASE_URL, WHATSAPP_SIDECAR_ALLOWLIST (=all in
@@ -101,18 +103,23 @@ spec:
               mountPath: /run/whatsapp-connector
           resources:
             requests:
-              # The measured floor is ~500Mi at 79 connected numbers (2026-08-30), so the old 256Mi
-              # request sat below actual usage and exposed the pod to eviction under node pressure.
-              memory: "512Mi"
+              # The measured floor is ~1.1Gi at 320 connected numbers (2026-09-06, twenty minutes
+              # after boot), so the old 512Mi request sat below actual usage and exposed the pod to
+              # eviction under node pressure.
+              memory: "2Gi"
               cpu: "100m"
             limits:
               # No Typst / PDF rendering here (that's the app) — just whatsmeow sockets and JSON.
-              # Sized off the measurement rather than the guess it replaces: memory tracks the
-              # number of connected numbers at ~4-5Mi per whatsmeow client over a ~70Mi base, and
-              # the base went from 3 numbers to 125 in ten days. At 768Mi that left room for ~30
-              # more; 1.5Gi restores about a year of that growth rate. GOMEMLIMIT above keeps the
-              # Go heap ~336Mi below this, leaving the difference for stacks, sockets and kernel.
-              memory: "1536Mi"
+              # Sized off the measurement rather than the guess it replaces: working_set tracks the
+              # number of connected numbers at ~2.8Mi per whatsmeow client (2026-09-06: 1170Mi at
+              # 326 clients → 1410Mi at 412), and the base went from 169 to 412 clients in 36 hours
+              # once the ChatGPT app started pairing numbers. 1.5Gi was "a year" of the August rate
+              # and lasted a week. 4Gi buys ~950 more clients at the current slope — days, not
+              # months, at ~170 new numbers a day — which is the window for shrinking the per-client
+              # cost in the connector itself (docs/whatsapp-connector-memory.md in the werify repo).
+              # GOMEMLIMIT above keeps the Go heap ~900Mi below this, leaving the difference for
+              # stacks, sockets and kernel. The node has 32Gi; the app pod's limit is 4Gi.
+              memory: "4Gi"
               cpu: "1"
       volumes:
         - name: heartbeat
