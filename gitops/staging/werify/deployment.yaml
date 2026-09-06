@@ -50,6 +50,14 @@ spec:
           env:
             - name: DNS_CLUSTER_QUERY
               value: cluster.werify-staging.svc.cluster.local
+            # Generic, privacy-safe support alerts stay inside the cluster until
+            # Apprise routes this environment's tag to its existing Pushover app.
+            - name: SUPPORT_ADMIN_NOTIFICATIONS_ENABLED
+              value: "true"
+            - name: SUPPORT_APPRISE_URL
+              value: http://apprise.apprise.svc.cluster.local/notify/homeserver
+            - name: SUPPORT_ADMIN_NOTIFICATION_TAG
+              value: support-werify-staging
             # Phase 2 pod split (staging): the connector runs in its own Deployment
             # (werify-connector), so the app must NOT spawn a second in-pod connector — the
             # whatsmeow session is single-owner — and it talks to the pod over the DB transport.
