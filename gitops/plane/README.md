@@ -5,6 +5,13 @@ The internal wildcard DNS record already resolves to 192.168.20.11.
 No VM resize is needed. PostgreSQL lives on VM 118; attachments live in
 the private `plane` bucket on Garage VM 114.
 
+Validated on 2026-09-07: all nine workloads Ready, Argo Synced/Healthy,
+164 migrations applied on PostgreSQL 18.4, database connections using TLS,
+valid per-host certificate, HTTPS routes and WebSocket upgrade passing.
+The Garage smoke test verified CORS, signed POST/GET, byte integrity and
+denial of anonymous reads. Re-running provisioning preserved all secrets.
+First-administrator setup and SMTP configuration are operator onboarding steps.
+
 ## Manifests
 
 `values.yaml` configures upstream Helm chart `plane-ce` 1.8.0. The pinned,
@@ -79,7 +86,7 @@ kubectl -n plane get pods,externalsecrets,certificate,pvc
 kubectl -n plane rollout status deployment/plane-api-wl
 kubectl -n plane exec -i deployment/plane-api-wl -- python - \
   < scripts/plane/check-storage.py
-curl -fsS https://plane.internal.prakash.com.br/api/instances/
+python3 scripts/plane/check-http.py
 ```
 
 For a new release, review chart changes, update `values.yaml` and the pinned
