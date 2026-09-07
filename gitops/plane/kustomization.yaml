@@ -157,11 +157,10 @@ patches:
     - op: add
       path: /spec/template/spec/containers/0/readinessProbe
       value:
-        exec:
-          command:
-          - rabbitmq-diagnostics
-          - -q
-          - ping
+        # Running rabbitmq-diagnostics as root during first boot can create
+        # .erlang.cookie with the wrong owner before the server starts.
+        tcpSocket:
+          port: 5672
         periodSeconds: 10
         timeoutSeconds: 5
     - op: add
