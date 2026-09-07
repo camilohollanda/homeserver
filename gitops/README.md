@@ -6,6 +6,7 @@ Kubernetes manifests for Argo CD to manage applications in the cluster.
 
 - `minio/` - MinIO S3-compatible storage (internal use only)
 - `grafana/` - Grafana observability dashboard
+- `plane/` - [Plane Community](plane/README.md), with external PostgreSQL and Garage
 - `production/werify/` - Werify Phoenix LiveView application
 - `argocd/` - ArgoCD Application manifests
 

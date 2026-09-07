@@ -1,0 +1,3 @@
+PyYAML==6.0.3
+# Match the Plane v1.4.2 S3 client for the provisioning/smoke-test environment.
+boto3==1.34.96

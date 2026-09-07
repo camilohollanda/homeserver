@@ -1,0 +1,19 @@
+# Only Plane pods need to reach the unauthenticated cache and AMQP broker.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: plane-brokers
+  namespace: plane
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.name
+        operator: In
+        values: [plane-plane-redis, plane-plane-rabbitmq]
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {}
+      ports:
+        - {protocol: TCP, port: 6379}
+        - {protocol: TCP, port: 5672}
