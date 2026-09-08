@@ -15,13 +15,338 @@
       }
     ]
   },
-  "description": "Werify and its connector in staging, on one page: resources on shared percentage axes so two services with very different limits are comparable, and both log streams side by side.",
+  "description": "Werify and its connector in staging, on one page: HTTP request counts from ingress access logs, resources on shared percentage axes so two services with very different limits are comparable, and both log streams side by side.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
   "id": 0,
   "links": [],
   "panels": [
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "P8E80F9AEF21F6940"
+      },
+      "description": "Completed HTTP requests routed to Werify staging, counted from ingress-nginx access logs in Loki over the selected time range. Includes static assets and LiveView long polling. WebSockets count once when the connection closes; messages inside them are not requests. Traffic served or blocked at the Cloudflare edge and direct in-cluster calls are outside this count. Zero means no matching retained logs; totals depend on log collection and retention.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "mappings": [],
+          "unit": "short",
+          "decimals": 0,
+          "min": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 4,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "P8E80F9AEF21F6940"
+          },
+          "editorMode": "code",
+          "expr": "sum(count_over_time({namespace=\"ingress-nginx\", container=\"controller\", stream=\"stdout\"} |= \"[werify-staging-werify-4000]\" | pattern `<_> - <_> [<_>] \"<_>\" <status> <_> \"<_>\" \"<_>\" <_> <_> [<upstream>] <_>` | __error__=\"\" | upstream=\"werify-staging-werify-4000\" | status=~\"[1-5][0-9]{2}\" [$__range])) or vector(0)",
+          "queryType": "instant",
+          "refId": "A",
+          "legendFormat": "Requests"
+        }
+      ],
+      "title": "HTTP requests in range",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "P8E80F9AEF21F6940"
+      },
+      "description": "Completed requests per query interval, stacked by HTTP response status. Each bar counts requests in an interval that follows the selected time range and graph resolution. Includes static assets and long polling; WebSockets appear when closed. Gaps mean no matching retained access logs.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "lineWidth": 0,
+            "showPoints": "never",
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            }
+          },
+          "mappings": [],
+          "unit": "short",
+          "decimals": 0,
+          "min": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^HTTP 1[0-9]{2}$"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "purple",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^HTTP 2[0-9]{2}$"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^HTTP 3[0-9]{2}$"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "blue",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^HTTP 4[0-9]{2}$"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "orange",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^HTTP 5[0-9]{2}$"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 4,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "P8E80F9AEF21F6940"
+          },
+          "editorMode": "code",
+          "expr": "sum by (status) (count_over_time({namespace=\"ingress-nginx\", container=\"controller\", stream=\"stdout\"} |= \"[werify-staging-werify-4000]\" | pattern `<_> - <_> [<_>] \"<_>\" <status> <_> \"<_>\" \"<_>\" <_> <_> [<upstream>] <_>` | __error__=\"\" | upstream=\"werify-staging-werify-4000\" | status=~\"[1-5][0-9]{2}\" [$__auto]))",
+          "queryType": "range",
+          "refId": "A",
+          "legendFormat": "HTTP {{status}}"
+        }
+      ],
+      "title": "HTTP requests per interval",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "P8E80F9AEF21F6940"
+      },
+      "description": "Completed requests by HTTP response status over the entire selected range, from the same ingress access logs as the total. Each status is counted once per request, including requests with upstream retries.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "unit": "short",
+          "decimals": 0,
+          "min": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^HTTP 1[0-9]{2}$"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "purple",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^HTTP 2[0-9]{2}$"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^HTTP 3[0-9]{2}$"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "blue",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^HTTP 4[0-9]{2}$"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "orange",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^HTTP 5[0-9]{2}$"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 0
+      },
+      "id": 3,
+      "options": {
+        "displayMode": "basic",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "P8E80F9AEF21F6940"
+          },
+          "editorMode": "code",
+          "expr": "sort_desc(sum by (status) (count_over_time({namespace=\"ingress-nginx\", container=\"controller\", stream=\"stdout\"} |= \"[werify-staging-werify-4000]\" | pattern `<_> - <_> [<_>] \"<_>\" <status> <_> \"<_>\" \"<_>\" <_> <_> [<upstream>] <_>` | __error__=\"\" | upstream=\"werify-staging-werify-4000\" | status=~\"[1-5][0-9]{2}\" [$__range])))",
+          "queryType": "instant",
+          "refId": "A",
+          "legendFormat": "HTTP {{status}}"
+        }
+      ],
+      "title": "HTTP responses in range",
+      "type": "bargauge"
+    },
     {
       "datasource": {
         "type": "prometheus",
@@ -64,7 +389,7 @@
         "h": 4,
         "w": 6,
         "x": 0,
-        "y": 0
+        "y": 8
       },
       "id": 10,
       "options": {
@@ -140,7 +465,7 @@
         "h": 4,
         "w": 6,
         "x": 6,
-        "y": 0
+        "y": 8
       },
       "id": 11,
       "options": {
@@ -209,7 +534,7 @@
         "h": 4,
         "w": 6,
         "x": 12,
-        "y": 0
+        "y": 8
       },
       "id": 12,
       "options": {
@@ -284,7 +609,7 @@
         "h": 4,
         "w": 6,
         "x": 18,
-        "y": 0
+        "y": 8
       },
       "id": 13,
       "options": {
@@ -390,7 +715,7 @@
         "h": 9,
         "w": 6,
         "x": 0,
-        "y": 4
+        "y": 12
       },
       "id": 20,
       "options": {
@@ -506,7 +831,7 @@
         "h": 9,
         "w": 6,
         "x": 6,
-        "y": 4
+        "y": 12
       },
       "id": 21,
       "options": {
@@ -637,7 +962,7 @@
         "h": 9,
         "w": 6,
         "x": 12,
-        "y": 4
+        "y": 12
       },
       "id": 22,
       "options": {
@@ -801,7 +1126,7 @@
         "h": 9,
         "w": 6,
         "x": 18,
-        "y": 4
+        "y": 12
       },
       "id": 23,
       "options": {
@@ -842,7 +1167,7 @@
         "h": 24,
         "w": 12,
         "x": 0,
-        "y": 13
+        "y": 21
       },
       "id": 30,
       "options": {
@@ -883,7 +1208,7 @@
         "h": 24,
         "w": 12,
         "x": 12,
-        "y": 13
+        "y": 21
       },
       "id": 31,
       "options": {
