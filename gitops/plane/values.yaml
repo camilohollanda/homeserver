@@ -1,0 +1,70 @@
+# Input to scripts/plane/render.sh; Argo consumes the resulting Kustomize tree.
+planeVersion: v1.4.2
+ingress:
+  enabled: false
+  appHost: plane.internal.prakash.com.br
+  ingressClass: nginx
+ssl:
+  tls_secret_name: plane-tls
+postgres:
+  local_setup: false
+minio:
+  local_setup: false
+redis:
+  image: valkey/valkey:7.2.11-alpine
+  storageClass: local-path
+  volumeSize: 1Gi
+rabbitmq:
+  image: rabbitmq:3.13.6-management-alpine
+  storageClass: local-path
+  volumeSize: 1Gi
+external_secrets:
+  app_keys_existingSecret: plane-keys
+  app_env_existingSecret: plane-app-env
+  live_env_existingSecret: plane-live-env
+  doc_store_existingSecret: plane-storage
+  rabbitmq_existingSecret: plane-rabbitmq
+env:
+  requireExplicitSecrets: true
+web:
+  pullPolicy: IfNotPresent
+  cpuRequest: 100m
+  memoryRequest: 256Mi
+  cpuLimit: 500m
+  memoryLimit: 512Mi
+space:
+  pullPolicy: IfNotPresent
+  cpuRequest: 100m
+  memoryRequest: 128Mi
+  cpuLimit: 500m
+  memoryLimit: 384Mi
+admin:
+  pullPolicy: IfNotPresent
+  cpuRequest: 100m
+  memoryRequest: 128Mi
+  cpuLimit: 500m
+  memoryLimit: 384Mi
+live:
+  pullPolicy: IfNotPresent
+  cpuRequest: 100m
+  memoryRequest: 256Mi
+  cpuLimit: 500m
+  memoryLimit: 512Mi
+api:
+  pullPolicy: IfNotPresent
+  cpuRequest: 500m
+  memoryRequest: 768Mi
+  cpuLimit: '2'
+  memoryLimit: 1536Mi
+worker:
+  pullPolicy: IfNotPresent
+  cpuRequest: 250m
+  memoryRequest: 768Mi
+  cpuLimit: '1'
+  memoryLimit: 1536Mi
+beatworker:
+  pullPolicy: IfNotPresent
+  cpuRequest: 100m
+  memoryRequest: 256Mi
+  cpuLimit: 500m
+  memoryLimit: 512Mi

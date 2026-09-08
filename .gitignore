@@ -4,3 +4,6 @@
 
 # Working notes (specs, implementation plans). Not repository content.
 docs/superpowers/
+
+# Python operator scripts
+__pycache__/

@@ -1,0 +1,202 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- namespace.yaml
+- secret-store.yaml
+- external-secrets.yaml
+- upstream.yaml
+- ingress.yaml
+- broker-network-policy.yaml
+patches:
+- target:
+    kind: ServiceAccount
+    name: plane-srv-account
+  patch: |
+    - op: replace
+      path: /automountServiceAccountToken
+      value: false
+- target:
+    kind: Deployment
+    name: .*
+  patch: |
+    - op: add
+      path: /metadata/annotations
+      value:
+        argocd.argoproj.io/sync-wave: '2'
+        secret.reloader.stakater.com/reload: plane-keys,plane-app-env,plane-live-env,plane-storage
+    - op: add
+      path: /spec/template/spec/automountServiceAccountToken
+      value: false
+    - op: add
+      path: /spec/revisionHistoryLimit
+      value: 2
+- target:
+    kind: Deployment
+    name: plane-web-wl
+  patch: |
+    - op: add
+      path: /spec/template/spec/containers/0/readinessProbe
+      value:
+        tcpSocket:
+          port: 3000
+        periodSeconds: 10
+        timeoutSeconds: 2
+- target:
+    kind: Deployment
+    name: plane-admin-wl
+  patch: |
+    - op: add
+      path: /spec/template/spec/containers/0/readinessProbe
+      value:
+        tcpSocket:
+          port: 3000
+        periodSeconds: 10
+        timeoutSeconds: 2
+- target:
+    kind: Deployment
+    name: plane-space-wl
+  patch: |
+    - op: add
+      path: /spec/template/spec/containers/0/readinessProbe
+      value:
+        tcpSocket:
+          port: 3000
+        periodSeconds: 10
+        timeoutSeconds: 2
+- target:
+    kind: Deployment
+    name: plane-live-wl
+  patch: |
+    - op: add
+      path: /spec/template/spec/containers/0/readinessProbe
+      value:
+        tcpSocket:
+          port: 3000
+        periodSeconds: 10
+        timeoutSeconds: 2
+- target:
+    kind: Deployment
+    name: plane-api-wl
+  patch: |
+    - op: add
+      path: /spec/template/spec/containers/0/readinessProbe/timeoutSeconds
+      value: 5
+- target:
+    kind: Deployment
+    name: plane-worker-wl
+  patch: |
+    - op: replace
+      path: /spec/template/spec/containers/0/command
+      value:
+      - /bin/bash
+      - -ec
+      - |
+        python manage.py wait_for_db
+        python manage.py wait_for_migrations
+        exec celery -A plane worker -l info --concurrency=2
+- target:
+    kind: Deployment
+    name: plane-beat-worker-wl
+  patch: |
+    - op: add
+      path: /spec/strategy
+      value:
+        type: Recreate
+- target:
+    kind: StatefulSet
+    name: plane-redis-wl
+  patch: |
+    - op: add
+      path: /spec/template/spec/containers/0/resources
+      value:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 500m
+          memory: 256Mi
+    - op: add
+      path: /spec/template/spec/containers/0/readinessProbe
+      value:
+        exec:
+          command:
+          - redis-cli
+          - ping
+        periodSeconds: 10
+        timeoutSeconds: 5
+    - op: add
+      path: /spec/template/spec/automountServiceAccountToken
+      value: false
+    - op: add
+      path: /spec/persistentVolumeClaimRetentionPolicy
+      value:
+        whenDeleted: Retain
+        whenScaled: Retain
+    - op: add
+      path: /spec/template/spec/containers/0/args
+      value:
+      - --appendonly
+      - 'yes'
+      - --maxmemory
+      - 160mb
+      - --maxmemory-policy
+      - noeviction
+- target:
+    kind: StatefulSet
+    name: plane-rabbitmq-wl
+  patch: |
+    - op: add
+      path: /spec/template/spec/containers/0/resources
+      value:
+        requests:
+          cpu: 250m
+          memory: 256Mi
+        limits:
+          cpu: '1'
+          memory: 512Mi
+    - op: add
+      path: /spec/template/spec/containers/0/readinessProbe
+      value:
+        # Running rabbitmq-diagnostics as root during first boot can create
+        # .erlang.cookie with the wrong owner before the server starts.
+        tcpSocket:
+          port: 5672
+        periodSeconds: 10
+        timeoutSeconds: 5
+    - op: add
+      path: /spec/template/spec/automountServiceAccountToken
+      value: false
+    - op: add
+      path: /metadata/annotations
+      value:
+        secret.reloader.stakater.com/reload: plane-rabbitmq
+    - op: add
+      path: /spec/persistentVolumeClaimRetentionPolicy
+      value:
+        whenDeleted: Retain
+        whenScaled: Retain
+- target:
+    kind: Job
+    name: plane-api-migrate-1
+  patch: |
+    - op: add
+      path: /metadata/annotations
+      value:
+        argocd.argoproj.io/hook: Sync
+        argocd.argoproj.io/sync-wave: '1'
+        argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+    - op: add
+      path: /spec/activeDeadlineSeconds
+      value: 600
+    - op: add
+      path: /spec/template/spec/automountServiceAccountToken
+      value: false
+    - op: add
+      path: /spec/template/spec/containers/0/resources
+      value:
+        requests:
+          cpu: 250m
+          memory: 512Mi
+        limits:
+          cpu: '1'
+          memory: 1Gi

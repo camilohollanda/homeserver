@@ -1,0 +1,68 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: plane
+  namespace: plane
+spec:
+  secretName: plane-tls
+  dnsNames:
+    - plane.internal.prakash.com.br
+  issuerRef:
+    name: letsencrypt-dns
+    kind: ClusterIssuer
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: plane
+  namespace: plane
+  annotations:
+    argocd.argoproj.io/sync-wave: '2'
+    nginx.ingress.kubernetes.io/proxy-body-size: 10m
+    nginx.ingress.kubernetes.io/proxy-read-timeout: '3600'
+    nginx.ingress.kubernetes.io/proxy-send-timeout: '3600'
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [plane.internal.prakash.com.br]
+      secretName: plane-tls
+  rules:
+    - host: plane.internal.prakash.com.br
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: plane-api
+                port: {number: 8000}
+          - path: /auth
+            pathType: Prefix
+            backend:
+              service:
+                name: plane-api
+                port: {number: 8000}
+          - path: /live/
+            pathType: Prefix
+            backend:
+              service:
+                name: plane-live
+                port: {number: 3000}
+          - path: /spaces
+            pathType: Prefix
+            backend:
+              service:
+                name: plane-space
+                port: {number: 3000}
+          - path: /god-mode
+            pathType: Prefix
+            backend:
+              service:
+                name: plane-admin
+                port: {number: 3000}
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: plane-web
+                port: {number: 3000}
