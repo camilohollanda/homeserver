@@ -20,4 +20,5 @@ resources:
   - bugsink-cluster-secret-store.yaml
   - mailpit-cluster-secret-store.yaml
   - iddh-members-cluster-secret-store.yaml
+  - miora-cluster-secret-store.yaml
   - umami-cluster-secret-store.yaml

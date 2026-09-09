@@ -20,6 +20,7 @@ resources:
   - applications/mailpit.yaml
   - applications/iddh-members-production.yaml
   - applications/iddh-members-staging.yaml
+  - applications/miora-staging.yaml
   - applications/apprise.yaml
   - applications/victoria-metrics.yaml
   - applications/umami.yaml

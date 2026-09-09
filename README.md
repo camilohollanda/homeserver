@@ -16,6 +16,8 @@ Kubernetes infrastructure for Werify and Prakash.com.br, running on Proxmox with
 
 - `werify.app` → Phoenix LiveView app (prod)
 - `staging.werify.app` → Staging environment
+- `staging.miora.now` → [Miora staging](gitops/staging/miora/README.md)
+- `iddh.com.br` and `*.iddh.com.br` → IDDH production (institutional site, members and events)
 - `grafana.internal.prakash.com.br` → Grafana dashboard
 - `prakash.com.br` → Institutional site
 

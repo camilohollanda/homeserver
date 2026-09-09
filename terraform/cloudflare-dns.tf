@@ -29,13 +29,12 @@ locals {
     prakash_apex     = { zone = "prakash_com_br", name = "prakash.com.br" }
     prakash_wildcard = { zone = "prakash_com_br", name = "*.prakash.com.br" }
     membros_iddh     = { zone = "iddh_com_br", name = "membros.iddh.com.br" }
+    miora_wildcard   = { zone = "miora_now", name = "*.miora.now" }
 
-    # The apex and www still point at Hostinger (the legacy WordPress) and were
-    # created outside Terraform, so both were imported rather than created —
-    # see "Importing the iddh.com.br apex" in README.md, which also lists the
-    # sibling A/AAAA records that must be deleted before the apex can become a
-    # CNAME. `blog.iddh.com.br` gets no entry of its own: the wildcard makes it
-    # resolve, and the app 301s it to iddh.com.br/blog.
+    # IDDH production has moved from Hostinger to the homeserver tunnel.
+    # The apex serves the institutional site; the wildcard covers event
+    # subdomains and blog.iddh.com.br (redirected by the app to /blog).
+    # Keep the existing explicit www and membros records alongside it.
     iddh_apex     = { zone = "iddh_com_br", name = "iddh.com.br" }
     iddh_www      = { zone = "iddh_com_br", name = "www.iddh.com.br" }
     iddh_wildcard = { zone = "iddh_com_br", name = "*.iddh.com.br" }

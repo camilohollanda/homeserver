@@ -66,6 +66,7 @@ cloudflare_zone_ids = {
   werify_app     = "<32-hex-zone-id-for-werify.app>",
   iddh_com_br    = "<32-hex-zone-id-for-iddh.com.br>",
   prakash_com_br = "<32-hex-zone-id-for-prakash.com.br>",
+  miora_now      = "<32-hex-zone-id-for-miora.now>",
 }
 
 # ---------------------------------------------------------------------------
