@@ -8,8 +8,10 @@
   `staging`, path `/Miora/`.
 
 Only staging is configured. TLS terminates at Cloudflare; the Ingress forwards
-HTTP to Phoenix on port 4000. Cloudflare Access uses the existing staging
-WARP/IP/identity policies, with no public bypass paths for Miora.
+HTTP to Phoenix on port 4000. Miora staging is intentionally public, without a
+Cloudflare Access gate, until its production environment launches. The app's
+own authentication still applies. Werify and IDDH staging keep their existing
+WARP/IP/identity policies.
 
 ## First deployment prerequisites
 
@@ -45,14 +47,14 @@ WARP/IP/identity policies, with no public bypass paths for Miora.
    the tunnel; it does not cover the apex `miora.now`. Only `staging.miora.now`
    has a tunnel route and Ingress. Other subdomains reaching the tunnel fall
    through to its HTTP 404 rule until their routes are added. Review a
-   Terraform plan for the DNS record, tunnel route and staging Access
-   application before applying.
+   Terraform plan for the DNS record and tunnel route before applying.
    Do not apply unrelated VM changes as part of adding this hostname.
 
 4. **Sync and verify.** Once the image, database and secrets exist, commit/push
    the GitOps changes so the root Argo CD application discovers `miora-staging`.
    Check ExternalSecret synchronization and Deployment readiness, then verify
-   HTTPS and a LiveView connection through an allowed staging client.
+   HTTPS and a LiveView connection from a public client without WARP or an
+   Access session.
 
 The current app has no `/health` route, so probes request `/` with
 `X-Forwarded-Proto: https` to satisfy Phoenix `force_ssl`. This checks HTTP
@@ -60,6 +62,23 @@ serving, not database readiness. Switch to a dedicated health endpoint when the
 application provides one. The app must also configure a mail adapter before
 testing email login/confirmation; for staging, use the existing Mailpit service
 with STARTTLS and authentication.
+
+## When production launches
+
+Restore the staging restriction by adding Miora to `staging_gated_hosts` in
+`terraform/cloudflare-access.tf`:
+
+```hcl
+miora_staging = {
+  domain       = "staging.miora.now"
+  webhook_path = null
+  public_paths = []
+}
+```
+
+Review and apply the Terraform plan to attach the existing staging
+WARP/IP/identity policies. Confirm that public clients encounter the Access
+gate and authorized clients can still reach the application.
 
 ## Validation
 

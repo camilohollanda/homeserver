@@ -129,6 +129,12 @@ Three distinct paths — don't conflate them:
 
 `setup.sh` scripts on the services VM create the A record automatically unless `SKIP_DNS=1`. The CF token needs `Zone.DNS Edit` + `Zone.Read`.
 
+**Miora staging is temporarily public:** `staging.miora.now` is intentionally
+absent from the Cloudflare Access staging gate until Miora production launches.
+When production is introduced, add it back to `staging_gated_hosts` in
+`terraform/cloudflare-access.tf` to use the same WARP/IP/identity policies as
+Werify and IDDH staging. The application still handles its own authentication.
+
 ## Secrets
 
 - Long-lived secrets live in **Infisical** (project `homeserver`). After running an app's `setup.sh`, the final echo block lists which keys to store and under which path (e.g. `/Garage/`, `/mailpit/`).

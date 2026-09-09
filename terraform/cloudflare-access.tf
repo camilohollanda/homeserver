@@ -1,9 +1,10 @@
 ######################################################################
 # Cloudflare Access (Zero Trust) — staging app gating
 #
-# staging.werify.app, iddh-members-staging.prakash.com.br and staging.miora.now
-# use the same tunnel + ingress-nginx as production (see cloudflare-tunnel.tf).
+# staging.werify.app and iddh-members-staging.prakash.com.br use the same
+# tunnel + ingress-nginx as production (see cloudflare-tunnel.tf).
 # The tunnel provides routing; these Access applications restrict staging.
+# Miora staging is public until its production environment launches.
 #
 # These Access apps gate them at the Cloudflare edge. Each host has a gate
 # application and, where needed, more specific bypass applications:
@@ -31,6 +32,8 @@
 
 locals {
   # Staging hosts to gate. Production is intentionally left public.
+  # Miora is also intentionally excluded until production launches; then add
+  # staging.miora.now here with webhook_path = null and public_paths = [].
   # webhook_path is the per-app prefix (no slashes at either end) under which
   # payment webhooks are served — everything under it bypasses the gate
   # without Access auth (the app verifies the provider signature/token).
@@ -64,11 +67,6 @@ locals {
     iddh_staging = {
       domain       = "iddh-members-staging.prakash.com.br"
       webhook_path = "webhooks"
-      public_paths = []
-    }
-    miora_staging = {
-      domain       = "staging.miora.now"
-      webhook_path = null
       public_paths = []
     }
   }
