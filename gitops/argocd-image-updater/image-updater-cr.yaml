@@ -11,6 +11,13 @@ spec:
   writeBackConfig:
     method: argocd
   applicationRefs:
+    - namePattern: "miora-staging"
+      images:
+        - alias: miora
+          # Publish/promote :staging in Cawser/miora; follow that tag by digest.
+          imageName: ghcr.io/cawser/miora:staging
+          commonUpdateSettings:
+            updateStrategy: digest
     - namePattern: "iddh-members-production"
       images:
         - alias: members

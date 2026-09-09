@@ -176,6 +176,7 @@ variable "cloudflare_zone_ids" {
     werify_app     = string
     iddh_com_br    = string
     prakash_com_br = string
+    miora_now      = string
   })
 }
 

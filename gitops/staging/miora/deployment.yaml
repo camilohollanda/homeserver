@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: miora
+  namespace: miora-staging
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: miora
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: miora
+    spec:
+      imagePullSecrets:
+      - name: ghcr-credentials
+      containers:
+      - name: miora
+        image: ghcr.io/cawser/miora:staging
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 4000
+          name: http
+        # The current app has no /health route. Exercise the public home page
+        # and satisfy Phoenix force_ssl without following an HTTPS redirect.
+        startupProbe:
+          httpGet:
+            path: /
+            port: http
+            httpHeaders:
+            - name: X-Forwarded-Proto
+              value: https
+          periodSeconds: 2
+          timeoutSeconds: 3
+          failureThreshold: 60
+        readinessProbe:
+          httpGet:
+            path: /
+            port: http
+            httpHeaders:
+            - name: X-Forwarded-Proto
+              value: https
+          periodSeconds: 5
+          timeoutSeconds: 3
+        livenessProbe:
+          httpGet:
+            path: /
+            port: http
+            httpHeaders:
+            - name: X-Forwarded-Proto
+              value: https
+          periodSeconds: 10
+          timeoutSeconds: 3
+        env:
+        - name: PHX_SERVER
+          value: "true"
+        - name: PHX_HOST
+          value: staging.miora.now
+        - name: PORT
+          value: "4000"
+        # PG 18 is shared; a rolling deploy temporarily doubles this pool.
+        - name: POOL_SIZE
+          value: "5"
+        envFrom:
+        - secretRef:
+            name: secrets
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "100m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        # Let ingress-nginx remove the endpoint before Phoenix drains sockets.
+        lifecycle:
+          preStop:
+            sleep:
+              seconds: 10
+      terminationGracePeriodSeconds: 45
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: miora
+  namespace: miora-staging
+spec:
+  type: ClusterIP
+  ports:
+  - port: 4000
+    targetPort: http
+    protocol: TCP
+    name: http
+  selector:
+    app: miora

@@ -1,13 +1,12 @@
 ######################################################################
 # Cloudflare Access (Zero Trust) — staging app gating
 #
-# staging.werify.app and iddh-members-staging.prakash.com.br ride the
-# SAME tunnel + ingress-nginx as production (see cloudflare-tunnel.tf:
-# the *.werify.app / *.prakash.com.br wildcards), so until now they were
-# reachable by anyone on the public internet.
+# staging.werify.app, iddh-members-staging.prakash.com.br and staging.miora.now
+# use the same tunnel + ingress-nginx as production (see cloudflare-tunnel.tf).
+# The tunnel provides routing; these Access applications restrict staging.
 #
-# These Access apps gate them at the Cloudflare edge — no tunnel, DNS, or
-# ingress changes needed. Per host we register two Access "applications":
+# These Access apps gate them at the Cloudflare edge. Each host has a gate
+# application and, where needed, more specific bypass applications:
 #
 #   <host>/<webhook_path>  -> Bypass  (no auth — payment webhooks from
 #                                Asaas / PagBank. Asaas signs with the
@@ -35,6 +34,7 @@ locals {
   # webhook_path is the per-app prefix (no slashes at either end) under which
   # payment webhooks are served — everything under it bypasses the gate
   # without Access auth (the app verifies the provider signature/token).
+  # Set null when an app has no webhook endpoints to expose.
   # The two apps disagree: werify mounts webhooks under /api, iddh doesn't.
   #
   # public_paths are further prefixes that bypass the gate for the same
@@ -64,6 +64,11 @@ locals {
     iddh_staging = {
       domain       = "iddh-members-staging.prakash.com.br"
       webhook_path = "webhooks"
+      public_paths = []
+    }
+    miora_staging = {
+      domain       = "staging.miora.now"
+      webhook_path = null
       public_paths = []
     }
   }
@@ -182,7 +187,7 @@ resource "cloudflare_zero_trust_access_policy" "staging_identity" {
 
 # Bypass app: <host>/webhooks  (more specific path → evaluated first)
 resource "cloudflare_zero_trust_access_application" "staging_webhooks" {
-  for_each = local.staging_gated_hosts
+  for_each = { for key, host in local.staging_gated_hosts : key => host if host.webhook_path != null }
 
   account_id           = var.cloudflare_account_id
   name                 = "${each.value.domain} — webhooks (bypass)"
