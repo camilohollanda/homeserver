@@ -26,6 +26,9 @@ spec:
         - name: werify
           image: ghcr.io/prem-prakash/werify:staging
           imagePullPolicy: Always
+          # The PreSync Job owns migrations, including when rolling back to
+          # older images whose bin/server still runs migrations at startup.
+          command: ["/app/bin/werify", "start"]
           ports:
             - containerPort: 4000
               name: http
@@ -48,6 +51,8 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 3
           env:
+            - name: PHX_SERVER
+              value: "true"
             - name: DNS_CLUSTER_QUERY
               value: cluster.werify-staging.svc.cluster.local
             # Generic, privacy-safe support alerts stay inside the cluster until
