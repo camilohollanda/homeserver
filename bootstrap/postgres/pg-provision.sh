@@ -91,11 +91,9 @@ fi
 DB_NAME=$(echo "${APP_NAME}_${ENVIRONMENT}" | tr '[:upper:]' '[:lower:]' | tr '-' '_')
 DB_USER=$(echo "${APP_NAME}_${ENVIRONMENT}" | tr '[:upper:]' '[:lower:]' | tr '-' '_')
 
-# Generate a strong password (32 chars, alphanumeric + special chars)
+# Generate 32 alphanumeric characters, safe in an unescaped DATABASE_URL.
 generate_password() {
-    # Generate 32 random bytes, base64 encode, take first 32 chars
-    # Remove problematic characters that might cause escaping issues
-    openssl rand -base64 48 | tr -dc 'a-zA-Z0-9!@#%^&*()_+-=' | head -c 32
+    openssl rand -base64 32 | tr -d '=+/' | cut -c1-32
 }
 
 DB_PASSWORD=$(generate_password)
