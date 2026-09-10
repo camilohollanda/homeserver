@@ -1,0 +1,40 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: werify-migrate
+  namespace: werify-staging
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    # Keep the result and logs until the next full sync recreates this Job.
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  parallelism: 1
+  completions: 1
+  backoffLimit: 0
+  activeDeadlineSeconds: 1800
+  template:
+    metadata:
+      labels:
+        # Must not match the HTTP or headless Service's app: werify selector.
+        app: werify-migrate
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: ghcr-credentials
+      containers:
+        - name: migrate
+          # Same image name/tag as the Deployment: Kustomize's image override
+          # from Image Updater pins both workloads to the same digest.
+          image: ghcr.io/prem-prakash/werify:staging
+          imagePullPolicy: Always
+          command: ["/app/bin/migrate"]
+          envFrom:
+            - secretRef:
+                name: secrets
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "1"

@@ -20,6 +20,9 @@ Kubernetes manifests for Argo CD to manage applications in the cluster.
 - MinIO is not exposed via Ingress (internal S3 API only)
 - Grafana is accessible via `grafana.internal.prakash.com.br`
 - Werify uses WebSocket-friendly Ingress annotations for Phoenix LiveView
+- Werify deploys run migrations through a PreSync Job; see the
+  [migration deployment runbook](../docs/werify-migrations.md) for prerequisites,
+  failures, retries, and local verification.
 
 ### Secrets Management
 

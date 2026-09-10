@@ -6,5 +6,6 @@ resources:
   - pvc.yaml
   - external-secret.yaml
   - ghcr-external-secret.yaml
+  - migration-job.yaml
   - deployment.yaml
   - ingress.yaml

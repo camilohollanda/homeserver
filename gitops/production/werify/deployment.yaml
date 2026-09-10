@@ -26,6 +26,9 @@ spec:
       - name: werify
         image: ghcr.io/prem-prakash/werify:main
         imagePullPolicy: Always
+        # The PreSync Job owns migrations, including when rolling back to
+        # older images whose bin/server still runs migrations at startup.
+        command: ["/app/bin/werify", "start"]
         ports:
         - containerPort: 4000
           name: http
@@ -33,8 +36,8 @@ spec:
           httpGet:
             path: /health
             port: 4000
-          # Release migrations run before HTTP starts. Allow the incident
-          # recovery migration to finish without restarting waiting app pods.
+          # Retain the incident's startup allowance during migration-gate
+          # adoption. Reduce it after measuring normal boot without migrations.
           periodSeconds: 2
           failureThreshold: 900
         readinessProbe:
@@ -50,6 +53,8 @@ spec:
           periodSeconds: 10
           timeoutSeconds: 3
         env:
+        - name: PHX_SERVER
+          value: "true"
         - name: DNS_CLUSTER_QUERY
           value: cluster.werify-production.svc.cluster.local
         # Generic, privacy-safe support alerts stay inside the cluster until
