@@ -33,8 +33,10 @@ spec:
           httpGet:
             path: /health
             port: 4000
+          # Release migrations run before HTTP starts. Allow the incident
+          # recovery migration to finish without restarting waiting app pods.
           periodSeconds: 2
-          failureThreshold: 30
+          failureThreshold: 900
         readinessProbe:
           httpGet:
             path: /health
