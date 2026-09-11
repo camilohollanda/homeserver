@@ -3,9 +3,13 @@
 #
 # node_exporter has no LVM collector, and a thin pool has no mounted
 # filesystem, so the filesystem collector cannot see it either. On this
-# hypervisor the thin pool pve/data backs the disks of VMs 112, 117 and 118 --
-# when it fills, writes fail while the guests still believe they have space,
-# and the result is corruption rather than a clean ENOSPC.
+# hypervisor the thin pool pve/data backs disks of VMs 112, 114, 115, 117 and
+# 118 -- when it fills, writes fail while the guests still believe they have
+# space, and the result is corruption rather than a clean ENOSPC.
+#
+# The list was 112/117/118 until 2026-09-11, when `lvs` during an incident
+# showed 114 and 115 on the pool too. A wrong list here understates the blast
+# radius, which is the whole reason the metric exists.
 set -euo pipefail
 
 OUT_DIR="${TEXTFILE_DIR:-/var/lib/prometheus/node-exporter}"
