@@ -230,8 +230,12 @@ data:
           # -- LVM thin pool -------------------------------------------------
           # node_exporter has no LVM collector and a thin pool has no mounted
           # filesystem, so the host-filesystem rule cannot see pve/data -- the
-          # pool backing the disks of VMs 112, 117 and 118. The metric comes
-          # from the textfile collector in bootstrap/node-exporter/.
+          # pool backing disks of VMs 112, 114, 115, 117 and 118. The metric
+          # comes from the textfile collector in bootstrap/node-exporter/.
+          #
+          # A full thin pool is not a full disk: writes fail while the guests
+          # still believe they have space, so every one of those VMs corrupts
+          # rather than getting a clean ENOSPC.
           - uid: infra-thinpool-data
             title: LVM thin pool nearly full
             condition: B
@@ -288,6 +292,58 @@ data:
                   expression: A
                   conditions:
                     - evaluator: {type: gt, params: [80]}
+
+          # This is a second rule watching the same pool, which the header of
+          # this file argues against. That argument is about two thresholds on
+          # one measurement, where the later one only repeats the earlier. A
+          # level and a rate are not that. A pool sitting at 95% and flat is
+          # dangerous and this rule is silent for it; a pool at 55% gaining five
+          # points a day is dangerous and the rule above is silent for it. They
+          # overlap only when a forecast went unanswered for days, and a second
+          # page then is correct rather than noise.
+          #
+          # On 2026-09-11 the 85% rule fired with 1.6 days of headroom left --
+          # enough to act, but only because someone happened to be looking.
+          # Backtested against that incident, this one first crosses 100% on
+          # 2026-09-04 20:27 UTC, with the pool at 55% and six days to spare.
+          #
+          # `for` is 6h rather than the 15m the threshold rules use because a
+          # seven-day extrapolation swings by tens of points between one 24h
+          # window and the next; at 15m it flaps. Through the calm stretch
+          # before 2026-09-04 it predicted 40-84%, so the quiet is real quiet.
+          #
+          # For one window length after a large one-off reclaim the regression
+          # is still fitting the old level and reads the pool as fuller than it
+          # is -- right after the 2026-09-11 move the window held twelve samples
+          # near 89% and one at 51%, and it answered 79.55%. The error runs
+          # toward alerting, never toward silence, and it lands in the day after
+          # a cleanup, when someone is already watching. It clears itself.
+          - uid: infra-thinpool-forecast
+            title: LVM thin pool filling up
+            condition: B
+            for: 6h
+            labels: {severity: warning, apprise_type: warning}
+            annotations:
+              summary: 'thin pool {{ $labels.vg }}/{{ $labels.lv }} is on track for {{ printf "%.0f" $values.A.Value }}% in 7 days at its current rate'
+            noDataState: NoData
+            execErrState: Error
+            data:
+              - refId: A
+                relativeTimeRange: {from: 86400, to: 0}
+                datasourceUid: victoria-metrics
+                model:
+                  refId: A
+                  editorMode: code
+                  instant: true
+                  expr: 'predict_linear(node_lvm_thinpool_data_percent[24h], 7 * 24 * 3600)'
+              - refId: B
+                datasourceUid: __expr__
+                model:
+                  refId: B
+                  type: threshold
+                  expression: A
+                  conditions:
+                    - evaluator: {type: gt, params: [100]}
 
           # -- The monitoring itself -----------------------------------------
           # Without this a dead exporter presents as "no alerts", which is
