@@ -20,7 +20,17 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
   "id": 0,
-  "links": [],
+  "links": [
+    {
+      "title": "PostgreSQL VM",
+      "type": "link",
+      "url": "/d/postgres-vm/postgresql-vm",
+      "icon": "external link",
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false
+    }
+  ],
   "panels": [
     {
       "datasource": {

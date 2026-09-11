@@ -28,6 +28,7 @@ configMapGenerator:
       - dashboards/vm-hosts.json
       - dashboards/disk-io.json
       - dashboards/postgres.json
+      - dashboards/postgres-vm.json
       - dashboards/garage.json
       - dashboards/infisical.json
       - dashboards/services-nginx.json
