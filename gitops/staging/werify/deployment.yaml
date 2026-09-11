@@ -71,6 +71,15 @@ spec:
               value: "false"
             - name: SIDECAR_MODE
               value: "db"
+            # Which accounts the WhatsApp event-archive renewal worker may authorize. NOT the
+            # connector's WHATSAPP_SIDECAR_ALLOWLIST: that one decides which numbers open a
+            # WhatsApp session, and widening it here — on a production data clone — would open a
+            # second session on the same device identity and knock the real numbers offline. This
+            # one opens no socket; it decides only whether an event that already arrived through
+            # an existing session is preserved. The connector's allowlist in this namespace stays
+            # as it is, so exactly one number actually produces events.
+            - name: WHATSAPP_EVENT_ARCHIVE_ACCOUNTS
+              value: "every_eligible_account"
           envFrom:
             - secretRef:
                 name: secrets
