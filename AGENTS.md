@@ -8,6 +8,10 @@ K3s + Proxmox homelab. Three top-level layers:
 
 A new piece of infra usually lives in exactly one of these, not multiple.
 
+`external/` contains independent deployments for machines outside this homelab.
+The native Ollama and dedicated review runner for `camilo@192.168.0.107` live in
+`external/cawser/`; they are not part of the Proxmox VM inventory or K3s bootstrap.
+
 ## VM inventory
 
 | vmid | name            | IP             | role                                                            |

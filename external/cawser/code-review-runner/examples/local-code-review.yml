@@ -1,0 +1,32 @@
+name: Ollama PR Review
+
+on:
+  # Run workflow policy from the trusted base branch.
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: PR number to review
+        required: true
+        type: string
+
+# The reusable job needs these permissions to read PR context and publish
+# advisory reviews. Local Ollama needs no OIDC token or Claude subscription.
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  actions: read
+
+jobs:
+  review:
+    uses: Cawser/ai-tooling/.github/workflows/ollama-pr-review.yml@main
+    with:
+      pr_number: ${{ inputs.pr_number }}
+      runner_labels: '["self-hosted","linux","x64","code-review","rtx3090"]'
+    secrets:
+      app_id: ${{ secrets.CLAUDE_CODE_REVIEWER_APP_ID }}
+      app_private_key: ${{ secrets.CLAUDE_CODE_REVIEWER_PRIVATE_KEY }}
