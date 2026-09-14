@@ -27,8 +27,11 @@ Kubernetes infrastructure for Werify and Prakash.com.br, running on Proxmox with
 .
 ├── terraform/          # Proxmox VM provisioning
 ├── bootstrap/          # K3s cluster initialization scripts
-└── gitops/             # Argo CD application manifests
+├── gitops/             # Argo CD application manifests
+└── external/           # Installers for machines outside this homelab
 ```
+
+External deployments are kept separately: [Cawser code review server](external/cawser/README.md).
 
 ## Quick Start
 
