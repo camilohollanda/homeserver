@@ -180,6 +180,24 @@ verify_gpu() {
     || fail "model is not fully on GPU; inspect ollama /api/ps and reduce context or choose a smaller model"
 }
 
+ensure_gpu_groups() {
+  local group memberships
+  memberships="$(id -nG ollama)"
+  for group in video render; do
+    if getent group "$group" >/dev/null && [[ " $memberships " != *" $group "* ]]; then
+      usermod -aG "$group" ollama
+      # The running process keeps its old groups until the service restarts.
+      CHANGED=1
+    fi
+  done
+}
+
+activate_service() {
+  systemctl daemon-reload
+  systemctl enable --quiet ollama.service
+  if (( CHANGED )); then systemctl restart ollama.service; else systemctl start ollama.service; fi
+}
+
 main() {
   configure "$@"
   if [[ "$MODE" == --dry-run ]]; then
@@ -263,9 +281,7 @@ main() {
   if ! id ollama >/dev/null 2>&1; then
     useradd --system --user-group --home-dir /var/lib/ollama --no-create-home --shell /usr/sbin/nologin ollama
   fi
-  for group in video render; do
-    if getent group "$group" >/dev/null; then usermod -aG "$group" ollama; fi
-  done
+  ensure_gpu_groups
   # Recheck after downloading, before changing any model-directory ownership.
   check_model_storage
   # Only own the model directory itself; never recursively chown /dados.
@@ -288,9 +304,7 @@ main() {
     mv -Tf "$WORK/current" "$BASE/current"
     CHANGED=1
   fi
-  systemctl daemon-reload
-  systemctl enable --quiet ollama.service
-  if (( CHANGED )); then systemctl restart ollama.service; else systemctl start ollama.service; fi
+  activate_service
 
   echo "==> Waiting for ${API}..."
   READY=0

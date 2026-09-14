@@ -62,7 +62,9 @@ directory blindly: inspect and migrate existing data deliberately.
 ## Re-runs and upgrades
 
 A re-run reuses the downloaded Ollama release and matching model, preserves model
-data, and restarts the service only if its managed binary/configuration changes.
+data, and restarts the service only if its managed binary/configuration changes
+or the installer adds the `ollama` account to a missing GPU group (`video` or
+`render`). Existing memberships do not trigger another restart.
 With the default GPU check enabled, a re-run still performs the one-token check.
 Old release directories remain available for explicit rollback. No model is
 deleted automatically.

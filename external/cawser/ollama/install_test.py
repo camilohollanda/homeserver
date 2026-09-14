@@ -259,5 +259,100 @@ printf '%s\\n' 'LISTEN 0 4096 127.0.0.1:11434 0.0.0.0:* users:(("other",pid=9999
         self.assertFalse(mutation.exists(), "must not generate through an unrelated server")
 
 
+class GroupMembershipTest(unittest.TestCase):
+    """Exercise group reconciliation and service activation without root access."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.groups = self.root / "groups"
+        self.groups.write_text("ollama video render")
+        self.changes = self.root / "changes"
+        self.service_calls = self.root / "service-calls"
+
+    def reconcile(self, **overrides):
+        script = '''source "$1"
+id() {
+  [[ "$*" == '-nG ollama' ]] || exit 90
+  cat "$TEST_GROUPS_FILE"
+}
+getent() {
+  [[ "$1" == group ]] || exit 90
+  [[ " $TEST_HOST_GROUPS " == *" $2 "* ]]
+}
+usermod() {
+  [[ "$1" == -aG && "$3" == ollama && "$#" == 3 ]] || exit 90
+  [[ "$TEST_FAIL_USERMOD" == 0 ]] || return 1
+  if [[ " $(cat "$TEST_GROUPS_FILE") " != *" $2 "* ]]; then
+    printf ' %s' "$2" >> "$TEST_GROUPS_FILE"
+  fi
+  printf '%s\\n' "$*" >> "$TEST_CHANGES_FILE"
+}
+systemctl() {
+  case "$*" in
+    daemon-reload|'enable --quiet ollama.service') ;;
+    'start ollama.service'|'restart ollama.service')
+      printf '%s\\n' "$1" >> "$TEST_SERVICE_CALLS" ;;
+    *) exit 90 ;;
+  esac
+}
+CHANGED="$TEST_CHANGED"
+ensure_gpu_groups
+activate_service
+'''
+        env = {**os.environ, "TEST_GROUPS_FILE": str(self.groups),
+               "TEST_CHANGES_FILE": str(self.changes), "TEST_SERVICE_CALLS": str(self.service_calls),
+               "TEST_HOST_GROUPS": "video render", "TEST_FAIL_USERMOD": "0", "TEST_CHANGED": "0",
+               **overrides}
+        return subprocess.run(["bash", "-c", script, "test", str(HERE / "install.sh")],
+                              env=env, text=True, capture_output=True, timeout=10)
+
+    def test_missing_memberships_restart_once_then_remain_idempotent(self):
+        for initial, additions in (("ollama", ["video", "render"]),
+                                   ("ollama video", ["render"]),
+                                   ("ollama render", ["video"]),
+                                   ("ollama video-capture render", ["video"])):
+            with self.subTest(initial=initial):
+                self.groups.write_text(initial)
+                self.changes.unlink(missing_ok=True)
+                self.service_calls.unlink(missing_ok=True)
+                for _ in range(2):
+                    result = self.reconcile()
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(self.service_calls.read_text().splitlines(), ["restart", "start"])
+                self.assertEqual(self.groups.read_text().split(), initial.split() + additions)
+                self.assertEqual(self.changes.read_text().splitlines(),
+                                 [f"-aG {group} ollama" for group in additions])
+
+    def test_existing_memberships_do_not_modify_accounts_or_restart(self):
+        result = self.reconcile()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(self.changes.exists())
+        self.assertEqual(self.groups.read_text(), "ollama video render")
+        self.assertEqual(self.service_calls.read_text(), "start\n")
+
+    def test_existing_configuration_change_still_restarts_service(self):
+        result = self.reconcile(TEST_CHANGED="1")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(self.changes.exists())
+        self.assertEqual(self.service_calls.read_text(), "restart\n")
+
+    def test_groups_absent_from_host_are_not_added(self):
+        self.groups.write_text("ollama video")
+        result = self.reconcile(TEST_HOST_GROUPS="video")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(self.changes.exists())
+        self.assertEqual(self.groups.read_text(), "ollama video")
+        self.assertEqual(self.service_calls.read_text(), "start\n")
+
+    def test_failed_group_update_stops_before_service_activation(self):
+        self.groups.write_text("ollama video")
+        result = self.reconcile(TEST_FAIL_USERMOD="1")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.groups.read_text(), "ollama video")
+        self.assertFalse(self.service_calls.exists())
+
+
 if __name__ == "__main__":
     unittest.main()
