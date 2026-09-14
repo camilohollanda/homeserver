@@ -15,14 +15,12 @@ WARP/IP/identity policies.
 
 ## First deployment prerequisites
 
-1. **Publish a release image.** The application was inspected on
-   `codex/bootstrap-phoenix-20260908` (commit `17c97b9`, PR #2). At that point,
-   `main` only contained planning documents, and the application branch had no
-   Dockerfile or image publishing workflow. The app repository must build an
-   `linux/amd64` Phoenix release with production assets, run database migrations
-   as part of its release deployment procedure, and publish
-   `ghcr.io/cawser/miora:staging`. No migration executable is assumed by these
-   manifests. The shared `GHCR_USERNAME`/`GHCR_TOKEN` must have read access to
+1. **Publish a release image.** The app repository builds a `linux/amd64`
+   Phoenix release with production assets and publishes
+   `ghcr.io/cawser/miora:staging`. At commit `7533c12`, `bin/server` runs
+   `bin/migrate` before starting Phoenix. These manifests use that image
+   entrypoint; there is no separate migration Job yet. The shared
+   `GHCR_USERNAME`/`GHCR_TOKEN` must have read access to
    that package, including Image Updater's registry credentials.
 
 2. **Create the database on VM 118.** Use the existing provisioner once for the
@@ -62,6 +60,50 @@ serving, not database readiness. Switch to a dedicated health endpoint when the
 application provides one. The app must also configure a mail adapter before
 testing email login/confirmation; for staging, use the existing Mailpit service
 with STARTTLS and authentication.
+
+## Observability
+
+The dedicated [Miora staging dashboard](../../grafana/dashboards/miora-staging.json)
+uses the shared Loki and VictoriaMetrics datasources. Its 12 panels cover HTTP
+requests from ingress access logs, memory, CPU, observed container restarts,
+network traffic, log volume by level, and application logs. It has no local-disk
+or WhatsApp connector panels because Miora has neither resource.
+
+[Promtail](../../loki-stack/promtail.yaml) parses Miora's text Logger output,
+groups multiline stack traces and extracts the severity label. It preserves
+the CRI timestamp, which includes the date. Existing logs are not relabeled;
+severity filtering applies to newly collected events after the parser reloads.
+
+The notification routes are `miora-staging` (Argo CD, pod restarts and Bugsink),
+`oom-miora-staging`, and `reload-miora-staging`. Before syncing the Apprise
+ExternalSecret, create the Pushover application **Miora - Staging** and store
+`PUSHOVER_TOKEN_MIORA_STAGING` in Infisical `prod` → `/Shared/`. This is a
+required key in the shared Apprise template; do not deploy the reference before
+the key exists. No support-message route is configured for Miora.
+
+Bugsink uses project `miora-staging` and a Slack-format webhook to
+`http://apprise-shim.bugsink.svc.cluster.local/hook/miora-staging`.
+Its DSN belongs in Infisical `staging` → `/Miora/` → `SENTRY_DSN`.
+The application image must include the Sentry SDK integration and use
+`ENVIRONMENT=staging`; setting the DSN alone does not instrument an old image.
+
+Deployment verification:
+
+1. Confirm the Pushover key and DSN exist without printing their values.
+2. Sync Grafana, Loki and Apprise through Argo CD. Confirm their ExternalSecrets
+   report `SecretSynced` and the workloads are healthy.
+3. Reload Promtail's config and restart Apprise after its rendered Secret
+   changes. The Reloader controller was scaled to zero during the 2026-09-13
+   audit, so annotations alone do not currently perform these reloads.
+4. Deploy the Miora image with the SDK and check the effective environment and
+   Logger handler. Use a synthetic error to verify ingestion before enabling
+   Bugsink's project alerts and verify Apprise recognizes the new tags.
+5. Open `/d/miora-staging` in Grafana, check HTTP and resource panels, and confirm
+   new Miora log streams carry `level`. The shared pod and database dashboards
+   remain available as before.
+
+See the [migration and persistence assessment](../../../docs/miora-staging-assessment.md)
+before adding a migration Job or a local volume.
 
 ## When production launches
 

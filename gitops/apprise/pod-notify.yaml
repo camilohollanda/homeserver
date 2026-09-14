@@ -132,7 +132,7 @@ spec:
             - name: APPRISE_URL
               value: "http://apprise.apprise.svc.cluster.local/notify/homeserver"
             - name: NAMESPACES
-              value: "werify-production werify-staging iddh-members-production iddh-members-staging"
+              value: "werify-production werify-staging iddh-members-production iddh-members-staging miora-staging"
             - name: INTERVAL
               value: "30"
           volumeMounts:

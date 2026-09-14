@@ -38,6 +38,20 @@ data:
                     fallback_formats:
                       - RFC3339
                     action_on_failure: skip
+          # Miora uses Logger's text formatter, including request_id metadata.
+          # Keep stack traces with the event that emitted them. The CRI timestamp
+          # carries the date; the app's time-only prefix must not replace it.
+          - match:
+              selector: '{namespace="miora-staging", app="miora"}'
+              stages:
+                - multiline:
+                    firstline: '^[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]+ '
+                    max_wait_time: 3s
+                    max_lines: 256
+                - regex:
+                    expression: '^[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]+ [^\r\n]*?\[(?P<level>debug|info|notice|warning|warn|error|critical|alert|emergency)\] '
+                - labels:
+                    level:
         relabel_configs:
           # Keep only pods with logs
           - source_labels: [__meta_kubernetes_pod_container_name]
