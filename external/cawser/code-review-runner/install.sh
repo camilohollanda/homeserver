@@ -32,6 +32,15 @@ if data.get('gitHubUrl', '').rstrip('/').lower() != sys.argv[2].lower() or data.
 PY
 }
 
+replace_runner_files() {
+  local source="$1" destination="$2"
+  # Remove only replaceable binaries; retain registration, credentials and jobs.
+  rm -rf -- "${destination:?}/bin" "${destination:?}/externals"
+  # The runner owns this destination: unlink existing files instead of opening
+  # through links that could redirect this root copy outside the runner tree.
+  cp -a --remove-destination "$source/." "$destination/"
+}
+
 main() {
 MODE="${1:-install}"
 [[ $# -le 1 ]] || fail "expected at most one argument"
@@ -171,10 +180,7 @@ if [[ "$INSTALLED" != "$REVIEW_RUNNER_SHA256" || ! -x "$RUNNER_DIR/bin/Runner.Li
   tar -xzf "$WORK/runner.tar.gz" -C "$WORK/runner"
   [[ -x "$WORK/runner/bin/Runner.Listener" ]] || fail "invalid runner archive"
   if [[ -n "$EXISTING_UNIT" ]]; then systemctl stop "$SERVICE_NAME"; fi
-  # Remove only this dedicated runner's replaceable binaries. Registration and
-  # credentials stay in place; none of the host's existing runners are touched.
-  rm -rf -- "${RUNNER_DIR:?}/bin" "${RUNNER_DIR:?}/externals"
-  cp -a "$WORK/runner/." "$RUNNER_DIR/"
+  replace_runner_files "$WORK/runner" "$RUNNER_DIR"
   chown -R "$RUNNER_USER:$RUNNER_USER" "$RUNNER_DIR"
   printf '%s\n' "$REVIEW_RUNNER_SHA256" > "$BASE/.runner-sha256"
   CHANGED=1

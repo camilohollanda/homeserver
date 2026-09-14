@@ -3,6 +3,7 @@
 import os
 import json
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -186,6 +187,84 @@ print("test-registration-token")
             ], text=True, capture_output=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(path.read_bytes(), before)
+
+
+class RunnerUpgradeTest(unittest.TestCase):
+    """Exercise the real upgrade copy with GNU cp and temporary files only."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.source = self.root / "release"
+        self.runner = self.root / "runner"
+        self.runner.mkdir()
+        for directory in ("bin", "externals"):
+            (self.source / directory).mkdir(parents=True)
+            (self.source / directory / "new-file").write_text("new binary")
+        (self.source / "run.sh").write_text("new runner script")
+        tools = self.root / "tools"
+        tools.mkdir()
+        cp = shutil.which("gcp") or shutil.which("cp")
+        self.assertIsNotNone(cp, "GNU cp is required (gcp on macOS)")
+        version = subprocess.run([cp, "--version"], text=True, capture_output=True)
+        self.assertIn("GNU coreutils", version.stdout, "GNU cp is required (gcp on macOS)")
+        (tools / "cp").symlink_to(cp)
+        self.env = {**os.environ, "PATH": str(tools) + os.pathsep + os.environ["PATH"]}
+
+    def upgrade(self):
+        result = subprocess.run([
+            "bash", "-c", 'source "$1"; replace_runner_files "$2" "$3"',
+            "test", str(HERE / "install.sh"), str(self.source), str(self.runner),
+        ], env=self.env, text=True, capture_output=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_upgrade_replaces_symlinks_without_writing_their_targets(self):
+        for existing in (True, False):
+            with self.subTest(existing_target=existing):
+                target = self.root / f"unrelated-{existing}"
+                if existing:
+                    target.write_text("keep outside")
+                destination = self.runner / "run.sh"
+                destination.unlink(missing_ok=True)
+                destination.symlink_to(target)
+                self.upgrade()
+                self.assertFalse(destination.is_symlink())
+                self.assertEqual(destination.read_text(), "new runner script")
+                if existing:
+                    self.assertEqual(target.read_text(), "keep outside")
+                else:
+                    self.assertFalse(target.exists())
+
+    def test_upgrade_replaces_binary_directory_links_without_touching_targets(self):
+        outside = self.root / "other-app"
+        outside.mkdir()
+        (outside / "keep").write_text("keep other app")
+        for directory in ("bin", "externals"):
+            (self.runner / directory).symlink_to(outside, target_is_directory=True)
+        self.upgrade()
+        self.assertEqual(list(outside.iterdir()), [outside / "keep"])
+        self.assertEqual((outside / "keep").read_text(), "keep other app")
+        for directory in ("bin", "externals"):
+            self.assertFalse((self.runner / directory).is_symlink())
+            self.assertEqual((self.runner / directory / "new-file").read_text(), "new binary")
+
+    def test_upgrade_preserves_registration_credentials_and_work_area(self):
+        preserved = (".runner", ".credentials", ".credentials_rsaparams", ".env", ".path", "_work/review")
+        for name in preserved:
+            path = self.runner / name
+            path.parent.mkdir(exist_ok=True)
+            path.write_text("existing " + name)
+        for directory in ("bin", "externals"):
+            (self.runner / directory).mkdir()
+            (self.runner / directory / "old-binary").write_text("obsolete")
+        self.upgrade()
+        self.upgrade()
+        for name in preserved:
+            self.assertEqual((self.runner / name).read_text(), "existing " + name)
+        for directory in ("bin", "externals"):
+            self.assertFalse((self.runner / directory / "old-binary").exists())
+            self.assertEqual((self.runner / directory / "new-file").read_text(), "new binary")
 
 
 if __name__ == "__main__":

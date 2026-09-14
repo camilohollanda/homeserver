@@ -18,8 +18,10 @@ REVIEW_GITHUB_URL=https://github.com/Cawser/miora \
 
 The preview is offline and never prints registration tokens. Setup obtains a
 short-lived registration token only when `.runner` is absent. Re-runs preserve
-registration and refuse a different repository or runner name. No personal
-GitHub token or App private key is copied to the host.
+registration and refuse a different repository or runner name. Upgrades replace
+existing destination files without following their symlinks and preserve runner
+registration, credentials and the work area. No personal GitHub token or App
+private key is copied to the host.
 
 | Variable | Default |
 | --- | --- |
@@ -81,6 +83,9 @@ The runner connects outbound to GitHub over HTTPS. Ollama stays at
 same native Ollama and GPU. Keep this review optional while evaluating it.
 
 ## Checks
+
+Offline tests require Python 3, Bash and GNU `cp` (`gcp` from GNU coreutils on
+macOS). They exercise upgrades using temporary files without root access.
 
 ```bash
 python3 -B -m unittest discover -s external/cawser/code-review-runner -p '*_test.py'
