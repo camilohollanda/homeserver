@@ -6,7 +6,8 @@
 # Both run as containers on the services VM, behind the shared nginx:
 #
 #   https://${GARAGE_DOMAIN}     -> 127.0.0.1:3900  (Garage S3 API)
-#   https://${GARAGE_UI_DOMAIN}  -> 127.0.0.1:8080  (garage-ui web dashboard)
+#   https://${GARAGE_UI_DOMAIN}  -> 127.0.0.1:8090  (garage-ui web dashboard)
+#   Public storage hosts -> Cloudflare Tunnel -> nginx :80 -> 127.0.0.1:3900
 #
 # Required env vars:
 #   CF_API_TOKEN          - Cloudflare API token (Zone.DNS Edit) for DNS-01
@@ -23,6 +24,9 @@
 #   GARAGE_DATA_MOUNT     - mountpoint inside VM (default: /var/lib/garage/data)
 #   GARAGE_META_DIR       - metadata path on OS disk (default: /var/lib/garage/meta)
 #   GARAGE_S3_REGION      - region label (default: garage)
+#   GARAGE_PUBLIC_DOMAINS - space-separated S3 hosts; match terraform/cloudflare-tunnel.tf
+#   GARAGE_TUNNEL_IP      - trusted cloudflared VM (default: 192.168.20.11)
+#   GARAGE_PUBLIC_MAX_BODY_SIZE - per request / multipart part (default: 60m)
 if [[ -n "${REMOTE_HOST:-}" ]]; then
   { printf 'export %s=%q\n' \
       CF_API_TOKEN         "${CF_API_TOKEN:-}" \
@@ -37,7 +41,10 @@ if [[ -n "${REMOTE_HOST:-}" ]]; then
       GARAGE_DATA_DEVICE   "${GARAGE_DATA_DEVICE:-}" \
       GARAGE_DATA_MOUNT    "${GARAGE_DATA_MOUNT:-}" \
       GARAGE_META_DIR      "${GARAGE_META_DIR:-}" \
-      GARAGE_S3_REGION     "${GARAGE_S3_REGION:-}"
+      GARAGE_S3_REGION     "${GARAGE_S3_REGION:-}" \
+      GARAGE_PUBLIC_DOMAINS "${GARAGE_PUBLIC_DOMAINS:-}" \
+      GARAGE_TUNNEL_IP     "${GARAGE_TUNNEL_IP:-}" \
+      GARAGE_PUBLIC_MAX_BODY_SIZE "${GARAGE_PUBLIC_MAX_BODY_SIZE:-}"
     cat "$0"
   } | ssh "$REMOTE_HOST" "sudo bash -s"
   exit $?
@@ -66,6 +73,9 @@ GARAGE_DATA_DEVICE="${GARAGE_DATA_DEVICE:-/dev/sdb}"
 GARAGE_DATA_MOUNT="${GARAGE_DATA_MOUNT:-/var/lib/garage/data}"
 GARAGE_META_DIR="${GARAGE_META_DIR:-/var/lib/garage/meta}"
 GARAGE_S3_REGION="${GARAGE_S3_REGION:-garage}"
+GARAGE_PUBLIC_DOMAINS="${GARAGE_PUBLIC_DOMAINS:-storage.werify.app storage-staging.werify.app storage.iddh.com.br storage-staging.iddh.com.br storage-staging.miora.now}"
+GARAGE_TUNNEL_IP="${GARAGE_TUNNEL_IP:-192.168.20.11}"
+GARAGE_PUBLIC_MAX_BODY_SIZE="${GARAGE_PUBLIC_MAX_BODY_SIZE:-60m}"
 
 # Refuse to install a UI-incompatible Garage. The UI needs v2.1.0+ and the
 # admin API auth changed between v1 and v2, so a v1 image will leave the UI
@@ -263,7 +273,7 @@ JWT_KEY_INDENTED="$(sed 's/^/      /' /opt/garage-ui/jwt-key.pem)"
 
 cat > /opt/garage-ui/config.yaml <<YAML
 server:
-  host: "0.0.0.0"
+  host: "127.0.0.1"
   # 8090, NOT 8080 — Infisical's web container already binds 127.0.0.1:8080
   # on this VM. Both apps land on the same loopback via network_mode: host,
   # so collisions are silent (the second binder just fails to start).
@@ -351,6 +361,65 @@ echo ""
 echo "==> Registering vhosts in shared services proxy..."
 
 cat > /opt/services/conf.d/garage.conf <<NGINX
+# Zones are shared across all public storage hosts: switching hostnames must
+# not reset a client's budget. realip runs before the limit modules.
+limit_req_zone \$binary_remote_addr zone=garage_s3_requests:10m rate=20r/s;
+limit_conn_zone \$binary_remote_addr zone=garage_s3_connections:10m;
+
+# Presigned URLs contain credentials in their query string; log the path only.
+log_format garage_s3_public '\$remote_addr \$request_method \$host\$uri \$server_protocol \$status \$body_bytes_sent';
+
+server {
+  listen 80;
+  server_name ${GARAGE_PUBLIC_DOMAINS};
+
+  # Only cloudflared on k3s-apps may supply the client address. Never trust
+  # arbitrary LAN clients or the public X-Forwarded-For header.
+  set_real_ip_from ${GARAGE_TUNNEL_IP};
+  real_ip_header CF-Connecting-IP;
+  if (\$realip_remote_addr != "${GARAGE_TUNNEL_IP}") { return 403; }
+  if (\$http_x_forwarded_proto != "https") { return 308 https://\$host\$request_uri; }
+
+  access_log /var/log/nginx/access.log garage_s3_public;
+  # nginx's 413/429 error messages include the full signed request URL.
+  # Statuses remain visible in the access log; keep only critical errors here.
+  error_log /var/log/nginx/error.log crit;
+  limit_req zone=garage_s3_requests burst=40 nodelay;
+  limit_req_status 429;
+  limit_conn garage_s3_connections 20;
+  limit_conn_status 429;
+
+  # Limit each PUT/UploadPart, not the final multipart object size.
+  client_max_body_size ${GARAGE_PUBLIC_MAX_BODY_SIZE};
+  client_header_timeout 15s;
+  client_body_timeout 60s;
+  send_timeout 120s;
+  keepalive_timeout 30s;
+  proxy_connect_timeout 5s;
+  proxy_read_timeout 120s;
+  proxy_send_timeout 120s;
+  proxy_request_buffering off;
+  proxy_buffering off;
+
+  # Signed downloads must be re-authorized even if their URL has been seen
+  # before. Also keep responses for different CORS origins separate.
+  proxy_hide_header Cache-Control;
+  add_header Cache-Control "private, no-store" always;
+  add_header Vary "Origin, Access-Control-Request-Method, Access-Control-Request-Headers" always;
+
+  location / {
+    # No URI suffix/rewrite: preserve object keys, query strings and Host
+    # exactly for SigV4. OPTIONS uses the bucket's native Garage CORS rules.
+    proxy_pass http://127.0.0.1:3900;
+    proxy_set_header Host              \$http_host;
+    proxy_set_header X-Real-IP         \$remote_addr;
+    proxy_set_header X-Forwarded-For    \$remote_addr;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+  }
+}
+
 server {
   listen 80;
   server_name ${GARAGE_DOMAIN};
@@ -479,8 +548,9 @@ for _ in $(seq 1 30); do
   sleep 1
 done
 
-# Reload the shared services proxy so both vhosts take effect
-docker exec services nginx -s reload 2>/dev/null || systemctl restart services
+# Reject invalid configuration before reloading the shared proxy.
+docker exec services nginx -t
+docker exec services nginx -s reload
 
 # ---------------------------------------------------------------------------
 # One-time cluster layout: assign this node to a single-node layout

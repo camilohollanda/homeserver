@@ -22,7 +22,22 @@ resource "cloudflare_zero_trust_tunnel_cloudflared" "homeserver" {
 locals {
   ingress_nginx_origin = "http://127.0.0.1:80" # ingress-nginx on the k3s VM (loopback — cloudflared lives on same host)
 
-  tunnel_ingress = [
+  # Exact S3 hosts must precede app wildcards. The shared services nginx
+  # preserves Host for SigV4 and proxies ONLY to Garage's loopback S3 API.
+  garage_public_hosts = [
+    "storage.werify.app",
+    "storage-staging.werify.app",
+    "storage.iddh.com.br",
+    "storage-staging.iddh.com.br",
+    "storage-staging.miora.now",
+  ]
+
+  tunnel_ingress = concat([
+    for hostname in local.garage_public_hosts : {
+      hostname = hostname
+      service  = "http://${local.services_vm_ip}:80"
+    }
+    ], [
     { hostname = "*.werify.app", service = local.ingress_nginx_origin },
     { hostname = "werify.app", service = local.ingress_nginx_origin },
     { hostname = "*.prakash.com.br", service = local.ingress_nginx_origin },
@@ -41,7 +56,7 @@ locals {
     { hostname = "*.iddh.com.br", service = local.ingress_nginx_origin },
 
     { service = "http_status:404" },
-  ]
+  ])
 }
 
 resource "cloudflare_zero_trust_tunnel_cloudflared_config" "homeserver" {

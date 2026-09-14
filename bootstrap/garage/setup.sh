@@ -22,6 +22,8 @@
 #   GARAGE_VERSION       - default: v2.3.0 (must be v2.1.0+ for the UI)
 #   GARAGE_UI_VERSION    - default: latest
 #   GARAGE_DATA_DEVICE   - default: /dev/sdb
+#   GARAGE_PUBLIC_DOMAINS / GARAGE_TUNNEL_IP / GARAGE_PUBLIC_MAX_BODY_SIZE
+#                       - public S3 proxy settings; see install.sh and README.md
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
