@@ -79,9 +79,10 @@ locals {
     vmid    = 117
     ip_cidr = "192.168.20.50/24"
     # CI saturated the previous 16-vCPU allocation while the 36-thread host
-    # retained headroom. The extra RAM absorbs observed 3-5 GiB per-job peaks.
+    # retained headroom. Concurrent CI jobs exhausted 20 GiB on 2026-09-14;
+    # 32 GiB provides headroom for the observed 3-5 GiB per-job peaks.
     cores     = 24
-    memory_mb = 20480
+    memory_mb = 32768
     disk_size = 60 # Docker layer cache + Elixir build artifacts + per-instance runner copies
     tags      = "ci,github-actions,runners"
   }
